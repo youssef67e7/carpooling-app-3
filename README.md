@@ -1,5 +1,7 @@
 # RideHail — full-stack ride-hailing demo
 
+**GitHub:** [youssef67e7/carpooling-app-3](https://github.com/youssef67e7/carpooling-app-3) — setup: [`GITHUB_SETUP.md`](GITHUB_SETUP.md)
+
 **Production roadmap (schema, APIs, scaling, phased rollout):** see [`docs/PRODUCTION_ARCHITECTURE.md`](docs/PRODUCTION_ARCHITECTURE.md).
 
 End-to-end **Expo (React Native) + Express + MongoDB** app: JWT auth, ride lifecycle, driver online status, **focused HTTP polling** (ride ~3s, lists ~4–5s) with **screen blur cleanup**, **backend-simulated driver movement**, maps with **user location**, pickup/destination/**assigned driver** markers, **route polyline** (mock interpolation or **Google Directions** when `GOOGLE_DIRECTIONS_API_KEY` is set), **estimated + final fare**, **Redux Toolkit**, **Axios + GET retries**, **Arabic RTL + English**, reusable UI, **light/dark/system** theme, and an **admin dashboard** (stats + dedicated users/rides screens).

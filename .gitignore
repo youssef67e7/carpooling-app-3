@@ -13,6 +13,7 @@ node_modules/
 # Expo / React Native
 .expo/
 .expo-shared/
+.expo-export-test/
 dist/
 web-build/
 *.jks
@@ -53,6 +54,13 @@ docs/graduation-projects/**/diagrams/*.html
 
 # Mongo / Docker local data
 **/data/db/
+
+# User uploads (keep folder only)
+backend/uploads/**
+!backend/uploads/.gitkeep
+!backend/uploads/public/
+backend/uploads/public/**
+!backend/uploads/public/.gitkeep
 
 # Misc
 coverage/
