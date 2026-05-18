@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>لوحة الإدارة — ReachNative</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Inter:wght@500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+  </head>
+  <body>
+    <div id="toast" class="toast hidden" role="status"></div>
+
+    <div id="modal-confirm" class="modal hidden" aria-modal="true" role="dialog">
+      <div class="modal-backdrop"></div>
+      <div class="modal-panel card">
+        <h3 id="modal-confirm-title" data-i18n="modal_default_title">تأكيد</h3>
+        <p id="modal-confirm-msg" class="sub"></p>
+        <div class="modal-actions">
+          <button type="button" class="secondary" id="modal-confirm-cancel" data-i18n="modal_cancel">إلغاء</button>
+          <button type="button" class="btn-danger" id="modal-confirm-ok" data-i18n="modal_ok">تأكيد</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="app-login" class="layout-login">
+      <div class="login-panel card fade-up">
+        <div class="login-top">
+          <div class="lang-switch" role="group" aria-label="Language">
+            <button type="button" class="lang-btn" data-set-lang="ar">العربية</button>
+            <button type="button" class="lang-btn" data-set-lang="en">English</button>
+          </div>
+        </div>
+        <div class="brand-row">
+          <span class="shield-wrap brand-accent" aria-hidden="true">
+            <svg class="shield-icon" viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M12 2L4 5v6c0 5.55 3.84 10.74 8 12 4.16-1.26 8-6.45 8-12V5l-8-3z" />
+              <path d="M9 12l2 2 4-4" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </span>
+          <div>
+            <h1 data-i18n="login_brand_title">لوحة الإدارة</h1>
+            <p class="sub" data-i18n="login_brand_sub">نفس API التطبيق — صلاحيات موحدة</p>
+          </div>
+        </div>
+
+        <section id="login-card">
+          <h2 data-i18n="login_heading">تسجيل الدخول</h2>
+          <p class="sub secure-note" data-i18n="login_secure_note">مسؤولون ثابتون فقط (مصادقة الخادم).</p>
+          <form id="form-login">
+            <label for="api-base" data-i18n="label_api">عنوان الخادم (API)</label>
+            <input
+              id="api-base"
+              name="api-base"
+              type="url"
+              inputmode="url"
+              autocomplete="off"
+              data-i18n-placeholder="ph_api"
+              placeholder="فارغ = نفس المنشأ (/admin-ui/)"
+            />
+            <label for="email" data-i18n="label_email">البريد</label>
+            <input id="email" name="email" type="email" autocomplete="username" required />
+            <label for="password" data-i18n="label_password">كلمة المرور</label>
+            <input id="password" name="password" type="password" autocomplete="current-password" required />
+            <button type="submit" class="btn-primary" data-i18n="btn_login">دخول</button>
+          </form>
+          <div id="google-signin-wrap" class="google-signin-wrap hidden">
+            <p class="login-divider" data-i18n="login_google_or">أو</p>
+            <div id="google-signin-btn" class="google-signin-btn-host"></div>
+          </div>
+          <p id="login-error" class="err hidden"></p>
+        </section>
+      </div>
+    </div>
+
+    <div id="app-dash" class="hidden app-shell">
+      <aside class="sidebar fade-up">
+        <div class="sidebar-brand">
+          <span class="shield-wrap small brand-accent" aria-hidden="true">
+            <svg class="shield-icon" viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M12 2L4 5v6c0 5.55 3.84 10.74 8 12 4.16-1.26 8-6.45 8-12V5l-8-3z" />
+            </svg>
+          </span>
+          <div>
+            <strong>ReachNative</strong>
+            <div class="sub" data-i18n="nav_brand_sub">إدارة</div>
+          </div>
+        </div>
+        <nav class="nav-side">
+          <button type="button" class="nav-item active" data-section="overview" data-i18n="nav_overview">لوحة التحكم</button>
+          <button type="button" class="nav-item" data-section="users" data-i18n="nav_users">المستخدمون</button>
+          <button type="button" class="nav-item" data-section="rides" data-i18n="nav_rides">الرحلات</button>
+          <button type="button" class="nav-item" data-section="reports" data-i18n="nav_reports">البلاغات</button>
+          <button type="button" class="nav-item" data-section="tx" data-i18n="nav_tx">المعاملات</button>
+          <button type="button" class="nav-item" data-section="audit" data-i18n="nav_audit">سجل القرارات</button>
+        </nav>
+        <div class="sidebar-footer">
+          <span id="whoami" class="mono whoami"></span>
+          <button type="button" class="secondary btn-block" id="btn-logout" data-i18n="btn_logout">تسجيل الخروج</button>
+        </div>
+      </aside>
+
+      <div class="main-column">
+        <header class="top-bar">
+          <div class="top-bar-start">
+            <h2 id="main-title">لوحة التحكم</h2>
+          </div>
+          <div class="top-bar-center">
+            <input
+              type="search"
+              id="global-search"
+              class="search-input"
+              data-i18n-placeholder="ph_search"
+              placeholder="بحث في القائمة الحالية…"
+              autocomplete="off"
+            />
+          </div>
+          <div class="top-bar-end">
+            <div class="lang-switch" role="group" aria-label="Language">
+              <button type="button" class="lang-btn" data-set-lang="ar">العربية</button>
+              <button type="button" class="lang-btn" data-set-lang="en">English</button>
+            </div>
+            <span id="profile-pill" class="profile-pill mono"></span>
+            <button type="button" class="btn-accent btn-compact" id="btn-refresh" data-i18n="btn_refresh">تحديث</button>
+          </div>
+        </header>
+
+        <main class="main-scroll">
+          <section id="section-overview" class="section-panel fade-up">
+            <div id="stats-skeleton" class="stats-grid skeleton-grid hidden"></div>
+            <div id="stats-grid" class="stats-grid stagger-children"></div>
+            <p id="stats-error" class="err hidden"></p>
+          </section>
+
+          <section id="section-users" class="section-panel hidden fade-up">
+            <div id="users-skeleton" class="table-skeleton hidden"></div>
+            <div class="table-wrap">
+              <table class="data-table" id="users-table">
+                <thead>
+                  <tr>
+                    <th data-i18n="th_name">الاسم</th>
+                    <th data-i18n="th_email">البريد</th>
+                    <th data-i18n="th_role">الدور</th>
+                    <th data-i18n="th_status">الحالة</th>
+                    <th data-i18n="th_online">متصل</th>
+                    <th data-i18n="th_vehicle">مركبة</th>
+                    <th class="col-actions" data-i18n="th_actions">إجراءات</th>
+                  </tr>
+                </thead>
+                <tbody id="users-body"></tbody>
+              </table>
+            </div>
+            <p id="users-error" class="err hidden"></p>
+          </section>
+
+          <section id="section-rides" class="section-panel hidden fade-up">
+            <div id="rides-skeleton" class="table-skeleton hidden"></div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th data-i18n="th_ride_status">الحالة</th>
+                    <th data-i18n="th_passenger">الراكب</th>
+                    <th data-i18n="th_driver">السائق</th>
+                    <th data-i18n="th_fare">الأجرة</th>
+                    <th data-i18n="th_date">تاريخ</th>
+                  </tr>
+                </thead>
+                <tbody id="rides-body"></tbody>
+              </table>
+            </div>
+            <p id="rides-error" class="err hidden"></p>
+          </section>
+
+          <section id="section-reports" class="section-panel hidden fade-up">
+            <div id="reports-skeleton" class="table-skeleton hidden"></div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th data-i18n="th_status">الحالة</th>
+                    <th data-i18n="th_reason">السبب</th>
+                    <th data-i18n="th_reporter_target">مُبلِغ ← مُبلَّغ عنه</th>
+                    <th data-i18n="th_description">وصف</th>
+                    <th class="col-actions" data-i18n="th_update_status">تحديث الحالة</th>
+                  </tr>
+                </thead>
+                <tbody id="reports-body"></tbody>
+              </table>
+            </div>
+            <p id="reports-error" class="err hidden"></p>
+          </section>
+
+          <section id="section-tx" class="section-panel hidden fade-up">
+            <div id="tx-skeleton" class="table-skeleton hidden"></div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th data-i18n="th_user">المستخدم</th>
+                    <th data-i18n="th_type">النوع</th>
+                    <th data-i18n="th_amount">المبلغ</th>
+                    <th data-i18n="tx_status_hdr">الحالة</th>
+                    <th data-i18n="th_flagged">علامة</th>
+                    <th data-i18n="th_date">تاريخ</th>
+                    <th class="col-actions" data-i18n="th_single_action">إجراء</th>
+                  </tr>
+                </thead>
+                <tbody id="tx-body"></tbody>
+              </table>
+            </div>
+            <p id="tx-error" class="err hidden"></p>
+          </section>
+
+          <section id="section-audit" class="section-panel hidden fade-up">
+            <div id="audit-skeleton" class="table-skeleton hidden"></div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th data-i18n="th_time">وقت</th>
+                    <th data-i18n="th_decision">القرار</th>
+                    <th data-i18n="th_admin">المسؤول</th>
+                    <th data-i18n="th_target">الهدف</th>
+                    <th data-i18n="th_summary">ملخص</th>
+                  </tr>
+                </thead>
+                <tbody id="audit-body"></tbody>
+              </table>
+            </div>
+            <p id="audit-error" class="err hidden"></p>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

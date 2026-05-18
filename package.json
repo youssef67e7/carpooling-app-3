@@ -1,0 +1,19 @@
+{
+  "name": "reachnative-car",
+  "private": true,
+  "description": "Ride-hail monorepo: npm start = Expo from /mobile (use npm start; global `expo` CLI is not required). npm run backend for API.",
+  "scripts": {
+    "install:all": "npm install --prefix backend && npm install --prefix mobile",
+    "mobile": "node scripts/start-mobile.cjs",
+    "backend": "npm run dev --prefix backend",
+    "start": "node scripts/start-mobile.cjs",
+    "expo": "node scripts/start-mobile.cjs",
+    "expo:start": "node scripts/start-mobile.cjs",
+    "api-proxy": "npm run api-proxy --prefix mobile",
+    "dev": "concurrently -n backend,mobile -c blue,green \"npm run backend\" \"npm run mobile\"",
+    "dev:lan": "concurrently -n backend,proxy,mobile -c blue,green,magenta \"npm run backend\" \"npm run api-proxy\" \"npm run mobile\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

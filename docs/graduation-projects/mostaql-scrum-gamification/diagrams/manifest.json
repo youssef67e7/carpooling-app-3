@@ -1,0 +1,17 @@
+[
+  {
+    "slug": "fig01_scrum_lifecycle",
+    "caption": "Figure 1 \u2014 Scrum lifecycle with gamification and risk layers",
+    "png": "fig01_scrum_lifecycle.png"
+  },
+  {
+    "slug": "fig02_risk_intervention",
+    "caption": "Figure 2 \u2014 Risk management intervention flow",
+    "png": "fig02_risk_intervention.png"
+  },
+  {
+    "slug": "fig03_architecture",
+    "caption": "Figure 3 \u2014 Technical architecture",
+    "png": "fig03_architecture.png"
+  }
+]
