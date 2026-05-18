@@ -31,6 +31,10 @@ git config --global user.name "Your Name"
 git config --global user.email "your@email.com"
 ```
 
+## Vercel (API + لوحة الإدارة)
+
+راجع [`VERCEL.md`](VERCEL.md): Import الريبو على Vercel مع **Root Directory = `backend`**.
+
 ## أمان
 
 - لا ترفع `.env` — مستثناة في `.gitignore`
