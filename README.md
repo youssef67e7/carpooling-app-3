@@ -1,6 +1,7 @@
 # RideHail — full-stack ride-hailing demo
 
-**GitHub:** [youssef67e7/carpooling-app-3](https://github.com/youssef67e7/carpooling-app-3) — setup: [`GITHUB_SETUP.md`](GITHUB_SETUP.md)
+**GitHub:** [youssef67e7/carpooling-app-3](https://github.com/youssef67e7/carpooling-app-3) — setup: [`GITHUB_SETUP.md`](GITHUB_SETUP.md)  
+**Vercel (API + admin):** [`VERCEL.md`](VERCEL.md) — Root Directory: `backend`
 
 **Production roadmap (schema, APIs, scaling, phased rollout):** see [`docs/PRODUCTION_ARCHITECTURE.md`](docs/PRODUCTION_ARCHITECTURE.md).
 

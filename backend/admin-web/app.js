@@ -368,12 +368,22 @@ function setToken(t) {
   else sessionStorage.removeItem(TOKEN_KEY);
 }
 
+function defaultApiBase() {
+  try {
+    if (typeof window !== "undefined" && window.location?.origin) {
+      return window.location.origin.replace(/\/$/, "");
+    }
+  } catch {}
+  return "";
+}
+
 function getApiBase() {
   const el = $("api-base");
   const fromInput = el?.value?.trim();
   if (fromInput) return fromInput.replace(/\/$/, "");
   const stored = (localStorage.getItem(API_BASE_KEY) || "").trim();
-  return stored.replace(/\/$/, "");
+  if (stored) return stored.replace(/\/$/, "");
+  return defaultApiBase();
 }
 
 function apiUrl(path) {
@@ -396,7 +406,7 @@ function initApiBaseField() {
       return;
     }
   } catch {}
-  el.value = localStorage.getItem(API_BASE_KEY) || "";
+  el.value = localStorage.getItem(API_BASE_KEY) || defaultApiBase();
   el.addEventListener("change", () => {
     refreshGoogleSignInButton();
   });
