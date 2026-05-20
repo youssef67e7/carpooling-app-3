@@ -1,9 +1,10 @@
 import { useEffect, useState, useCallback, useLayoutEffect } from "react";
-import { View, FlatList, Pressable, Text } from "react-native";
+import { FlatList, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchHistory } from "../store/slices/rideSlice";
-import { useTheme } from "../context/ThemeProvider";
+import { useWeretScreenChrome } from "../hooks/useWeretScreenChrome";
+import WeretAmbientBackground from "../components/ui/weret/WeretAmbientBackground";
 import RideCard from "../components/RideCard";
 import EmptyState from "../components/EmptyState";
 
@@ -11,7 +12,7 @@ export default function PassengerHistoryScreen({ navigation }) {
   const { t } = useTranslation();
   const dispatch = useDispatch();
   const { history } = useSelector((s) => s.ride);
-  const { colors, spacing } = useTheme();
+  const { colors, spacing } = useWeretScreenChrome();
   const [refreshing, setRefreshing] = useState(false);
 
   useLayoutEffect(() => {
@@ -33,23 +34,22 @@ export default function PassengerHistoryScreen({ navigation }) {
   }, [load]);
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+    <WeretAmbientBackground>
       <FlatList
+        style={{ flex: 1 }}
         data={history}
         keyExtractor={(item) => item._id}
-        contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xl, flexGrow: 1 }}
+        contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xl * 2, flexGrow: 1 }}
         refreshing={refreshing}
         onRefresh={onRefresh}
-        ListEmptyComponent={<EmptyState title={t("noRides")} subtitle={t("pullToRefresh")} />}
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={<EmptyState title={t("noRides")} subtitle={t("pullToRefresh")} icon="history" />}
         renderItem={({ item }) => (
           <View style={{ marginBottom: spacing.sm }}>
             <RideCard ride={item} />
           </View>
         )}
       />
-      <Pressable style={{ padding: spacing.md, alignItems: "center" }} onPress={() => navigation.goBack()}>
-        <Text style={{ color: colors.primary, fontWeight: "700" }}>{t("back")}</Text>
-      </Pressable>
-    </View>
+    </WeretAmbientBackground>
   );
 }

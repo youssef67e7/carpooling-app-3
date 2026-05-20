@@ -18,7 +18,7 @@ import { useTranslation } from "react-i18next";
 import { useDispatch, useSelector } from "react-redux";
 import { Ionicons } from "@expo/vector-icons";
 import { fetchRideMessagesThunk, sendRideMessageThunk, fetchRideById } from "../store/slices/rideSlice";
-import { useTheme } from "../context/ThemeProvider";
+import { useWeretScreenChrome } from "../hooks/useWeretScreenChrome";
 import ReportUserModal from "../components/ReportUserModal";
 import {
   joinWebrtcRoom,
@@ -41,7 +41,7 @@ export default function RideChatScreen() {
   const navigation = useNavigation();
   const dispatch = useDispatch();
   const isFocused = useIsFocused();
-  const { colors, spacing, radius } = useTheme();
+  const { colors, spacing, radius } = useWeretScreenChrome();
   const rtl = I18nManager.isRTL;
   const { user } = useSelector((s) => s.auth);
   const rideId = route.params?.rideId;

@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { View, Text, TextInput, StyleSheet, I18nManager } from "react-native";
+import { View, Text, TextInput, I18nManager } from "react-native";
 import { useTheme } from "../context/ThemeProvider";
+import { weretRadius } from "../theme/weretDesignSystem";
 
 export default function InputField({
   label,
@@ -13,12 +14,12 @@ export default function InputField({
   error,
   editable = true,
 }) {
-  const { colors, spacing, radius } = useTheme();
+  const { colors, spacing } = useTheme();
   const rtl = I18nManager.isRTL;
   const [focused, setFocused] = useState(false);
 
-  const borderColor = error ? colors.danger : focused ? colors.primary : colors.border;
-  const ringWidth = focused && !error ? 2 : 1;
+  const borderColor = error ? colors.danger : focused ? colors.text : colors.border;
+  const ringWidth = error ? 2 : focused ? 2 : 1.5;
 
   return (
     <View style={{ marginBottom: spacing.md }}>
@@ -26,9 +27,11 @@ export default function InputField({
         <Text
           style={{
             marginBottom: spacing.xs,
-            color: focused ? colors.text : colors.textMuted,
-            fontSize: 14,
-            fontWeight: focused ? "600" : "500",
+            color: colors.textMuted,
+            fontSize: 11,
+            fontWeight: "800",
+            letterSpacing: 1,
+            textTransform: "uppercase",
             textAlign: rtl ? "right" : "left",
           }}
         >
@@ -49,12 +52,13 @@ export default function InputField({
         style={{
           borderWidth: ringWidth,
           borderColor,
-          borderRadius: radius.md,
+          borderRadius: weretRadius.field,
           paddingHorizontal: spacing.md,
-          paddingVertical: spacing.sm + 2,
+          paddingVertical: spacing.sm + 4,
           fontSize: 16,
+          fontWeight: "600",
           color: colors.text,
-          backgroundColor: colors.surface,
+          backgroundColor: colors.surfaceMuted,
           textAlign: rtl ? "right" : "left",
         }}
       />

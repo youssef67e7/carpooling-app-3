@@ -4,13 +4,11 @@ import { useTheme } from "../context/ThemeProvider";
 import { weretPalette, weretPress, weretRadius } from "../theme/weretDesignSystem";
 import { getServiceIconName } from "../utils/serviceTypeIcons";
 
-export default function ServiceTypeChip({ typeKey, label, capacity, selected, onPress, weret }) {
-  const { colors, radius } = useTheme();
+export default function ServiceTypeChip({ typeKey, label, capacity, selected, onPress, weret = true }) {
   const rtl = I18nManager.isRTL;
   const iconName = getServiceIconName(typeKey);
-  const lime = colors.accentLime || "#d4fc5c";
 
-  if (weret) {
+  if (weret !== false) {
     const P = weretPalette;
     return (
       <Pressable

@@ -5,13 +5,16 @@ import { useDispatch, useSelector } from "react-redux";
 import { useIsFocused } from "@react-navigation/native";
 import { fetchHistory } from "../../store/slices/rideSlice";
 import { useWeretScreenChrome } from "../../hooks/useWeretScreenChrome";
+import { weretRadius, weretElevation } from "../../theme/weretDesignSystem";
 import EmptyState from "../../components/EmptyState";
+import WeretListScreen from "../../components/ui/weret/WeretListScreen";
+import WeretStepHeader from "../../components/ui/weret/WeretStepHeader";
 
 export default function DriverRatingsScreen() {
   const { t } = useTranslation();
   const dispatch = useDispatch();
   const { history } = useSelector((s) => s.ride);
-  const { colors, spacing, radius } = useWeretScreenChrome();
+  const { colors, spacing } = useWeretScreenChrome();
   const rtl = I18nManager.isRTL;
   const isFocused = useIsFocused();
   const [refreshing, setRefreshing] = useState(false);
@@ -52,18 +55,17 @@ export default function DriverRatingsScreen() {
         style={{
           padding: spacing.md,
           marginBottom: spacing.sm,
-          borderRadius: radius.md,
+          borderRadius: weretRadius.card,
           borderWidth: 1,
           borderColor: colors.border,
           backgroundColor: colors.surface,
+          ...weretElevation.card,
         }}
       >
         <View style={{ flexDirection: rtl ? "row-reverse" : "row", justifyContent: "space-between", alignItems: "center" }}>
-          <Text style={{ color: colors.text, fontWeight: "800", flex: 1, textAlign: rtl ? "right" : "left" }}>{name}</Text>
+          <Text style={{ color: colors.text, fontWeight: "900", flex: 1, textAlign: rtl ? "right" : "left" }}>{name}</Text>
           {stars != null ? (
-            <Text style={{ color: colors.primary, fontWeight: "800", fontSize: 16 }}>
-              ★ {stars}/5
-            </Text>
+            <Text style={{ color: colors.text, fontWeight: "900", fontSize: 16 }}>★ {stars}/5</Text>
           ) : (
             <Text style={{ color: colors.textMuted, fontSize: 13 }}>{t("driverRatingPendingFromPassenger")}</Text>
           )}
@@ -72,7 +74,7 @@ export default function DriverRatingsScreen() {
           {when} · #{subId}
         </Text>
         {item.passengerReview ? (
-          <Text style={{ color: colors.text, marginTop: spacing.sm, fontSize: 14, textAlign: rtl ? "right" : "left" }}>
+          <Text style={{ color: colors.text, marginTop: spacing.sm, fontSize: 14, fontStyle: "italic", textAlign: rtl ? "right" : "left" }}>
             “{item.passengerReview}”
           </Text>
         ) : null}
@@ -81,20 +83,17 @@ export default function DriverRatingsScreen() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+    <WeretListScreen scroll={false} contentContainerStyle={{ flex: 1, padding: spacing.md }}>
+      <WeretStepHeader title={t("driverRatingsTitle")} subtitle={t("driverRatingsPerTripIntro")} colors={colors} spacing={spacing} />
       <FlatList
         data={completedRated}
         keyExtractor={(item) => item._id}
         renderItem={renderItem}
-        contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xl, flexGrow: 1 }}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: spacing.xl, flexGrow: 1 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        ListHeaderComponent={
-          <Text style={{ color: colors.textMuted, fontSize: 14, marginBottom: spacing.md, textAlign: rtl ? "right" : "left", lineHeight: 22 }}>
-            {t("driverRatingsPerTripIntro")}
-          </Text>
-        }
         ListEmptyComponent={<EmptyState title={t("driverRatingsNoTrips")} subtitle={t("pullToRefresh")} />}
       />
-    </View>
+    </WeretListScreen>
   );
 }

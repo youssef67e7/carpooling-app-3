@@ -1,26 +1,23 @@
-import { ScrollView, Text, I18nManager } from "react-native";
+import { Text, I18nManager } from "react-native";
 import Constants from "expo-constants";
 import { useTranslation } from "react-i18next";
-import { useTheme } from "../../context/ThemeProvider";
+import { useWeretScreenChrome } from "../../hooks/useWeretScreenChrome";
+import WeretInfoScreen from "../../components/ui/weret/WeretInfoScreen";
 
 export default function AboutAmeenScreen() {
   const { t } = useTranslation();
-  const { colors, spacing } = useTheme();
+  const { colors, spacing } = useWeretScreenChrome();
   const rtl = I18nManager.isRTL;
   const version = Constants.expoConfig?.version ?? "1.0.0";
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xl }}>
-      <Text style={{ color: colors.text, fontSize: 24, fontWeight: "800", textAlign: rtl ? "right" : "left", marginBottom: spacing.xs }}>
-        {t("appName")}
+    <WeretInfoScreen title={t("appName")} subtitle={t("aboutVersion", { version })} colors={colors} spacing={spacing}>
+      <Text style={{ color: colors.text, fontSize: 16, lineHeight: 24, fontWeight: "600", textAlign: rtl ? "right" : "left" }}>
+        {t("aboutTagline")}
       </Text>
-      <Text style={{ color: colors.textMuted, marginBottom: spacing.lg, textAlign: rtl ? "right" : "left" }}>
-        {t("aboutVersion", { version })}
-      </Text>
-      <Text style={{ color: colors.text, fontSize: 16, lineHeight: 24, textAlign: rtl ? "right" : "left" }}>{t("aboutTagline")}</Text>
-      <Text style={{ color: colors.textMuted, fontSize: 15, lineHeight: 22, marginTop: spacing.md, textAlign: rtl ? "right" : "left" }}>
+      <Text style={{ color: colors.textMuted, fontSize: 15, lineHeight: 24, marginTop: spacing.md, textAlign: rtl ? "right" : "left" }}>
         {t("aboutBody")}
       </Text>
-    </ScrollView>
+    </WeretInfoScreen>
   );
 }

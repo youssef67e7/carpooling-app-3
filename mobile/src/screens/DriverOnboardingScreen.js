@@ -7,9 +7,8 @@ import {
   I18nManager,
   KeyboardAvoidingView,
   Platform,
-  Image,
   Pressable,
-  ActivityIndicator,
+  Image,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Animated, { FadeIn, FadeInUp, SlideInLeft, SlideInRight, SlideOutLeft, SlideOutRight } from "react-native-reanimated";
@@ -25,21 +24,23 @@ import InputField from "../components/InputField";
 import CustomButton from "../components/CustomButton";
 import PressableScale from "../components/ui/PressableScale";
 import FormErrorCallout from "../components/ui/FormErrorCallout";
+import WeretAmbientBackground from "../components/ui/weret/WeretAmbientBackground";
+import WeretScreenHeader from "../components/ui/weret/WeretScreenHeader";
+import WeretStepProgress from "../components/ui/weret/WeretStepProgress";
+import WeretStepHeader from "../components/ui/weret/WeretStepHeader";
+import WeretUploadCard from "../components/ui/weret/WeretUploadCard";
+import WeretStickyFooter from "../components/ui/weret/WeretStickyFooter";
+import WeretWordmarkOnLight from "../components/auth/WeretWordmarkOnLight";
+import { weretElevation, weretRadius } from "../theme/weretDesignSystem";
 import { showAlert } from "../utils/showAlert";
-import { api, apiBaseURL } from "../api/client";
+import { api } from "../api/client";
+import { toApiUploadUrl, toAbsoluteUploadUrl } from "../utils/uploadUrl";
+import { formatApiError } from "../utils/apiErrors";
 import { applySessionThunk, setUser } from "../store/slices/authSlice";
 import { fetchDriverProfileThunk, fetchDriverStatusThunk } from "../store/slices/driverSlice";
 
 const TOTAL = 4;
 const DRAFT_KEY = "driver_application_draft_v1";
-
-function toAbsoluteUrl(maybeRelative) {
-  const s = String(maybeRelative || "");
-  if (!s) return "";
-  if (s.startsWith("http://") || s.startsWith("https://")) return s;
-  if (s.startsWith("/")) return `${apiBaseURL}${s}`;
-  return s;
-}
 
 function isValidEmail(s) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s || "").trim());
@@ -98,59 +99,6 @@ async function uploadPickedAsset(asset, visibility = "public") {
   return data?.url;
 }
 
-function UploadCard({ title, subtitle, uri, onPress, busy }) {
-  const { colors, spacing, radius } = useWeretScreenChrome();
-  const rtl = I18nManager.isRTL;
-  const token = useSelector((s) => s.auth.token);
-  const isPrivate = typeof uri === "string" && uri.includes("/uploads/private/");
-  const imageSource =
-    uri && isPrivate && token
-      ? { uri, headers: { Authorization: `Bearer ${token}` } }
-      : uri
-        ? { uri }
-        : null;
-  return (
-    <PressableScale onPress={onPress} disabled={busy} accessibilityRole="button" style={{ flex: 1 }}>
-      <SectionSurface style={{ padding: spacing.md }} noEntering>
-        <View style={{ flexDirection: rtl ? "row-reverse" : "row", alignItems: "center", gap: spacing.md }}>
-          <View
-            style={{
-              width: 72,
-              height: 72,
-              borderRadius: radius.lg,
-              borderWidth: 1,
-              borderColor: colors.border,
-              backgroundColor: colors.surfaceMuted,
-              overflow: "hidden",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            {imageSource ? (
-              <Animated.View entering={FadeIn.duration(220)} style={{ width: "100%", height: "100%" }}>
-                <Image source={imageSource} style={{ width: "100%", height: "100%" }} resizeMode="cover" />
-              </Animated.View>
-            ) : busy ? (
-              <ActivityIndicator color={colors.primary} />
-            ) : (
-              <Ionicons name="add" size={32} color={colors.textMuted} />
-            )}
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: colors.text, fontWeight: "800", textAlign: rtl ? "right" : "left" }}>{title}</Text>
-            {subtitle ? (
-              <Text style={{ color: colors.textMuted, marginTop: 4, fontSize: 12, textAlign: rtl ? "right" : "left" }}>
-                {subtitle}
-              </Text>
-            ) : null}
-          </View>
-          <Ionicons name={rtl ? "chevron-back" : "chevron-forward"} size={18} color={colors.textMuted} />
-        </View>
-      </SectionSurface>
-    </PressableScale>
-  );
-}
-
 export default function DriverOnboardingScreen() {
   const { t } = useTranslation();
   const navigation = useNavigation();
@@ -158,8 +106,15 @@ export default function DriverOnboardingScreen() {
   const dispatch = useDispatch();
   const { colors, spacing, radius } = useWeretScreenChrome();
   const rtl = I18nManager.isRTL;
-  const { user } = useSelector((s) => s.auth);
+  const { user, token } = useSelector((s) => s.auth);
   const driver = useSelector((s) => s.driver);
+
+  function uploadImageSource(uri) {
+    if (!uri) return null;
+    const isPrivate = String(uri).includes("/uploads/private/");
+    if (isPrivate && token) return { uri, headers: { Authorization: `Bearer ${token}` } };
+    return { uri };
+  }
   const [forceEdit, setForceEdit] = useState(false);
 
   const [step, setStep] = useState(1);
@@ -287,8 +242,6 @@ export default function DriverOnboardingScreen() {
     selectedCarIndex,
   ]);
 
-  const progress = step / TOTAL;
-
   const direction = step >= prevStepRef.current ? "forward" : "back";
   useEffect(() => {
     prevStepRef.current = step;
@@ -376,7 +329,7 @@ export default function DriverOnboardingScreen() {
           ? "private"
           : "public";
       const rel = await uploadPickedAsset(asset, vis);
-      setUrl(toAbsoluteUrl(rel));
+      setUrl(toAbsoluteUploadUrl(rel));
     } catch (e) {
       showAlert(t("error"), String(e?.message || e));
     } finally {
@@ -401,15 +354,25 @@ export default function DriverOnboardingScreen() {
       const payload = {
         fullName: fullName.trim(),
         phone: phone.trim(),
-        email: email.trim(),
-        profileImageUrl,
-        criminalRecordFrontUrl: criminalFrontUrl,
-        criminalRecordBackUrl: criminalBackUrl,
+        email: email.trim().toLowerCase(),
+        profileImageUrl: toApiUploadUrl(profileImageUrl),
+        criminalRecordFrontUrl: toApiUploadUrl(criminalFrontUrl),
+        criminalRecordBackUrl: toApiUploadUrl(criminalBackUrl),
         nationalIdNumber: nationalIdNumber.trim(),
-        licenseImageUrl,
+        licenseImageUrl: toApiUploadUrl(licenseImageUrl),
         licenseNumber: licenseNumber.trim(),
-        licenseExpiry: exp?.toISOString(),
-        cars,
+        licenseExpiry: exp.toISOString().slice(0, 10),
+        cars: (Array.isArray(cars) ? cars : []).map((c) => ({
+          imageUrl: toApiUploadUrl(c.imageUrl),
+          brand: String(c.brand || "").trim(),
+          model: String(c.model || "").trim(),
+          color: String(c.color || "").trim(),
+          plateNumber: String(c.plateNumber || "").trim(),
+          seats: Math.min(20, Math.max(2, Math.floor(Number(c.seats) || 4))),
+          carCategory: ["sedan", "suv", "van"].includes(String(c.carCategory || "").toLowerCase())
+            ? String(c.carCategory).toLowerCase()
+            : "sedan",
+        })),
       };
       const { data } = await api.post("/driver-application/submit", payload);
       await AsyncStorage.removeItem(DRAFT_KEY);
@@ -433,7 +396,7 @@ export default function DriverOnboardingScreen() {
       if (data?.status === "approved") showAlert(t("success"), t("driverRegCompletedApproved"));
       else showAlert(t("success"), t("driverRegCompletedPending"));
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || "Request failed";
+      const msg = formatApiError(e, t);
       if (String(msg).includes("Email mismatch")) setErr(t("driverRegEmailMismatch"));
       else if (String(msg).includes("Email already in use")) setErr(t("emailAlreadyInUse"));
       else setErr(msg);
@@ -455,100 +418,88 @@ export default function DriverOnboardingScreen() {
   const isRejected = applicationStatus === "rejected" || profileStatus === "rejected";
 
   if (!forceEdit && (isApproved || isPending || isRejected)) {
+    const statusIcon = isApproved ? "checkmark-circle" : isRejected ? "close-circle" : "time";
     return (
-      <KeyboardAvoidingView
-        style={{ flex: 1, backgroundColor: colors.bg }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 6 : 0}
-      >
-        <View style={{ paddingTop: insets.top, flex: 1, paddingHorizontal: spacing.lg, paddingBottom: spacing.xl }}>
-          <View style={[styles.topBar, { paddingHorizontal: 0, flexDirection: rtl ? "row-reverse" : "row" }]}>
-            <PressableScale onPress={() => navigation.goBack()} accessibilityRole="button" hitSlop={10} style={styles.topIcon}>
-              <Ionicons name={rtl ? "chevron-forward" : "chevron-back"} size={22} color={colors.text} />
-            </PressableScale>
-            <View style={{ flex: 1 }} />
-            <PressableScale onPress={() => navigation.goBack()} accessibilityRole="button" hitSlop={10} style={styles.topIcon}>
-              <Ionicons name="close" size={24} color={colors.text} />
-            </PressableScale>
-          </View>
-
-          <View style={{ marginTop: spacing.lg }}>
-            <Text style={[styles.h1, { color: colors.text, textAlign: rtl ? "right" : "left" }]}>
-              {isApproved ? t("driverRegCompletedApproved") : isRejected ? t("driverRegRejectedTitle") : t("driverRegPendingTitle")}
-            </Text>
-            <Text style={[styles.sub, { color: colors.textMuted, textAlign: rtl ? "right" : "left", marginTop: spacing.sm }]}>
-              {isApproved ? t("driverMyCarsApprovedHint") : isRejected ? t("driverRegRejectedBody") : t("driverRegPendingBody")}
-            </Text>
-
-            {isRejected ? (
-              <View
-                style={{
-                  marginTop: spacing.md,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  backgroundColor: colors.surface,
-                  borderRadius: radius.md,
-                  padding: spacing.md,
-                }}
-              >
-                <Text style={{ color: colors.textMuted, fontWeight: "800", textAlign: rtl ? "right" : "left" }}>
-                  {t("driverRegReviewNote")}
-                </Text>
-                <Text style={{ color: colors.text, marginTop: 6, textAlign: rtl ? "right" : "left" }}>
-                  {reviewNote || "—"}
-                </Text>
-              </View>
-            ) : null}
-
-            <View style={{ marginTop: spacing.lg, gap: spacing.sm }}>
-              <CustomButton title={t("driverRegGoToMyCars")} onPress={() => navigation.navigate("DriverCars")} />
-              {!isApproved ? (
-                <CustomButton
-                  title={t("driverRegEditSubmission")}
-                  variant="outline"
-                  onPress={() => setForceEdit(true)}
-                />
-              ) : null}
+      <WeretAmbientBackground>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 6 : 0}
+        >
+          <View style={{ paddingTop: insets.top, flex: 1, paddingHorizontal: spacing.lg }}>
+            <WeretScreenHeader
+              colors={colors}
+              spacing={spacing}
+              onBack={() => navigation.goBack()}
+              onClose={() => navigation.goBack()}
+            />
+            <View style={{ alignItems: "center", marginBottom: spacing.md }}>
+              <WeretWordmarkOnLight label={t("appName")} fontSize={28} />
             </View>
+            <Animated.View entering={FadeInUp.duration(400)} style={{ flex: 1, justifyContent: "center", paddingBottom: spacing.xl }}>
+              <View style={[styles.statusIconWrap, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <Ionicons name={statusIcon} size={48} color={isRejected ? colors.danger : colors.text} />
+              </View>
+              <WeretStepHeader
+                title={isApproved ? t("driverRegCompletedApproved") : isRejected ? t("driverRegRejectedTitle") : t("driverRegPendingTitle")}
+                subtitle={
+                  isApproved ? t("driverMyCarsApprovedHint") : isRejected ? t("driverRegRejectedBody") : t("driverRegPendingBody")
+                }
+                colors={colors}
+                spacing={spacing}
+              />
+              {isRejected ? (
+                <SectionSurface noEntering elevated style={{ marginTop: spacing.sm }}>
+                  <Text style={{ color: colors.textMuted, fontWeight: "800", textAlign: rtl ? "right" : "left" }}>
+                    {t("driverRegReviewNote")}
+                  </Text>
+                  <Text style={{ color: colors.text, marginTop: 8, textAlign: rtl ? "right" : "left", lineHeight: 22 }}>
+                    {reviewNote || "—"}
+                  </Text>
+                </SectionSurface>
+              ) : null}
+              <View style={{ marginTop: spacing.lg, gap: spacing.sm }}>
+                <CustomButton title={t("driverRegGoToMyCars")} variant="ink" onPress={() => navigation.navigate("DriverCars")} />
+                {!isApproved ? (
+                  <CustomButton title={t("driverRegEditSubmission")} variant="outline" onPress={() => setForceEdit(true)} />
+                ) : null}
+              </View>
+            </Animated.View>
           </View>
-        </View>
-      </KeyboardAvoidingView>
+        </KeyboardAvoidingView>
+      </WeretAmbientBackground>
     );
   }
 
-  return (
-    <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: colors.bg }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 6 : 0}
-    >
-      <View style={{ paddingTop: insets.top, flex: 1 }}>
-        <View style={[styles.topBar, { paddingHorizontal: spacing.lg, flexDirection: rtl ? "row-reverse" : "row" }]}>
-          <PressableScale onPress={onBack} accessibilityRole="button" hitSlop={10} style={styles.topIcon}>
-            <Ionicons name={rtl ? "chevron-forward" : "chevron-back"} size={22} color={colors.text} />
-          </PressableScale>
-          <View style={{ flex: 1 }} />
-          <PressableScale
-            onPress={() => navigation.navigate("HelpCenter")}
-            accessibilityRole="button"
-            hitSlop={10}
-            style={styles.topHelp}
-          >
-            <Text style={{ color: colors.primary, fontWeight: "800" }}>{t("driverOnboardingHelp")}</Text>
-          </PressableScale>
-          <PressableScale onPress={() => navigation.goBack()} accessibilityRole="button" hitSlop={10} style={styles.topIcon}>
-            <Ionicons name="close" size={24} color={colors.text} />
-          </PressableScale>
-        </View>
+  const stepMeta = [
+    { title: t("driverRegStep1Title"), sub: t("driverRegStep1Sub") },
+    { title: t("driverRegStep2Title"), sub: t("driverRegStep2Sub") },
+    { title: t("driverRegStep3Title"), sub: t("driverRegStep3Sub") },
+    { title: t("driverRegStep4Title"), sub: t("driverRegStep4Sub") },
+  ][step - 1];
 
-        <View style={{ paddingHorizontal: spacing.lg, marginTop: spacing.sm }}>
-          <Text style={{ color: colors.textMuted, fontWeight: "700", textAlign: rtl ? "right" : "left" }}>
-            {t("driverOnboardingProgress", { step, total: TOTAL })}
-          </Text>
-          <View style={[styles.progressTrack, { backgroundColor: colors.border, marginTop: spacing.xs }]}>
-            <View style={[styles.progressFill, { width: `${progress * 100}%`, backgroundColor: colors.primary }]} />
+  return (
+    <WeretAmbientBackground>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 6 : 0}
+      >
+        <View style={{ paddingTop: insets.top, flex: 1 }}>
+          <WeretScreenHeader
+            colors={colors}
+            spacing={spacing}
+            onBack={onBack}
+            onClose={() => navigation.goBack()}
+            helpLabel={t("driverOnboardingHelp")}
+            onHelp={() => navigation.navigate("HelpCenter")}
+          />
+
+          <View style={{ paddingHorizontal: spacing.lg, alignItems: "center" }}>
+            <WeretWordmarkOnLight label={t("appName")} fontSize={28} />
+            <View style={{ height: spacing.sm, width: "100%" }} />
+            <WeretStepProgress step={step} total={TOTAL} colors={colors} spacing={spacing} />
           </View>
-        </View>
 
         <ScrollView
           style={{ flex: 1 }}
@@ -556,20 +507,26 @@ export default function DriverOnboardingScreen() {
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.xl }}
         >
-          <Animated.View key={step} entering={entering} exiting={exiting} style={{ gap: spacing.sm }}>
+          <Animated.View key={step} entering={entering} exiting={exiting} style={{ gap: spacing.md }}>
+            <WeretStepHeader
+              overline={t("driverOnboardingProgress", { step, total: TOTAL })}
+              title={stepMeta?.title}
+              subtitle={stepMeta?.sub}
+              colors={colors}
+              spacing={spacing}
+            />
             {step === 1 ? (
               <>
-                <Animated.View entering={FadeInUp.duration(240)}>
-                  <Text style={[styles.h1, { color: colors.text, textAlign: rtl ? "right" : "left" }]}>{t("driverRegStep1Title")}</Text>
-                  <Text style={[styles.sub, { color: colors.textMuted, textAlign: rtl ? "right" : "left" }]}>{t("driverRegStep1Sub")}</Text>
-                </Animated.View>
-                <SectionSurface noEntering style={{ padding: spacing.lg }}>
-                  <UploadCard
+                <SectionSurface noEntering elevated style={{ padding: spacing.lg }}>
+                  <WeretUploadCard
                     title={t("driverRegProfilePic")}
                     subtitle={t("driverRegUploadRequired")}
                     uri={profileImageUrl}
+                    imageSource={uploadImageSource(profileImageUrl)}
                     busy={busyUploadKey === "profile"}
                     onPress={() => pickAndUpload(setProfileImageUrl, "profile", [4, 4])}
+                    colors={colors}
+                    spacing={spacing}
                   />
                   <View style={{ height: spacing.md }} />
                   <InputField label={t("driverRegFullName")} value={fullName} onChangeText={setFullName} />
@@ -588,25 +545,31 @@ export default function DriverOnboardingScreen() {
 
             {step === 2 ? (
               <>
-                <Text style={[styles.h1, { color: colors.text, textAlign: rtl ? "right" : "left" }]}>{t("driverRegStep2Title")}</Text>
-                <Text style={[styles.sub, { color: colors.textMuted, textAlign: rtl ? "right" : "left" }]}>{t("driverRegStep2Sub")}</Text>
                 <View style={{ flexDirection: rtl ? "row-reverse" : "row", gap: spacing.sm }}>
-                  <UploadCard
+                  <WeretUploadCard
+                    compact
                     title={t("driverRegCriminalFront")}
                     subtitle={t("driverRegUploadRequired")}
                     uri={criminalFrontUrl}
+                    imageSource={uploadImageSource(criminalFrontUrl)}
                     busy={busyUploadKey === "crimFront"}
                     onPress={() => pickAndUpload(setCriminalFrontUrl, "crimFront", [4, 3])}
+                    colors={colors}
+                    spacing={spacing}
                   />
-                  <UploadCard
+                  <WeretUploadCard
+                    compact
                     title={t("driverRegCriminalBack")}
                     subtitle={t("driverRegUploadRequired")}
                     uri={criminalBackUrl}
+                    imageSource={uploadImageSource(criminalBackUrl)}
                     busy={busyUploadKey === "crimBack"}
                     onPress={() => pickAndUpload(setCriminalBackUrl, "crimBack", [4, 3])}
+                    colors={colors}
+                    spacing={spacing}
                   />
                 </View>
-                <SectionSurface noEntering style={{ padding: spacing.lg }}>
+                <SectionSurface noEntering elevated style={{ padding: spacing.lg }}>
                   <InputField
                     label={t("driverRegNationalId")}
                     value={nationalIdNumber}
@@ -620,16 +583,17 @@ export default function DriverOnboardingScreen() {
 
             {step === 3 ? (
               <>
-                <Text style={[styles.h1, { color: colors.text, textAlign: rtl ? "right" : "left" }]}>{t("driverRegStep3Title")}</Text>
-                <Text style={[styles.sub, { color: colors.textMuted, textAlign: rtl ? "right" : "left" }]}>{t("driverRegStep3Sub")}</Text>
-                <UploadCard
+                <WeretUploadCard
                   title={t("driverRegLicenseImage")}
                   subtitle={t("driverRegUploadRequired")}
                   uri={licenseImageUrl}
+                  imageSource={uploadImageSource(licenseImageUrl)}
                   busy={busyUploadKey === "licenseImg"}
                   onPress={() => pickAndUpload(setLicenseImageUrl, "licenseImg", [4, 3])}
+                  colors={colors}
+                  spacing={spacing}
                 />
-                <SectionSurface noEntering style={{ padding: spacing.lg }}>
+                <SectionSurface noEntering elevated style={{ padding: spacing.lg }}>
                   <InputField label={t("driverRegLicenseNumber")} value={licenseNumber} onChangeText={setLicenseNumber} />
                   <InputField
                     label={t("driverRegLicenseExpiry")}
@@ -644,9 +608,7 @@ export default function DriverOnboardingScreen() {
 
             {step === 4 ? (
               <>
-                <Text style={[styles.h1, { color: colors.text, textAlign: rtl ? "right" : "left" }]}>{t("driverRegStep4Title")}</Text>
-                <Text style={[styles.sub, { color: colors.textMuted, textAlign: rtl ? "right" : "left" }]}>{t("driverRegStep4Sub")}</Text>
-                <SectionSurface noEntering style={{ padding: spacing.lg }}>
+                <SectionSurface noEntering elevated style={{ padding: spacing.lg }}>
                   <Text style={{ color: colors.text, fontWeight: "900", marginBottom: spacing.sm }}>
                     {t("driverRegYourCars")}
                   </Text>
@@ -663,16 +625,12 @@ export default function DriverOnboardingScreen() {
                           onPress={() => setSelectedCarIndex(idx)}
                           style={{
                             width: 240,
-                            borderRadius: radius.lg,
-                            borderWidth: 1,
-                            borderColor: selected ? colors.primary : colors.border,
+                            borderRadius: weretRadius.card,
+                            borderWidth: selected ? 2.5 : 1,
+                            borderColor: selected ? colors.text : colors.border,
                             backgroundColor: colors.surface,
                             padding: spacing.md,
-                            shadowColor: "#000",
-                            shadowOpacity: 0.08,
-                            shadowRadius: 10,
-                            shadowOffset: { width: 0, height: 4 },
-                            elevation: 3,
+                            ...(selected ? weretElevation.heroFloat : weretElevation.card),
                           }}
                         >
                           <View style={{ flexDirection: rtl ? "row-reverse" : "row", alignItems: "center", gap: spacing.sm }}>
@@ -726,17 +684,20 @@ export default function DriverOnboardingScreen() {
                       onPress={addCarFromForm}
                       style={{
                         width: 240,
-                        borderRadius: radius.lg,
-                        borderWidth: 1,
+                        borderRadius: weretRadius.card,
+                        borderWidth: 1.5,
+                        borderStyle: "dashed",
                         borderColor: colors.border,
-                        backgroundColor: colors.bg,
+                        backgroundColor: colors.surfaceMuted,
                         padding: spacing.md,
                         alignItems: "center",
                         justifyContent: "center",
                       }}
                     >
-                      <Ionicons name="add" size={22} color={colors.primary} />
-                      <Text style={{ color: colors.primary, fontWeight: "900", marginTop: 8 }}>
+                      <View style={[styles.addCarCircle, { backgroundColor: colors.text }]}>
+                        <Ionicons name="add" size={22} color={colors.primaryText} />
+                      </View>
+                      <Text style={{ color: colors.text, fontWeight: "900", marginTop: 8 }}>
                         {t("driverRegAddCar")}
                       </Text>
                       <Text style={{ color: colors.textMuted, marginTop: 4, textAlign: "center", fontSize: 12 }}>
@@ -746,14 +707,17 @@ export default function DriverOnboardingScreen() {
                   </ScrollView>
                 </SectionSurface>
 
-                <UploadCard
+                <WeretUploadCard
                   title={t("driverRegCarImage")}
                   subtitle={t("driverRegUploadRequired")}
                   uri={carImageUrl}
+                  imageSource={uploadImageSource(carImageUrl)}
                   busy={busyUploadKey === "carImg"}
                   onPress={() => pickAndUpload(setCarImageUrl, "carImg", [4, 3])}
+                  colors={colors}
+                  spacing={spacing}
                 />
-                <SectionSurface noEntering style={{ padding: spacing.lg }}>
+                <SectionSurface noEntering elevated style={{ padding: spacing.lg }}>
                   <InputField label={t("driverRegCarBrand")} value={carBrand} onChangeText={setCarBrand} />
                   <InputField label={t("driverRegCarModel")} value={carModel} onChangeText={setCarModel} />
                   <InputField label={t("driverRegCarColor")} value={carColor} onChangeText={setCarColor} />
@@ -775,30 +739,38 @@ export default function DriverOnboardingScreen() {
           </Animated.View>
         </ScrollView>
 
-        <View style={{ paddingHorizontal: spacing.lg, paddingBottom: insets.bottom + spacing.md, paddingTop: spacing.sm }}>
-          <View style={{ flexDirection: rtl ? "row-reverse" : "row", gap: spacing.sm, alignItems: "center" }}>
-            <View style={{ flex: 1 }}>
-              <CustomButton
-                title={step === TOTAL ? t("driverRegSubmit") : t("driverOnboardingNext")}
-                variant="lime"
-                onPress={onNext}
-                loading={submitting}
-                disabled={submitting || !!busyUploadKey}
-              />
-            </View>
-          </View>
+        <WeretStickyFooter colors={colors} spacing={spacing} bottomInset={insets.bottom}>
+          <CustomButton
+            title={step === TOTAL ? t("driverRegSubmit") : t("driverOnboardingNext")}
+            variant="ink"
+            onPress={onNext}
+            loading={submitting}
+            disabled={submitting || !!busyUploadKey}
+          />
+        </WeretStickyFooter>
         </View>
-      </View>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </WeretAmbientBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  topBar: { alignItems: "center", justifyContent: "space-between" },
-  topIcon: { paddingVertical: 8, paddingHorizontal: 10 },
-  topHelp: { paddingVertical: 8, paddingHorizontal: 10 },
-  progressTrack: { height: 6, borderRadius: 999, overflow: "hidden" },
-  progressFill: { height: "100%", borderRadius: 999 },
-  h1: { fontSize: 22, fontWeight: "900", letterSpacing: -0.3 },
-  sub: { fontSize: 13, marginTop: 6, lineHeight: 18 },
+  statusIconWrap: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    alignSelf: "center",
+    marginBottom: 20,
+    ...weretElevation.card,
+  },
+  addCarCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 });

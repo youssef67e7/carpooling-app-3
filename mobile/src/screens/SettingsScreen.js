@@ -6,7 +6,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { setThemeModeThunk } from "../store/slices/uiSlice";
 import { updateProfileThunk, clearError } from "../store/slices/authSlice";
 import { setAppLanguage } from "../i18n";
-import { useTheme } from "../context/ThemeProvider";
+import { useWeretScreenChrome } from "../hooks/useWeretScreenChrome";
 import CustomButton from "../components/CustomButton";
 import InputField from "../components/InputField";
 import SectionSurface from "../components/ui/SectionSurface";
@@ -18,7 +18,7 @@ export default function SettingsScreen({ navigation }) {
   const dispatch = useDispatch();
   const themeMode = useSelector((s) => s.ui.themeMode);
   const { user } = useSelector((s) => s.auth);
-  const { colors, spacing, radius } = useTheme();
+  const { colors, spacing, radius } = useWeretScreenChrome();
   const rtl = I18nManager.isRTL;
   const [phone, setPhone] = useState(user?.phone || "");
   const [savingPhone, setSavingPhone] = useState(false);

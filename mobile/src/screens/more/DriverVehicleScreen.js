@@ -1,8 +1,11 @@
-import { ScrollView, Text, View, I18nManager, StyleSheet } from "react-native";
+import { Text, View, I18nManager, StyleSheet } from "react-native";
 import { useTranslation } from "react-i18next";
 import { useWeretScreenChrome } from "../../hooks/useWeretScreenChrome";
+import { weretRadius, weretElevation } from "../../theme/weretDesignSystem";
+import WeretListScreen from "../../components/ui/weret/WeretListScreen";
+import WeretStepHeader from "../../components/ui/weret/WeretStepHeader";
 
-function CheckRow({ label, statusLabel, ok, colors, spacing, radius, rtl }) {
+function CheckRow({ label, statusLabel, ok, colors, spacing, rtl }) {
   return (
     <View
       style={[
@@ -10,23 +13,24 @@ function CheckRow({ label, statusLabel, ok, colors, spacing, radius, rtl }) {
         {
           borderColor: colors.border,
           backgroundColor: colors.surface,
-          borderRadius: radius.md,
+          borderRadius: weretRadius.card,
           padding: spacing.md,
           marginBottom: spacing.sm,
           flexDirection: rtl ? "row-reverse" : "row",
           alignItems: "center",
+          ...weretElevation.card,
         },
       ]}
     >
-      <Text style={{ flex: 1, color: colors.text, fontSize: 15, textAlign: rtl ? "right" : "left" }}>{label}</Text>
-      <Text style={{ color: ok ? colors.success : colors.textMuted, fontWeight: "700", fontSize: 13 }}>{statusLabel}</Text>
+      <Text style={{ flex: 1, color: colors.text, fontSize: 15, fontWeight: "700", textAlign: rtl ? "right" : "left" }}>{label}</Text>
+      <Text style={{ color: ok ? colors.success : colors.textMuted, fontWeight: "800", fontSize: 13 }}>{statusLabel}</Text>
     </View>
   );
 }
 
 export default function DriverVehicleScreen() {
   const { t } = useTranslation();
-  const { colors, spacing, radius } = useWeretScreenChrome();
+  const { colors, spacing } = useWeretScreenChrome();
   const rtl = I18nManager.isRTL;
   const soon = t("driverVehicleSoon");
   const items = [
@@ -37,10 +41,8 @@ export default function DriverVehicleScreen() {
   ];
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xl }}>
-      <Text style={{ color: colors.textMuted, fontSize: 15, lineHeight: 22, textAlign: rtl ? "right" : "left", marginBottom: spacing.md }}>
-        {t("driverVehicleIntro")}
-      </Text>
+    <WeretListScreen contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xl * 2 }}>
+      <WeretStepHeader title={t("featureDriverVehicle")} subtitle={t("driverVehicleIntro")} colors={colors} spacing={spacing} />
       {items.map((row) => (
         <CheckRow
           key={row.key}
@@ -49,14 +51,13 @@ export default function DriverVehicleScreen() {
           ok={row.ok}
           colors={colors}
           spacing={spacing}
-          radius={radius}
           rtl={rtl}
         />
       ))}
-      <Text style={{ color: colors.textMuted, fontSize: 14, lineHeight: 20, marginTop: spacing.md, textAlign: rtl ? "right" : "left" }}>
+      <Text style={{ color: colors.textMuted, fontSize: 14, lineHeight: 22, marginTop: spacing.sm, textAlign: rtl ? "right" : "left" }}>
         {t("driverVehicleFooter")}
       </Text>
-    </ScrollView>
+    </WeretListScreen>
   );
 }
 

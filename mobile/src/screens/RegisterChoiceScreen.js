@@ -1,12 +1,13 @@
 import { useLayoutEffect } from "react";
-import { View, ScrollView } from "react-native";
+import { View, Text, ScrollView } from "react-native";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../context/ThemeProvider";
 import LanguageBar from "../components/LanguageBar";
 import ConnectionStatusBanner from "../components/ConnectionStatusBanner";
-import WeretBrandMark from "../components/auth/WeretBrandMark";
+import WeretWordmarkOnLight from "../components/auth/WeretWordmarkOnLight";
 import WeretPillButton from "../components/auth/WeretPillButton";
 import { weretAuth as A } from "../theme/weretAuth";
+import WeretAmbientBackground from "../components/ui/weret/WeretAmbientBackground";
 
 export default function RegisterChoiceScreen({ navigation }) {
   const { t } = useTranslation();
@@ -24,8 +25,9 @@ export default function RegisterChoiceScreen({ navigation }) {
   }, [navigation, t]);
 
   return (
+    <WeretAmbientBackground>
     <ScrollView
-      style={{ flex: 1, backgroundColor: A.bg }}
+      style={{ flex: 1 }}
       contentContainerStyle={{
         padding: spacing.lg,
         paddingBottom: spacing.xl * 2,
@@ -33,7 +35,10 @@ export default function RegisterChoiceScreen({ navigation }) {
       }}
     >
       <View style={{ alignItems: "center", marginBottom: spacing.lg }}>
-        <WeretBrandMark title={t("appName")} subtitle={t("registerRoleHint")} tone="onLight" size={32} />
+        <WeretWordmarkOnLight label={t("appName")} fontSize={36} />
+        <Text style={{ marginTop: 14, color: A.muted, fontSize: 14, fontWeight: "600", textAlign: "center", paddingHorizontal: 12 }}>
+          {t("registerRoleHint")}
+        </Text>
       </View>
       <LanguageBar variant="weret" />
       <ConnectionStatusBanner compact />
@@ -48,5 +53,6 @@ export default function RegisterChoiceScreen({ navigation }) {
         <WeretPillButton variant="outline" title={t("login")} onPress={() => navigation.goBack()} />
       </View>
     </ScrollView>
+    </WeretAmbientBackground>
   );
 }

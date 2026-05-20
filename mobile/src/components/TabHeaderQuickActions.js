@@ -3,14 +3,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { useTranslation } from "react-i18next";
 import { useDispatch } from "react-redux";
 import { logoutThunk } from "../store/slices/authSlice";
-import { useTheme } from "../context/ThemeProvider";
+import { useWeretScreenChrome } from "../hooks/useWeretScreenChrome";
 
 const HIT = { top: 10, bottom: 10, left: 10, right: 10 };
 
 export default function TabHeaderQuickActions({ routeName, navigation }) {
   const { t } = useTranslation();
   const dispatch = useDispatch();
-  const { colors } = useTheme();
+  const { colors } = useWeretScreenChrome();
   const rtl = I18nManager.isRTL;
 
   return (

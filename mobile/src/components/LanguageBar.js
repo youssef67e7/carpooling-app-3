@@ -52,7 +52,7 @@ export default function LanguageBar({ variant }) {
         <Pressable accessibilityRole="button" onPress={() => switchLang("en")}>
           <Text style={{ fontSize: 15, fontWeight: en ? "900" : "500", color: weretPalette.ink }}>{t("english")}</Text>
         </Pressable>
-        <Text style={{ color: weretPalette.mutedLight, fontWeight: "300" }}>|</Text>
+        <Text style={{ color: weretPalette.muted, fontWeight: "400" }}>|</Text>
         <Pressable accessibilityRole="button" onPress={() => switchLang("ar")}>
           <Text style={{ fontSize: 15, fontWeight: ar ? "900" : "500", color: weretPalette.ink }}>{t("arabic")}</Text>
         </Pressable>

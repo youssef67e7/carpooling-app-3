@@ -22,6 +22,7 @@ import { AppError } from "./errors/AppError.js";
 import { User } from "./models/User.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { globalApiLimiter } from "./middleware/rateLimiters.js";
+import { getUploadRoot } from "./uploadPaths.js";
 
 const __dirnameSrc = path.dirname(fileURLToPath(import.meta.url));
 const adminWebPath = path.resolve(__dirnameSrc, "../admin-web");
@@ -61,9 +62,10 @@ export function createApp() {
   app.use("/reports", reportRoutes);
   app.use("/wallet", walletRoutes);
 
+  const uploadRoot = getUploadRoot();
   app.use(
     "/uploads/public",
-    express.static(path.resolve(process.cwd(), "uploads/public"), { index: false, redirect: false })
+    express.static(path.join(uploadRoot, "public"), { index: false, redirect: false })
   );
 
   app.get("/uploads/private/:userId/:file", authRequired, blockCheck, async (req, res, next) => {
@@ -75,8 +77,9 @@ export function createApp() {
         const u = await User.findById(req.userId).select("role").lean();
         if (!u || u.role !== "admin") throw new AppError("Forbidden", 403);
       }
-      const abs = path.resolve(process.cwd(), "uploads/private", uid, f);
-      if (!abs.startsWith(path.resolve(process.cwd(), "uploads/private"))) throw new AppError("Forbidden", 403);
+      const privateRoot = path.resolve(uploadRoot, "private");
+      const abs = path.resolve(privateRoot, uid, f);
+      if (!abs.startsWith(privateRoot)) throw new AppError("Forbidden", 403);
       return res.sendFile(abs);
     } catch (e) {
       return next(e);

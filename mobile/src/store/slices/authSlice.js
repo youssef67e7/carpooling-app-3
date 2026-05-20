@@ -92,6 +92,33 @@ export const googleSignInThunk = createAsyncThunk(
   }
 );
 
+export const phoneOtpRequestThunk = createAsyncThunk(
+  "auth/phoneOtpRequest",
+  async (phone, { rejectWithValue }) => {
+    try {
+      const { data } = await api.post("/auth/phone/otp", { phone });
+      return data;
+    } catch (e) {
+      return rejectWithValue(e.response?.data?.message || e.message);
+    }
+  }
+);
+
+export const phoneOtpVerifyThunk = createAsyncThunk(
+  "auth/phoneOtpVerify",
+  async ({ phone, otp, name }, { rejectWithValue }) => {
+    try {
+      const { data } = await api.post("/auth/phone/verify", { phone, otp, name });
+      await AsyncStorage.setItem(TOKEN_KEY, data.token);
+      setAuthToken(data.token);
+      await persistUserCache(data.user);
+      return data;
+    } catch (e) {
+      return rejectWithValue(e.response?.data?.message || e.message);
+    }
+  }
+);
+
 export const loginThunk = createAsyncThunk(
   "auth/login",
   async ({ email, password }, { rejectWithValue }) => {
@@ -213,6 +240,30 @@ const authSlice = createSlice({
       .addCase(googleSignInThunk.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload || "Google sign-in failed";
+      })
+      .addCase(phoneOtpRequestThunk.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(phoneOtpRequestThunk.fulfilled, (state) => {
+        state.loading = false;
+      })
+      .addCase(phoneOtpRequestThunk.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload || "Failed to send code";
+      })
+      .addCase(phoneOtpVerifyThunk.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(phoneOtpVerifyThunk.fulfilled, (state, action) => {
+        state.loading = false;
+        state.token = action.payload.token;
+        state.user = action.payload.user;
+      })
+      .addCase(phoneOtpVerifyThunk.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload || "Invalid code";
       })
       .addCase(loginThunk.pending, (state) => {
         state.loading = true;

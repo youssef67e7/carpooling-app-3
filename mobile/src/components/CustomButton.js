@@ -6,6 +6,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { Pressable } from "react-native";
 import { useTheme } from "../context/ThemeProvider";
+import { weretElevation } from "../theme/weretDesignSystem";
 import { D } from "../animation/presets";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -30,30 +31,18 @@ export default function CustomButton({
       ? "outline"
       : variant === "danger"
         ? "danger"
-        : variant === "ink"
+        : variant === "ink" || variant === "lime" || variant === "primary"
           ? "ink"
-          : variant === "lime"
-            ? "lime"
-            : "primary";
+          : "primary";
   const bg =
     v === "outline"
       ? "transparent"
       : v === "danger"
         ? colors.danger
-        : v === "ink"
-          ? "#111111"
-          : v === "lime"
-            ? colors.accentLime || "#d4fc5c"
-            : colors.primary;
+        : colors.primary;
   const borderColor = v === "outline" ? colors.border : "transparent";
-  const color =
-    v === "outline"
-      ? colors.text
-      : v === "ink"
-        ? "#ffffff"
-        : v === "lime"
-          ? colors.accentLimeText || "#0f0f0f"
-          : colors.primaryText;
+  const color = v === "outline" ? colors.text : colors.primaryText;
+  const pill = v === "ink";
 
   return (
     <AnimatedPressable
@@ -72,27 +61,18 @@ export default function CustomButton({
         {
           paddingVertical: spacing.sm + 4,
           paddingHorizontal: spacing.md,
-          borderRadius: v === "ink" ? 999 : radius.md,
+          borderRadius: pill ? 999 : radius.md,
           backgroundColor: bg,
-          borderWidth: v === "outline" ? 1 : 0,
+          borderWidth: v === "outline" ? 1.5 : 0,
           borderColor,
           opacity: disabled ? 0.55 : 1,
+          ...(pill && v !== "outline" ? weretElevation.fab : null),
         },
         style,
       ]}
     >
       {loading ? (
-        <ActivityIndicator
-          color={
-            v === "outline"
-              ? colors.primary
-              : v === "lime"
-                ? colors.accentLimeText || "#0f0f0f"
-                : v === "ink"
-                  ? "#ffffff"
-                  : colors.primaryText
-          }
-        />
+        <ActivityIndicator color={v === "outline" ? colors.primary : colors.primaryText} />
       ) : (
         <Text style={[styles.text, { color }, textStyle]}>{title}</Text>
       )}
@@ -102,5 +82,5 @@ export default function CustomButton({
 
 const styles = StyleSheet.create({
   base: { alignItems: "center", justifyContent: "center" },
-  text: { fontWeight: "700", fontSize: 16 },
+  text: { fontWeight: "800", fontSize: 16, letterSpacing: 0.2 },
 });

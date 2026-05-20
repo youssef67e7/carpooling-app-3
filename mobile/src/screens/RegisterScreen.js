@@ -1,15 +1,25 @@
 import { useState, useLayoutEffect } from "react";
-import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Pressable, I18nManager } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Pressable,
+  I18nManager,
+} from "react-native";
 import { useTranslation } from "react-i18next";
 import { useDispatch, useSelector } from "react-redux";
 import { registerThunk, clearError } from "../store/slices/authSlice";
-import { useTheme } from "../context/ThemeProvider";
 import LanguageBar from "../components/LanguageBar";
-import InputField from "../components/InputField";
-import CustomButton from "../components/CustomButton";
 import ConnectionStatusBanner from "../components/ConnectionStatusBanner";
 import FormErrorCallout from "../components/ui/FormErrorCallout";
+import WeretWordmarkOnLight from "../components/auth/WeretWordmarkOnLight";
+import WeretTextField from "../components/auth/WeretTextField";
+import CustomButton from "../components/CustomButton";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { weretAuth as A } from "../theme/weretAuth";
 
 const POST_REGISTER_DRIVER_FLAG = "@post_register_driver_onboarding";
 
@@ -17,16 +27,21 @@ export default function RegisterScreen({ navigation }) {
   const { t } = useTranslation();
   const dispatch = useDispatch();
   const { loading, error } = useSelector((s) => s.auth);
-  const { colors, spacing, radius } = useTheme();
   const rtl = I18nManager.isRTL;
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
-  const [intent, setIntent] = useState("passenger"); // passenger | driver
+  const [intent, setIntent] = useState("passenger");
 
   useLayoutEffect(() => {
-    navigation.setOptions({ title: t("register"), headerShown: true });
+    navigation.setOptions({
+      title: t("register"),
+      headerStyle: { backgroundColor: A.bg },
+      headerTintColor: A.ink,
+      headerTitleStyle: { fontWeight: "800", color: A.ink },
+      headerShadowVisible: false,
+    });
   }, [navigation, t]);
 
   async function onRegister() {
@@ -51,60 +66,60 @@ export default function RegisterScreen({ navigation }) {
       if (intent === "driver") {
         await AsyncStorage.removeItem(POST_REGISTER_DRIVER_FLAG);
       }
-      // handled by slice
     }
   }
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1, backgroundColor: colors.bg }}>
-      <ScrollView contentContainerStyle={{ padding: spacing.lg }} keyboardShouldPersistTaps="handled">
-        <LanguageBar />
+    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1, backgroundColor: A.bg }}>
+      <ScrollView contentContainerStyle={{ padding: 22, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
+        <View style={{ alignItems: "center", marginBottom: 12 }}>
+          <WeretWordmarkOnLight label={t("appName")} fontSize={32} />
+          <Text style={{ marginTop: 8, color: A.muted, fontWeight: "600", textAlign: "center", paddingHorizontal: 12 }}>
+            {t("registerRoleHint")}
+          </Text>
+        </View>
+        <LanguageBar variant="weret" />
         <ConnectionStatusBanner compact />
-        <Text style={{ color: colors.textMuted, marginBottom: spacing.xs, textAlign: rtl ? "right" : "left" }}>{t("registerRoleHint")}</Text>
-        <View style={{ flexDirection: rtl ? "row-reverse" : "row", flexWrap: "wrap", gap: spacing.sm, marginBottom: spacing.md }}>
+
+        <View style={{ flexDirection: rtl ? "row-reverse" : "row", flexWrap: "wrap", gap: 10, marginBottom: 16, marginTop: 8 }}>
           {[
             { key: "passenger", label: t("registerContinuePassenger") },
             { key: "driver", label: t("registerBecomeDriver") },
-          ].map((r) => (
-            <Pressable
-              key={r.key}
-              style={[
-                styles.roleChip,
-                {
-                  borderRadius: radius.full,
-                  paddingHorizontal: spacing.md,
-                  paddingVertical: spacing.sm,
-                  backgroundColor: intent === r.key ? colors.primary : colors.surfaceMuted,
-                  borderWidth: 1,
-                  borderColor: intent === r.key ? colors.primary : colors.border,
-                },
-              ]}
-              onPress={() => setIntent(r.key)}
-            >
-              <Text style={{ color: intent === r.key ? colors.primaryText : colors.text, fontWeight: "800" }}>{r.label}</Text>
-            </Pressable>
-          ))}
+          ].map((r) => {
+            const selected = intent === r.key;
+            return (
+              <Pressable
+                key={r.key}
+                onPress={() => setIntent(r.key)}
+                style={[
+                  styles.roleChip,
+                  {
+                    borderColor: selected ? A.ink : A.border,
+                    backgroundColor: selected ? A.ink : A.field,
+                  },
+                ]}
+              >
+                <Text style={{ color: selected ? A.onPrimary : A.ink, fontWeight: "800", fontSize: 13 }}>{r.label}</Text>
+              </Pressable>
+            );
+          })}
         </View>
-        <InputField label={t("name")} value={name} onChangeText={setName} />
-        <InputField label={t("email")} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
-        <InputField label={t("password")} value={password} onChangeText={setPassword} secureTextEntry />
-        <InputField
-          label={t("phone")}
-          value={phone}
-          onChangeText={setPhone}
-          keyboardType="phone-pad"
-          placeholder={t("phonePlaceholder")}
-        />
+
+        <WeretTextField label={t("name")} value={name} onChangeText={setName} />
+        <WeretTextField label={t("email")} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
+        <WeretTextField label={t("password")} value={password} onChangeText={setPassword} secureTextEntry />
+        <WeretTextField label={t("phone")} value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder={t("phonePlaceholder")} />
         <FormErrorCallout message={error} />
         <CustomButton
           title={intent === "driver" ? t("registerNext") : t("register")}
+          variant="ink"
           onPress={onRegister}
           loading={loading}
           disabled={loading}
         />
-        <View style={{ marginTop: spacing.md, alignItems: "center" }}>
+        <View style={{ marginTop: 16, alignItems: "center" }}>
           <Pressable onPress={() => navigation.goBack()}>
-            <Text style={{ color: colors.primary, fontWeight: "600" }}>{t("login")}</Text>
+            <Text style={{ color: A.ink, fontWeight: "700" }}>{t("login")}</Text>
           </Pressable>
         </View>
       </ScrollView>
@@ -113,5 +128,10 @@ export default function RegisterScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  roleChip: {},
+  roleChip: {
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderWidth: 1,
+  },
 });

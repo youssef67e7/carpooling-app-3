@@ -16,6 +16,10 @@ function safeMongoUriForLogs(uri) {
 export async function ensureDb() {
   if (mongoose.connection.readyState === 1) return mongoose.connection;
 
+  if (process.env.VERCEL && !process.env.MONGODB_URI) {
+    throw new Error("MONGODB_URI is required on Vercel (set in Project → Environment Variables)");
+  }
+
   if (!connectPromise) {
     connectPromise = (async () => {
       console.log(`Connecting MongoDB → ${safeMongoUriForLogs(MONGODB_URI)}`);

@@ -1,11 +1,11 @@
 import { View, Text, StyleSheet, I18nManager } from "react-native";
 import { useTranslation } from "react-i18next";
-import { useTheme } from "../context/ThemeProvider";
-import { cardShadow } from "../theme/tokens";
+import { useWeretScreenChrome } from "../hooks/useWeretScreenChrome";
+import { weretElevation, weretRadius } from "../theme/weretDesignSystem";
 
 export default function RideCard({ ride, compact, emphasis }) {
   const { t } = useTranslation();
-  const { colors, spacing, radius, isDark } = useTheme();
+  const { colors, spacing } = useWeretScreenChrome();
   const rtl = I18nManager.isRTL;
 
   if (!ride) return null;
@@ -23,10 +23,10 @@ export default function RideCard({ ride, compact, emphasis }) {
   const vehicleLabel = t(`vehicleType_${vtKey}`, { defaultValue: vtKey });
 
   const elevated = !!emphasis;
-  const shadowStyle = elevated ? cardShadow(isDark) : null;
-  const bookedUnits = ride.totalSeats != null && ride.availableSeatUnits != null
-    ? Math.max(0, Number(ride.totalSeats) - Number(ride.availableSeatUnits))
-    : null;
+  const bookedUnits =
+    ride.totalSeats != null && ride.availableSeatUnits != null
+      ? Math.max(0, Number(ride.totalSeats) - Number(ride.availableSeatUnits))
+      : null;
   const passengerGroups = Array.isArray(ride.bookings) ? ride.bookings.length : null;
 
   return (
@@ -35,74 +35,34 @@ export default function RideCard({ ride, compact, emphasis }) {
         styles.card,
         {
           padding: compact ? spacing.sm : spacing.md,
-          borderRadius: radius.md,
+          borderRadius: weretRadius.card,
           backgroundColor: colors.surface,
-          borderColor: elevated ? colors.primary : colors.border,
+          borderColor: elevated ? colors.text : colors.border,
           borderWidth: elevated ? 2 : 1,
-          ...(shadowStyle || {}),
+          ...(elevated ? weretElevation.heroFloat : weretElevation.card),
         },
       ]}
     >
       <View style={[styles.row, { flexDirection: rtl ? "row-reverse" : "row" }]}>
         <Text style={[styles.status, { color: colors.text }]}>{statusLabel}</Text>
         {fare != null ? (
-          <Text style={{ color: colors.primary, fontWeight: "700" }}>
+          <Text style={{ color: colors.text, fontWeight: "800" }}>
             {fareLabel}: {Number(fare).toFixed(2)}
           </Text>
         ) : null}
       </View>
-      <Text style={{ color: colors.textMuted, marginTop: spacing.xs, textAlign: rtl ? "right" : "left" }}>
-        {vehicleLabel} · {new Date(ride.createdAt).toLocaleString()} · {subId}
+      <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 4, textAlign: rtl ? "right" : "left" }}>
+        #{subId} · {vehicleLabel}
       </Text>
-      {ride.totalSeats != null && ride.availableSeatUnits != null ? (
-        <Text style={{ color: colors.textMuted, marginTop: spacing.xs, fontSize: 12, textAlign: rtl ? "right" : "left" }}>
-          {t("rideCardSeatsRemaining", {
-            remaining: Number(ride.availableSeatUnits).toFixed(Number(ride.availableSeatUnits) % 1 === 0 ? 0 : 1),
-            total: ride.totalSeats,
-          })}
-          {bookedUnits != null ? ` · ${Number(bookedUnits).toFixed(Number(bookedUnits) % 1 === 0 ? 0 : 1)}/${ride.totalSeats} booked` : ""}
-          {passengerGroups != null ? ` · ${passengerGroups} group(s)` : ""}
+      {bookedUnits != null ? (
+        <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2, textAlign: rtl ? "right" : "left" }}>
+          {t("seatsBooked")}: {bookedUnits}
+          {passengerGroups != null ? ` · ${t("passengerGroups")}: ${passengerGroups}` : ""}
         </Text>
       ) : null}
-      {Array.isArray(ride.bookings) && ride.bookings[0] ? (
-        <Text style={{ color: colors.textMuted, marginTop: 4, fontSize: 11, textAlign: rtl ? "right" : "left" }}>
-          {t("bookingSeatUnitsLine", {
-            units: Number(ride.bookings[0].seatsReserved).toFixed(
-              Number(ride.bookings[0].seatsReserved) % 1 === 0 ? 0 : 1
-            ),
-          })}{" "}
-          · {t(`passengerSize_${ride.bookings[0].passengerSize}`)} ×{ride.bookings[0].passengerCount}
-        </Text>
-      ) : null}
-      {minP != null && est != null && minP > est ? (
-        <Text style={{ color: colors.textMuted, marginTop: spacing.xs, fontSize: 12, textAlign: rtl ? "right" : "left" }}>
+      {minP != null && ride.status === "pending" ? (
+        <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2, textAlign: rtl ? "right" : "left" }}>
           {t("passengerMinFareShort", { amount: minP.toFixed(0) })}
-        </Text>
-      ) : null}
-      {ride.status === "pending" && ride.driverProposal?.proposedFare != null ? (
-        <Text style={{ color: colors.primary, marginTop: spacing.xs, fontSize: 12, textAlign: rtl ? "right" : "left" }}>
-          {t("rideCardDriverOfferPending", { amount: Number(ride.driverProposal.proposedFare).toFixed(0) })}
-        </Text>
-      ) : null}
-      {ride.status === "pending" && ride.driverProposal?.driverMeta?.name ? (
-        <View style={{ marginTop: spacing.xs }}>
-          <Text style={{ color: colors.textMuted, fontSize: 12, textAlign: rtl ? "right" : "left" }}>
-            {ride.driverProposal.driverMeta.name}
-            {ride.driverProposal.driverMeta.carSpec ? ` · ${ride.driverProposal.driverMeta.carSpec}` : ""}
-            {ride.driverProposal.driverMeta.carColor ? ` · ${ride.driverProposal.driverMeta.carColor}` : ""}
-            {ride.driverProposal.driverMeta.availableSeats != null ? ` · ${t("seats")}: ${ride.driverProposal.driverMeta.availableSeats}` : ""}
-          </Text>
-        </View>
-      ) : null}
-      {ride.passengerRating != null ? (
-        <Text style={{ color: colors.primary, marginTop: spacing.xs, textAlign: rtl ? "right" : "left" }}>
-          ★ {ride.passengerRating}/5
-        </Text>
-      ) : null}
-      {!compact ? (
-        <Text style={{ color: colors.textMuted, marginTop: spacing.xs, textAlign: rtl ? "right" : "left", fontSize: 13 }}>
-          {ride.pickupLocation?.lat?.toFixed(4)},{ride.pickupLocation?.lng?.toFixed(4)} →{" "}
-          {ride.destinationLocation?.lat?.toFixed(4)},{ride.destinationLocation?.lng?.toFixed(4)}
         </Text>
       ) : null}
     </View>
@@ -110,7 +70,7 @@ export default function RideCard({ ride, compact, emphasis }) {
 }
 
 const styles = StyleSheet.create({
-  card: { borderWidth: 1, marginBottom: 8 },
+  card: { marginBottom: 0 },
   row: { justifyContent: "space-between", alignItems: "center" },
-  status: { fontWeight: "700", fontSize: 16, textTransform: "capitalize" },
+  status: { fontWeight: "800", fontSize: 14, letterSpacing: -0.2 },
 });

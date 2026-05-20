@@ -1,27 +1,23 @@
-import { ScrollView, Text, I18nManager } from "react-native";
+import { Text, I18nManager } from "react-native";
 import { useTranslation } from "react-i18next";
 import { useWeretScreenChrome } from "../../hooks/useWeretScreenChrome";
+import WeretInfoScreen from "../../components/ui/weret/WeretInfoScreen";
 
 export default function DriverEarningsScreen() {
   const { t } = useTranslation();
   const { colors, spacing } = useWeretScreenChrome();
   const rtl = I18nManager.isRTL;
+  const align = rtl ? "right" : "left";
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xl }}>
-      <Text style={{ color: colors.text, fontSize: 17, fontWeight: "700", marginBottom: spacing.sm, textAlign: rtl ? "right" : "left" }}>
-        {t("driverEarningsTitle")}
-      </Text>
-      <Text style={{ color: colors.textMuted, fontSize: 15, lineHeight: 22, textAlign: rtl ? "right" : "left", marginBottom: spacing.md }}>
-        {t("driverEarningsIntro")}
-      </Text>
-      <Text style={{ color: colors.text, fontSize: 15, lineHeight: 24, textAlign: rtl ? "right" : "left" }}>{t("driverEarningsBody1")}</Text>
-      <Text style={{ color: colors.text, fontSize: 15, lineHeight: 24, marginTop: spacing.md, textAlign: rtl ? "right" : "left" }}>
+    <WeretInfoScreen title={t("driverEarningsTitle")} subtitle={t("driverEarningsIntro")} colors={colors} spacing={spacing}>
+      <Text style={{ color: colors.text, fontSize: 15, lineHeight: 24, textAlign: align, fontWeight: "500" }}>{t("driverEarningsBody1")}</Text>
+      <Text style={{ color: colors.text, fontSize: 15, lineHeight: 24, marginTop: spacing.md, textAlign: align, fontWeight: "500" }}>
         {t("driverEarningsBody2")}
       </Text>
-      <Text style={{ color: colors.textMuted, fontSize: 14, lineHeight: 20, marginTop: spacing.lg, textAlign: rtl ? "right" : "left" }}>
+      <Text style={{ color: colors.textMuted, fontSize: 14, lineHeight: 21, marginTop: spacing.lg, textAlign: align }}>
         {t("driverEarningsFooter")}
       </Text>
-    </ScrollView>
+    </WeretInfoScreen>
   );
 }

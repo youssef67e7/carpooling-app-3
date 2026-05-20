@@ -37,7 +37,7 @@ export default function WeretTextField({
           styles.input,
           {
             borderColor: error ? A.danger : focused ? A.ink : A.border,
-            borderWidth: error ? 2 : focused ? 2 : 1,
+            borderWidth: error ? 2 : focused ? 2 : 1.5,
             textAlign: rtl ? "right" : "left",
           },
         ]}

@@ -12,8 +12,12 @@ import { authWriteLimiter } from "../middleware/rateLimiters.js";
 import { isFixedAdminEmail, normalizeAdminEmail } from "../config/fixedAdmins.js";
 import { signUserToken } from "../utils/signUserToken.js";
 import { verifyGoogleIdToken, isGoogleAuthConfigured } from "../utils/verifyGoogleIdToken.js";
+import { PhoneLoginOtp } from "../models/PhoneLoginOtp.js";
+import { normalizePhone, hashPhoneOtp, randomPhoneOtp6, syntheticEmailForPhone } from "../utils/phoneOtp.js";
 
 const router = Router();
+const PHONE_OTP_TTL_MS = 10 * 60 * 1000;
+const PHONE_OTP_MAX_ATTEMPTS = 5;
 
 async function finalizeUserForSession(user) {
   const now = new Date();
@@ -41,11 +45,15 @@ router.get("/google-config", (_req, res) => {
   const webClientId = String(process.env.GOOGLE_OAUTH_WEB_CLIENT_ID || "").trim();
   const iosClientId = String(process.env.GOOGLE_OAUTH_IOS_CLIENT_ID || "").trim();
   const androidClientId = String(process.env.GOOGLE_OAUTH_ANDROID_CLIENT_ID || "").trim();
+  const expoClientId = String(process.env.GOOGLE_OAUTH_EXPO_CLIENT_ID || "").trim();
   res.json({
     enabled: isGoogleAuthConfigured(),
     webClientId,
     iosClientId,
     androidClientId,
+    expoClientId,
+    /** Hints for Google Cloud Console → Web client → Authorized redirect URIs */
+    redirectUriHints: ["weret:/oauthredirect", "com.ridehail.app:/oauthredirect"],
   });
 });
 
@@ -64,7 +72,12 @@ router.post(
         g = await verifyGoogleIdToken(req.body.idToken);
       } catch (e) {
         if (e.code === "GOOGLE_EMAIL_UNVERIFIED") throw new AppError(e.message, 403);
-        throw new AppError("Google sign-in failed", 401);
+        if (e.code === "GOOGLE_NOT_CONFIGURED") {
+          throw new AppError("Google sign-in is not enabled on this server", 503);
+        }
+        const devHint =
+          process.env.NODE_ENV !== "production" && e?.message ? String(e.message).slice(0, 200) : null;
+        throw new AppError(devHint || "Google sign-in failed", 401);
       }
       const emailNorm = normalizeAdminEmail(g.email);
 
@@ -246,6 +259,101 @@ router.patch(
       }
       await user.save();
       return res.json({ user: user.toJSON() });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+router.post(
+  "/phone/otp",
+  authWriteLimiter,
+  body("phone").trim().notEmpty().isLength({ min: 8, max: 32 }),
+  validateRequest,
+  async (req, res, next) => {
+    try {
+      const phone = normalizePhone(req.body.phone);
+      if (!phone) throw new AppError("Invalid phone number", 400);
+      const otp = randomPhoneOtp6();
+      const expiresAt = new Date(Date.now() + PHONE_OTP_TTL_MS);
+      await PhoneLoginOtp.deleteMany({ phone });
+      await PhoneLoginOtp.create({ phone, otpDigest: hashPhoneOtp(otp), expiresAt, attempts: 0 });
+      if (process.env.NODE_ENV !== "production") {
+        console.log(`[auth] Phone OTP for ${phone}: ${otp}`);
+      }
+      return res.json({
+        ok: true,
+        phone,
+        message: "OTP sent",
+        _devOtp: process.env.NODE_ENV !== "production" ? otp : undefined,
+      });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+router.post(
+  "/phone/verify",
+  authWriteLimiter,
+  body("phone").trim().notEmpty().isLength({ min: 8, max: 32 }),
+  body("otp").trim().isLength({ min: 4, max: 8 }),
+  body("name").optional().trim().isLength({ max: 80 }),
+  validateRequest,
+  async (req, res, next) => {
+    try {
+      const phone = normalizePhone(req.body.phone);
+      if (!phone) throw new AppError("Invalid phone number", 400);
+      const otp = String(req.body.otp || "").trim();
+      const record = await PhoneLoginOtp.findOne({ phone }).sort({ createdAt: -1 });
+      if (!record || record.expiresAt <= new Date()) {
+        throw new AppError("Code expired. Request a new one.", 400);
+      }
+      if (record.attempts >= PHONE_OTP_MAX_ATTEMPTS) {
+        throw new AppError("Too many attempts. Request a new code.", 429);
+      }
+      if (hashPhoneOtp(otp) !== record.otpDigest) {
+        record.attempts += 1;
+        await record.save();
+        throw new AppError("Invalid code", 401);
+      }
+      await PhoneLoginOtp.deleteMany({ phone });
+
+      let user = await User.findOne({ phone });
+      if (!user) {
+        const email = syntheticEmailForPhone(phone);
+        const existingEmail = await User.findOne({ email });
+        if (existingEmail) {
+          existingEmail.phone = phone;
+          user = existingEmail;
+          await user.save();
+        } else {
+          user = await User.create({
+            name: String(req.body.name || "").trim().slice(0, 80) || phone,
+            email,
+            password: await bcrypt.hash(randomBytes(32).toString("hex"), 12),
+            role: "passenger",
+            active_role: "passenger",
+            isOnline: false,
+            phone,
+            profileImageUrl: "",
+            is_verified: true,
+            is_blocked: false,
+            location: { lat: 24.7136, lng: 46.6753 },
+          });
+          await PassengerProfile.updateOne({ userId: user._id }, { $set: { userId: user._id } }, { upsert: true });
+        }
+      } else if (user.role === "admin") {
+        throw new AppError("Invalid credentials", 401);
+      } else if (!user.phone || user.phone !== phone) {
+        user.phone = phone;
+        await user.save();
+      }
+
+      await finalizeUserForSession(user);
+      const fresh = await User.findById(user._id);
+      const token = signUserToken(fresh);
+      return res.json({ token, user: fresh.toJSON() });
     } catch (e) {
       next(e);
     }

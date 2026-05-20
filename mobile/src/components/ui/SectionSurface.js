@@ -1,20 +1,18 @@
 import { View, StyleSheet } from "react-native";
 import Animated, { FadeIn } from "react-native-reanimated";
 import { useTheme } from "../../context/ThemeProvider";
-import { cardShadow } from "../../theme/tokens";
 import { weretListChromeColors } from "../../theme/weretPassenger";
-import { weretRadius } from "../../theme/weretDesignSystem";
+import { weretRadius, weretElevation } from "../../theme/weretDesignSystem";
 import { D } from "../../animation/presets";
 
 /**
- * Rounded card with soft shadow for settings / grouped content.
- * @param {boolean} [weret] — use WERET list chrome (driver onboarding, etc.)
+ * Rounded card with soft shadow for settings / grouped content (WERET style).
  */
-export default function SectionSurface({ children, style, noEntering, weret }) {
-  const { colors: themeColors, radius: themeRadius, isDark } = useTheme();
-  const colors = weret ? weretListChromeColors : themeColors;
-  const radius = weret ? { ...themeRadius, lg: weretRadius.card } : themeRadius;
-  const shadow = cardShadow(isDark);
+export default function SectionSurface({ children, style, noEntering, elevated }) {
+  const { radius: themeRadius } = useTheme();
+  const colors = weretListChromeColors;
+  const radius = { ...themeRadius, lg: weretRadius.card };
+  const shadow = elevated ? weretElevation.heroFloat : weretElevation.card;
 
   const inner = (
     <View
@@ -23,7 +21,7 @@ export default function SectionSurface({ children, style, noEntering, weret }) {
         {
           backgroundColor: colors.surface,
           borderRadius: radius.lg,
-          borderWidth: StyleSheet.hairlineWidth,
+          borderWidth: 1,
           borderColor: colors.border,
           ...shadow,
         },
@@ -45,7 +43,7 @@ export default function SectionSurface({ children, style, noEntering, weret }) {
 
 const styles = StyleSheet.create({
   card: {
-    padding: 16,
+    padding: 18,
     marginBottom: 12,
     overflow: "visible",
   },

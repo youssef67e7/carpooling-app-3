@@ -3,7 +3,7 @@ import { View, Text, Pressable, StyleSheet, I18nManager } from "react-native";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { Ionicons } from "@expo/vector-icons";
-import { useTheme } from "../context/ThemeProvider";
+import { useWeretScreenChrome } from "../hooks/useWeretScreenChrome";
 import { onWebrtcSignal, sendWebrtcSignal, joinWebrtcRoom, leaveWebrtcRoom } from "../realtime/socket";
 import { showAlert } from "../utils/showAlert";
 
@@ -15,7 +15,7 @@ export default function InAppCallScreen() {
   const { t } = useTranslation();
   const route = useRoute();
   const navigation = useNavigation();
-  const { colors, spacing, radius } = useTheme();
+  const { colors, spacing, radius } = useWeretScreenChrome();
   const rtl = I18nManager.isRTL;
 
   const rideId = route.params?.rideId;

@@ -2,16 +2,13 @@ import path from "path";
 import { Router } from "express";
 import multer from "multer";
 import { randomBytes } from "crypto";
-import { mkdirSync } from "fs";
 import { authRequired, blockCheck } from "../middleware/auth.js";
 import { AppError } from "../errors/AppError.js";
+import { userUploadDir } from "../uploadPaths.js";
 
 const router = Router();
 
 router.use(authRequired, blockCheck);
-
-const UPLOAD_ROOT = path.resolve(process.cwd(), "uploads");
-mkdirSync(UPLOAD_ROOT, { recursive: true });
 
 function normVisibility(raw) {
   const v = String(raw || "").trim().toLowerCase();
@@ -21,10 +18,12 @@ function normVisibility(raw) {
 const upload = multer({
   storage: multer.diskStorage({
     destination: (req, _file, cb) => {
-      const vis = normVisibility(req.body?.visibility);
-      const userDir = path.join(UPLOAD_ROOT, vis, String(req.userId));
-      mkdirSync(userDir, { recursive: true });
-      cb(null, userDir);
+      try {
+        const vis = normVisibility(req.body?.visibility);
+        cb(null, userUploadDir(vis, req.userId));
+      } catch (e) {
+        cb(e);
+      }
     },
     filename: (_req, file, cb) => {
       const ext = (path.extname(file.originalname || "") || "").slice(0, 12).toLowerCase();

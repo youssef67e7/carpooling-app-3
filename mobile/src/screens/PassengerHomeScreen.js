@@ -48,6 +48,7 @@ import RideStatusBanner from "../components/RideStatusBanner";
 import RateDriverModal from "../components/RateDriverModal";
 import PassengerWeretHero from "../components/passenger/PassengerWeretHero";
 import { weretPassenger as W } from "../theme/weretPassenger";
+import { weretElevation, weretRadius } from "../theme/weretDesignSystem";
 import i18n from "../i18n";
 import { mapboxAutocomplete } from "../utils/mapboxPlaces";
 import { aiRerankPlaces } from "../utils/aiPlaceRerank";
@@ -717,7 +718,7 @@ export default function PassengerHomeScreen({ navigation }) {
   }, [dispatch, selectedVehicleType]);
 
   return (
-    <View style={[styles.root, { backgroundColor: isDark ? colors.bg : "#f2f2f2" }]}>
+    <View style={[styles.root, { backgroundColor: colors.bg }]}>
       <Animated.View
         style={[
           styles.mapShell,
@@ -876,6 +877,7 @@ export default function PassengerHomeScreen({ navigation }) {
             backgroundColor: W.sheet,
             borderTopLeftRadius: 24,
             borderTopRightRadius: 24,
+            ...weretElevation.heroFloat,
           },
         ]}
         contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xl }}
@@ -952,7 +954,7 @@ export default function PassengerHomeScreen({ navigation }) {
               <CustomButton
                 style={{ flex: 1 }}
                 title={t("passengerAcceptOffer")}
-                variant="lime"
+                variant="ink"
                 onPress={() => respondProposal(true)}
                 disabled={proposalBusy}
                 loading={proposalBusy}
@@ -1676,8 +1678,8 @@ const styles = StyleSheet.create({
   destFakeInput: {
     flexDirection: "row",
     alignItems: "center",
-    borderWidth: 1,
-    borderRadius: 16,
+    borderWidth: 1.5,
+    borderRadius: weretRadius.field,
     paddingVertical: 14,
     paddingHorizontal: 14,
     marginBottom: 4,
@@ -1693,8 +1695,8 @@ const styles = StyleSheet.create({
   },
   infoBarText: { fontSize: 14, fontWeight: "600" },
   routeCard: {
-    borderWidth: 1,
-    borderRadius: 14,
+    borderWidth: 1.5,
+    borderRadius: weretRadius.card,
     padding: 14,
     marginBottom: 4,
   },
@@ -1715,12 +1717,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   routeConnectorLine: { flex: 1, height: 1, maxHeight: 1 },
-  panel: {
-    shadowColor: W.shadow,
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 4,
-  },
+  panel: {},
   offerAdjBtn: {
     minWidth: 44,
     paddingVertical: 10,

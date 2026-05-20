@@ -1,11 +1,13 @@
 import { useState, useEffect } from "react";
-import { View, Text, TextInput, ScrollView, Pressable, I18nManager } from "react-native";
+import { View, Text, TextInput, Pressable, I18nManager } from "react-native";
 import { useTranslation } from "react-i18next";
 import { useDispatch, useSelector } from "react-redux";
-import { useTheme } from "../../context/ThemeProvider";
+import { useWeretScreenChrome } from "../../hooks/useWeretScreenChrome";
 import SectionSurface from "../../components/ui/SectionSurface";
 import CustomButton from "../../components/CustomButton";
 import FormErrorCallout from "../../components/ui/FormErrorCallout";
+import WeretListScreen from "../../components/ui/weret/WeretListScreen";
+import WeretStepHeader from "../../components/ui/weret/WeretStepHeader";
 import {
   requestWithdraw,
   confirmWithdraw,
@@ -18,7 +20,7 @@ import { showAlert } from "../../utils/showAlert";
 export default function WalletWithdrawScreen({ navigation }) {
   const { t } = useTranslation();
   const dispatch = useDispatch();
-  const { colors, spacing, radius } = useTheme();
+  const { colors, spacing, radius } = useWeretScreenChrome();
   const rtl = I18nManager.isRTL;
   const { accounts, lastWithdrawMeta } = useSelector((s) => s.wallet);
   const [accountId, setAccountId] = useState("");
@@ -77,10 +79,16 @@ export default function WalletWithdrawScreen({ navigation }) {
   }
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.md }}>
+    <WeretListScreen contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xl * 2 }}>
+      <WeretStepHeader
+        title={t("walletWithdraw")}
+        subtitle={lastWithdrawMeta ? t("walletEnterOtp") : t("walletSimulatedDisclaimer")}
+        colors={colors}
+        spacing={spacing}
+      />
       {!lastWithdrawMeta ? (
         <>
-          <Text style={{ color: colors.textMuted, marginBottom: spacing.sm, textAlign: rtl ? "right" : "left" }}>
+          <Text style={{ color: colors.textMuted, marginBottom: spacing.sm, fontWeight: "700", textAlign: rtl ? "right" : "left" }}>
             {t("walletPickAccount")}
           </Text>
           {accounts.map((a) => (
@@ -156,7 +164,7 @@ export default function WalletWithdrawScreen({ navigation }) {
             />
           </SectionSurface>
           <FormErrorCallout message={err} />
-          <CustomButton title={t("walletConfirmWithdraw")} variant="lime" onPress={onConfirm} loading={busy} disabled={busy} />
+          <CustomButton title={t("walletConfirmWithdraw")} variant="ink" onPress={onConfirm} loading={busy} disabled={busy} />
           <CustomButton
             style={{ marginTop: spacing.sm }}
             title={t("walletCancelRequest")}
@@ -169,6 +177,6 @@ export default function WalletWithdrawScreen({ navigation }) {
           />
         </>
       )}
-    </ScrollView>
+    </WeretListScreen>
   );
 }

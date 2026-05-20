@@ -6,11 +6,12 @@ import { registerThunk, clearError } from "../store/slices/authSlice";
 import LanguageBar from "../components/LanguageBar";
 import ConnectionStatusBanner from "../components/ConnectionStatusBanner";
 import FormErrorCallout from "../components/ui/FormErrorCallout";
-import WeretBrandMark from "../components/auth/WeretBrandMark";
+import WeretWordmarkOnLight from "../components/auth/WeretWordmarkOnLight";
 import WeretTextField from "../components/auth/WeretTextField";
 import CustomButton from "../components/CustomButton";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { weretAuth as A } from "../theme/weretAuth";
+import WeretAmbientBackground from "../components/ui/weret/WeretAmbientBackground";
 
 const POST_REGISTER_DRIVER_FLAG = "@post_register_driver_onboarding";
 
@@ -54,10 +55,12 @@ export default function PassengerRegisterScreen({ navigation }) {
   }
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1, backgroundColor: A.bg }}>
+    <WeretAmbientBackground>
+    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={{ padding: 22, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
         <View style={{ alignItems: "center", marginBottom: 12 }}>
-          <WeretBrandMark title={t("appName")} subtitle={t("passenger")} tone="onLight" size={26} />
+          <WeretWordmarkOnLight label={t("appName")} fontSize={32} />
+          <Text style={{ marginTop: 8, color: A.muted, fontWeight: "700", textAlign: "center" }}>{t("passenger")}</Text>
         </View>
         <LanguageBar variant="weret" />
         <ConnectionStatusBanner compact />
@@ -89,5 +92,6 @@ export default function PassengerRegisterScreen({ navigation }) {
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
+    </WeretAmbientBackground>
   );
 }

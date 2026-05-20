@@ -8,12 +8,14 @@ import { D } from "../animation/presets";
 export const weretPalette = {
   surface: "#ffffff",
   surfaceMuted: "#f5f5f5",
-  field: "#f2f2f2",
-  border: "#e5e5e5",
+  field: "#ececec",
+  border: "#c4c4c4",
+  borderSubtle: "#d8d8d8",
   ink: "#111111",
   text: "#0a0a0a",
-  muted: "#737373",
-  mutedLight: "#a3a3a3",
+  muted: "#525252",
+  mutedLight: "#6b6b6b",
+  track: "#d1d1d1",
   onPrimary: "#ffffff",
   accent: "#0095ff",
   gold: "#c9a227",
@@ -31,7 +33,7 @@ export const weretPalette = {
 
 export const weretRadius = {
   field: 16,
-  card: 18,
+  card: 20,
   chip: 14,
   pill: 999,
   dot: 4,
@@ -108,7 +110,33 @@ export const weretType = {
   overline: {
     fontSize: 11,
     fontWeight: "800",
-    letterSpacing: 1,
+    letterSpacing: 1.2,
     textTransform: "uppercase",
   },
+  display: {
+    fontSize: 28,
+    fontWeight: "900",
+    letterSpacing: -0.5,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: "800",
+    letterSpacing: -0.3,
+  },
+  body: {
+    fontSize: 15,
+    fontWeight: "500",
+    lineHeight: 22,
+  },
+  caption: {
+    fontSize: 12,
+    fontWeight: "600",
+    lineHeight: 17,
+  },
+};
+
+export const weretLayout = {
+  screenPadding: 20,
+  cardPadding: 18,
+  sectionGap: 14,
 };

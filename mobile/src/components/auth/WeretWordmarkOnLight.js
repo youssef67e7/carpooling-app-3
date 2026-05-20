@@ -1,52 +1,36 @@
 import { View, Text, StyleSheet, Platform } from "react-native";
 
-function chebyshevRing(r) {
-  const o = [];
-  for (let dy = -r; dy <= r; dy++) {
-    for (let dx = -r; dx <= r; dx++) {
-      if (dx === 0 && dy === 0) continue;
-      if (Math.max(Math.abs(dx), Math.abs(dy)) === r) o.push([dx, dy]);
-    }
-  }
-  return o;
-}
-
 /**
- * Bold wordmark for white backgrounds: white fill, black outline, soft offset “shadow”.
+ * Bold WERET wordmark for light backgrounds — single glyph layer (reliable on Android).
  */
-export default function WeretWordmarkOnLight({ label = "WERET", fontSize = 40, compact = false, disableUppercase = false }) {
+export default function WeretWordmarkOnLight({
+  label = "WERET",
+  fontSize = 40,
+  compact = false,
+  disableUppercase = false,
+}) {
   const letterSpacing = Platform.OS === "ios" ? (compact ? 6 : 10) : compact ? 5 : 8;
-  const rings = compact ? chebyshevRing(1) : [...chebyshevRing(3), ...chebyshevRing(2), ...chebyshevRing(1)];
-  const common = [
-    styles.glyph,
-    { fontSize, letterSpacing },
-    disableUppercase ? styles.noUpper : styles.upper,
-  ];
+  const display = disableUppercase ? label : String(label || "WERET").toUpperCase();
 
   return (
-    <View style={styles.wrap} accessibilityRole="text" accessibilityLabel={label}>
-      {!compact ? (
-        <Text
-          pointerEvents="none"
-          style={[
-            ...common,
-            styles.shadow,
-            { transform: [{ translateX: 5 }, { translateY: 5 }] },
-          ]}
-        >
-          {label}
-        </Text>
-      ) : null}
-      {rings.map(([dx, dy], i) => (
-        <Text
-          key={`k${i}-${dx}-${dy}`}
-          pointerEvents="none"
-          style={[...common, styles.stroke, { transform: [{ translateX: dx }, { translateY: dy }] }]}
-        >
-          {label}
-        </Text>
-      ))}
-      <Text style={[...common, styles.fill]}>{label}</Text>
+    <View
+      style={[styles.wrap, { minHeight: Math.ceil(fontSize * 1.2) }]}
+      accessibilityRole="text"
+      accessibilityLabel={display}
+    >
+      <Text
+        style={[
+          styles.mark,
+          {
+            fontSize,
+            letterSpacing,
+            lineHeight: Math.ceil(fontSize * 1.1),
+          },
+          Platform.OS === "android" ? styles.markAndroid : styles.markIos,
+        ]}
+      >
+        {display}
+      </Text>
     </View>
   );
 }
@@ -55,23 +39,21 @@ const styles = StyleSheet.create({
   wrap: {
     alignItems: "center",
     justifyContent: "center",
-    position: "relative",
+    width: "100%",
+    paddingVertical: 2,
   },
-  glyph: {
+  mark: {
     fontWeight: "900",
     textAlign: "center",
-    position: "absolute",
+    color: "#111111",
+    includeFontPadding: false,
   },
-  upper: { textTransform: "uppercase" },
-  noUpper: { textTransform: "none" },
-  stroke: {
-    color: "#000000",
+  markIos: {
+    textShadowColor: "rgba(0,0,0,0.12)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 0,
   },
-  fill: {
-    color: "#ffffff",
-    position: "relative",
-  },
-  shadow: {
-    color: "rgba(0,0,0,0.22)",
+  markAndroid: {
+    elevation: 0,
   },
 });

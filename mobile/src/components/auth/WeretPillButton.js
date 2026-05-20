@@ -1,6 +1,6 @@
 import { Pressable, Text, StyleSheet, ActivityIndicator, View } from "react-native";
 import { weretAuth as A } from "../../theme/weretAuth";
-import { weretPress, weretRadius } from "../../theme/weretDesignSystem";
+import { weretPress, weretRadius, weretElevation } from "../../theme/weretDesignSystem";
 
 export default function WeretPillButton({
   title,
@@ -49,6 +49,7 @@ const styles = StyleSheet.create({
   },
   fill: {
     backgroundColor: A.ink,
+    ...weretElevation.fab,
   },
   outline: {
     backgroundColor: A.bg,

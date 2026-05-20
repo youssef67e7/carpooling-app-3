@@ -47,7 +47,7 @@ export function useWeretTabScreenOptions() {
         alignItems: "center",
       },
       headerTintColor: W.ink,
-      tabBarActiveTintColor: W.accent,
+      tabBarActiveTintColor: W.ink,
       tabBarInactiveTintColor: W.muted,
       tabBarHideOnKeyboard: true,
       tabBarStyle: {

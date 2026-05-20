@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, I18nManager, Platform, Pressable, Image } from "react-native";
+import { View, Text, StyleSheet, ScrollView, I18nManager, Pressable, Image } from "react-native";
 import Animated from "react-native-reanimated";
 import { useTranslation } from "react-i18next";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -6,6 +6,7 @@ import { weretPassenger as W } from "../../theme/weretPassenger";
 import { weretElevation, weretPress, weretRadius } from "../../theme/weretDesignSystem";
 import { weretEnter } from "../../theme/weretMotion";
 import { getWeretGalleryImageForTypeKey, isMotorcycleServiceType } from "../../utils/weretServiceTypeGallery";
+import WeretWordmarkOnLight from "../auth/WeretWordmarkOnLight";
 
 export default function PassengerWeretHero({
   appName,
@@ -19,10 +20,8 @@ export default function PassengerWeretHero({
 
   return (
     <Animated.View entering={weretEnter.screen} style={styles.wrap}>
-      <Animated.View entering={weretEnter.brand}>
-        <Text style={[styles.brand, { textAlign: rtl ? "right" : "left" }]} numberOfLines={1}>
-          {appName}
-        </Text>
+      <Animated.View entering={weretEnter.brand} style={{ alignItems: rtl ? "flex-end" : "flex-start" }}>
+        <WeretWordmarkOnLight label={appName} fontSize={30} />
       </Animated.View>
       <Animated.View entering={weretEnter.block}>
         <Text style={[styles.headline, { textAlign: rtl ? "right" : "left" }]}>{t("passengerWeretHeadline")}</Text>
@@ -102,14 +101,6 @@ const styles = StyleSheet.create({
   },
   cardSlot: {
     width: 132,
-  },
-  brand: {
-    fontSize: 28,
-    fontWeight: "900",
-    letterSpacing: Platform.OS === "ios" ? 2 : 1,
-    color: W.text,
-    textTransform: "uppercase",
-    ...weretElevation.brand,
   },
   headline: {
     marginTop: 10,

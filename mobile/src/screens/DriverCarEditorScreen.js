@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { View, Text, TextInput, ScrollView, StyleSheet, I18nManager, Pressable } from "react-native";
+import { View, Text, TextInput, StyleSheet, I18nManager, Pressable } from "react-native";
 import { useTranslation } from "react-i18next";
 import { useDispatch, useSelector } from "react-redux";
 import { useWeretScreenChrome } from "../hooks/useWeretScreenChrome";
 import { showAlert } from "../utils/showAlert";
 import CustomButton from "../components/CustomButton";
+import WeretListScreen from "../components/ui/weret/WeretListScreen";
+import WeretStepHeader from "../components/ui/weret/WeretStepHeader";
+import { weretRadius } from "../theme/weretDesignSystem";
 import { addDriverCarThunk, fetchDriverProfileThunk, updateDriverCarThunk } from "../store/slices/driverSlice";
 
 export default function DriverCarEditorScreen({ navigation, route }) {
@@ -68,10 +71,8 @@ export default function DriverCarEditorScreen({ navigation, route }) {
   const title = mode === "edit" ? t("driverEditCar") : t("driverAddCar");
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xl }}>
-      <Text style={{ color: colors.text, fontWeight: "900", fontSize: 20, textAlign: rtl ? "right" : "left" }}>{title}</Text>
-
-      <View style={{ height: spacing.md }} />
+    <WeretListScreen contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xl * 2 }}>
+      <WeretStepHeader title={title} colors={colors} spacing={spacing} />
 
       {[
         { label: t("driverCarImageUrl"), value: imageUrl, set: setImageUrl },
@@ -93,7 +94,7 @@ export default function DriverCarEditorScreen({ navigation, route }) {
               {
                 borderColor: colors.border,
                 backgroundColor: colors.surface,
-                borderRadius: radius.md,
+                borderRadius: weretRadius.field,
                 color: colors.text,
                 textAlign: rtl ? "right" : "left",
               },
@@ -116,8 +117,8 @@ export default function DriverCarEditorScreen({ navigation, route }) {
                 style={({ pressed }) => [
                   styles.chip,
                   {
-                    borderColor: active ? colors.primary : colors.border,
-                    backgroundColor: active ? colors.primary : colors.surface,
+                    borderColor: active ? colors.text : colors.border,
+                    backgroundColor: active ? colors.text : colors.surface,
                     opacity: pressed ? 0.88 : 1,
                   },
                 ]}
@@ -131,8 +132,8 @@ export default function DriverCarEditorScreen({ navigation, route }) {
         </View>
       </View>
 
-      <CustomButton title={t("save")} onPress={save} loading={loading} disabled={loading} />
-    </ScrollView>
+      <CustomButton title={t("save")} variant="ink" onPress={save} loading={loading} disabled={loading} />
+    </WeretListScreen>
   );
 }
 

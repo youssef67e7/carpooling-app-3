@@ -1,6 +1,7 @@
-import { ScrollView } from "react-native";
 import { useTranslation } from "react-i18next";
-import { useTheme } from "../../context/ThemeProvider";
+import { useWeretScreenChrome } from "../../hooks/useWeretScreenChrome";
+import WeretListScreen from "../../components/ui/weret/WeretListScreen";
+import WeretMenuHero from "../../components/ui/weret/WeretMenuHero";
 import MoreMenuRow from "./MoreMenuRow";
 import ModeSwitchRow from "./ModeSwitchRow";
 import { useDispatch, useSelector } from "react-redux";
@@ -10,12 +11,13 @@ import { showAlert } from "../../utils/showAlert";
 export default function PassengerMoreMenuScreen({ navigation }) {
   const { t } = useTranslation();
   const dispatch = useDispatch();
-  const { colors, spacing, radius } = useTheme();
+  const { colors, spacing, radius } = useWeretScreenChrome();
   const { user, loading } = useSelector((s) => s.auth);
   const current = (user?.active_role || user?.role) === "driver" ? "driver" : "passenger";
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xl }}>
+    <WeretListScreen contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xl * 2 }}>
+      <WeretMenuHero name={user?.name} roleLabel={t("modePassenger")} colors={colors} spacing={spacing} />
       <ModeSwitchRow
         value={current}
         loading={loading}
@@ -106,6 +108,6 @@ export default function PassengerMoreMenuScreen({ navigation }) {
         spacing={spacing}
         radius={radius}
       />
-    </ScrollView>
+    </WeretListScreen>
   );
 }

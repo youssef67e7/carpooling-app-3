@@ -13,7 +13,7 @@ import { useTranslation } from "react-i18next";
 import { useDispatch, useSelector } from "react-redux";
 import { useIsFocused } from "@react-navigation/native";
 import { fetchHistory } from "../store/slices/rideSlice";
-import { useTheme } from "../context/ThemeProvider";
+import { useWeretScreenChrome } from "../hooks/useWeretScreenChrome";
 import { weretPassenger as W } from "../theme/weretPassenger";
 import { weretRadius, weretPalette } from "../theme/weretDesignSystem";
 import RideCard from "../components/RideCard";
@@ -38,7 +38,7 @@ export default function DriverHistoryScreen({ navigation }) {
   const { t } = useTranslation();
   const dispatch = useDispatch();
   const { history } = useSelector((s) => s.ride);
-  const { spacing } = useTheme();
+  const { colors, spacing } = useWeretScreenChrome();
   const rtl = I18nManager.isRTL;
   const [refreshing, setRefreshing] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
@@ -128,7 +128,7 @@ export default function DriverHistoryScreen({ navigation }) {
         onPress={() => setSelectedId(item._id)}
         style={[
           { marginBottom: spacing.sm },
-          sel && { borderWidth: 2, borderColor: W.accent, borderRadius: weretRadius.card, padding: 2 },
+          sel && { borderWidth: 2, borderColor: colors.text, borderRadius: weretRadius.card, padding: 2 },
         ]}
       >
         <RideCard ride={item} />
@@ -154,7 +154,7 @@ export default function DriverHistoryScreen({ navigation }) {
   const listEmpty = !history?.length;
 
   return (
-    <View style={{ flex: 1, backgroundColor: weretPalette.surfaceMuted }}>
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <View
         style={[
           styles.mapShell,

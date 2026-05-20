@@ -148,11 +148,11 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingVertical: 14,
     paddingHorizontal: 14,
-    borderRadius: 10,
+    borderRadius: 14,
     marginHorizontal: 8,
     marginBottom: 4,
   },
-  menuLabel: { flex: 1, fontSize: 15, fontWeight: "600" },
+  menuLabel: { flex: 1, fontSize: 15, fontWeight: "800", letterSpacing: -0.2 },
   passengerBtn: {
     marginHorizontal: 12,
     paddingVertical: 14,
