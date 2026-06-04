@@ -5,12 +5,13 @@ import Animated, {
   withSpring,
 } from "react-native-reanimated";
 import { Pressable } from "react-native";
-import { useTheme } from "../context/ThemeProvider";
-import { weretElevation } from "../theme/weretDesignSystem";
+import { weretAuth as A } from "../theme/weretAuth";
+import { weretPalette, weretPress, weretRadius, weretElevation } from "../theme/weretDesignSystem";
 import { D } from "../animation/presets";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
+/** WERET pill CTA — same tokens as WeretPillButton (ink / outline / danger). */
 export default function CustomButton({
   title,
   onPress,
@@ -20,7 +21,6 @@ export default function CustomButton({
   style,
   textStyle,
 }) {
-  const { colors, spacing, radius } = useTheme();
   const scale = useSharedValue(1);
   const animStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -31,18 +31,11 @@ export default function CustomButton({
       ? "outline"
       : variant === "danger"
         ? "danger"
-        : variant === "ink" || variant === "lime" || variant === "primary"
-          ? "ink"
-          : "primary";
-  const bg =
-    v === "outline"
-      ? "transparent"
-      : v === "danger"
-        ? colors.danger
-        : colors.primary;
-  const borderColor = v === "outline" ? colors.border : "transparent";
-  const color = v === "outline" ? colors.text : colors.primaryText;
-  const pill = v === "ink";
+        : "fill";
+
+  const bg = v === "outline" ? A.bg : v === "danger" ? weretPalette.danger : A.ink;
+  const borderColor = v === "outline" ? A.ink : "transparent";
+  const color = v === "outline" ? A.ink : v === "danger" ? "#fff" : A.onPrimary;
 
   return (
     <AnimatedPressable
@@ -50,7 +43,7 @@ export default function CustomButton({
       onPress={onPress}
       disabled={disabled || loading}
       onPressIn={() => {
-        scale.value = withSpring(0.96, D.press);
+        scale.value = withSpring(0.98, D.press);
       }}
       onPressOut={() => {
         scale.value = withSpring(1, D.spring);
@@ -59,20 +52,20 @@ export default function CustomButton({
         styles.base,
         animStyle,
         {
-          paddingVertical: spacing.sm + 4,
-          paddingHorizontal: spacing.md,
-          borderRadius: pill ? 999 : radius.md,
+          paddingVertical: 16,
+          paddingHorizontal: 22,
+          borderRadius: weretRadius.pill,
           backgroundColor: bg,
-          borderWidth: v === "outline" ? 1.5 : 0,
+          borderWidth: v === "outline" ? 2 : 0,
           borderColor,
-          opacity: disabled ? 0.55 : 1,
-          ...(pill && v !== "outline" ? weretElevation.fab : null),
+          opacity: disabled ? weretPress.disabledOpacity : 1,
+          ...(v === "fill" || v === "danger" ? weretElevation.fab : null),
         },
         style,
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={v === "outline" ? colors.primary : colors.primaryText} />
+        <ActivityIndicator color={color} />
       ) : (
         <Text style={[styles.text, { color }, textStyle]}>{title}</Text>
       )}
@@ -81,6 +74,6 @@ export default function CustomButton({
 }
 
 const styles = StyleSheet.create({
-  base: { alignItems: "center", justifyContent: "center" },
+  base: { alignItems: "center", justifyContent: "center", minHeight: 54 },
   text: { fontWeight: "800", fontSize: 16, letterSpacing: 0.2 },
 });

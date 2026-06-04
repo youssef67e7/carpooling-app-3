@@ -49,7 +49,7 @@ export default function AdminMoreMenuScreen({ navigation }) {
         icon="information-circle-outline"
         title={t("featureAbout")}
         subtitle={t("featureAboutSubtitle")}
-        onPress={() => navigation.navigate("AboutAmeen")}
+        onPress={() => navigation.navigate("AboutWeret")}
         colors={colors}
         spacing={spacing}
         radius={radius}

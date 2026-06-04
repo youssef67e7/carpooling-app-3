@@ -23,7 +23,7 @@ export default function WeretAmbientBackground({ variant = "light", children, st
 const styles = StyleSheet.create({
   root: { flex: 1, overflow: "hidden" },
   blob: { position: "absolute", borderRadius: 999 },
-  blobTop: { width: 280, height: 280, top: -90, right: -70 },
-  blobMid: { width: 200, height: 200, top: "38%", left: -60 },
-  blobBottom: { width: 320, height: 320, bottom: -120, left: -40 },
+  blobTop: { width: 300, height: 300, top: -100, right: -80 },
+  blobMid: { width: 220, height: 220, top: "32%", left: -70 },
+  blobBottom: { width: 340, height: 340, bottom: -130, left: -50 },
 });

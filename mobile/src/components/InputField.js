@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { View, Text, TextInput, I18nManager } from "react-native";
-import { useTheme } from "../context/ThemeProvider";
+import { weretAuth as A } from "../theme/weretAuth";
 import { weretRadius } from "../theme/weretDesignSystem";
 
+/** WERET form field — same style as WeretTextField (settings, legacy forms). */
 export default function InputField({
   label,
   value,
@@ -14,20 +15,19 @@ export default function InputField({
   error,
   editable = true,
 }) {
-  const { colors, spacing } = useTheme();
   const rtl = I18nManager.isRTL;
   const [focused, setFocused] = useState(false);
 
-  const borderColor = error ? colors.danger : focused ? colors.text : colors.border;
+  const borderColor = error ? A.danger : focused ? A.ink : A.border;
   const ringWidth = error ? 2 : focused ? 2 : 1.5;
 
   return (
-    <View style={{ marginBottom: spacing.md }}>
+    <View style={{ marginBottom: 16 }}>
       {label ? (
         <Text
           style={{
-            marginBottom: spacing.xs,
-            color: colors.textMuted,
+            marginBottom: 6,
+            color: A.muted,
             fontSize: 11,
             fontWeight: "800",
             letterSpacing: 1,
@@ -42,7 +42,7 @@ export default function InputField({
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor={colors.textMuted}
+        placeholderTextColor={A.muted}
         secureTextEntry={secureTextEntry}
         keyboardType={keyboardType}
         autoCapitalize={autoCapitalize}
@@ -50,22 +50,20 @@ export default function InputField({
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         style={{
-          borderWidth: ringWidth,
+          backgroundColor: A.field,
+          color: A.ink,
           borderColor,
-          borderRadius: weretRadius.field,
-          paddingHorizontal: spacing.md,
-          paddingVertical: spacing.sm + 4,
+          borderWidth: ringWidth,
+          borderRadius: weretRadius.sm,
+          paddingVertical: 14,
+          paddingHorizontal: 16,
           fontSize: 16,
           fontWeight: "600",
-          color: colors.text,
-          backgroundColor: colors.surfaceMuted,
           textAlign: rtl ? "right" : "left",
         }}
       />
       {error ? (
-        <Text style={{ marginTop: spacing.xs, color: colors.danger, fontSize: 13, textAlign: rtl ? "right" : "left" }}>
-          {error}
-        </Text>
+        <Text style={{ color: A.danger, fontSize: 13, marginTop: 6, textAlign: rtl ? "right" : "left" }}>{error}</Text>
       ) : null}
     </View>
   );

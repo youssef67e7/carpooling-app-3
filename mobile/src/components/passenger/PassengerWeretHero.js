@@ -8,21 +8,26 @@ import { weretEnter } from "../../theme/weretMotion";
 import { getWeretGalleryImageForTypeKey, isMotorcycleServiceType } from "../../utils/weretServiceTypeGallery";
 import WeretWordmarkOnLight from "../auth/WeretWordmarkOnLight";
 
+const CARD_W = 148;
+
 export default function PassengerWeretHero({
   appName,
   nearbyCount,
   vehicleList = [],
   selectedVehicleType,
   onSelectVehicleType,
+  showBrand = true,
 }) {
   const { t } = useTranslation();
   const rtl = I18nManager.isRTL;
 
   return (
     <Animated.View entering={weretEnter.screen} style={styles.wrap}>
-      <Animated.View entering={weretEnter.brand} style={{ alignItems: rtl ? "flex-end" : "flex-start" }}>
-        <WeretWordmarkOnLight label={appName} fontSize={30} />
-      </Animated.View>
+      {showBrand ? (
+        <Animated.View entering={weretEnter.brand} style={{ alignItems: rtl ? "flex-end" : "flex-start" }}>
+          <WeretWordmarkOnLight label={appName} fontSize={30} />
+        </Animated.View>
+      ) : null}
       <Animated.View entering={weretEnter.block}>
         <Text style={[styles.headline, { textAlign: rtl ? "right" : "left" }]}>{t("passengerWeretHeadline")}</Text>
         <Text style={[styles.sub, { textAlign: rtl ? "right" : "left" }]}>{t("passengerWeretSub")}</Text>
@@ -57,7 +62,6 @@ export default function PassengerWeretHero({
                     onPress={() => onSelectVehicleType?.(v.typeKey)}
                     style={({ pressed }) => [
                       styles.card,
-                      weretElevation.card,
                       selected ? styles.cardSelected : styles.cardIdle,
                       { opacity: pressed ? weretPress.opacityStrong : 1 },
                     ]}
@@ -74,16 +78,23 @@ export default function PassengerWeretHero({
                           <MaterialCommunityIcons name="motorbike" size={36} color={W.onPrimary} />
                         </View>
                       ) : null}
+                      {selected ? (
+                        <View style={styles.selectedBadge} pointerEvents="none">
+                          <MaterialCommunityIcons name="check-circle" size={22} color={W.onPrimary} />
+                        </View>
+                      ) : null}
                     </View>
-                    <Text style={[styles.cardLabel, { textAlign: rtl ? "right" : "left" }]} numberOfLines={2}>
-                      {t(`vehicleType_${v.nameKey || v.typeKey}`)}
-                    </Text>
-                    {cap != null ? (
-                      <View style={[styles.capRow, { flexDirection: rtl ? "row-reverse" : "row" }]}>
-                        <MaterialCommunityIcons name="account" size={12} color={W.muted} />
-                        <Text style={styles.capText}>{cap}</Text>
-                      </View>
-                    ) : null}
+                    <View style={styles.cardBody}>
+                      <Text style={[styles.cardLabel, { textAlign: rtl ? "right" : "left" }]} numberOfLines={2}>
+                        {t(`vehicleType_${v.nameKey || v.typeKey}`)}
+                      </Text>
+                      {cap != null ? (
+                        <View style={[styles.capRow, { flexDirection: rtl ? "row-reverse" : "row" }]}>
+                          <MaterialCommunityIcons name="account-multiple-outline" size={13} color={W.muted} />
+                          <Text style={styles.capText}>{cap}</Text>
+                        </View>
+                      ) : null}
+                    </View>
                   </Pressable>
                 </Animated.View>
               );
@@ -97,17 +108,18 @@ export default function PassengerWeretHero({
 
 const styles = StyleSheet.create({
   wrap: {
-    marginBottom: 18,
+    marginBottom: 0,
   },
   cardSlot: {
-    width: 132,
+    width: CARD_W,
   },
   headline: {
-    marginTop: 10,
+    marginTop: 0,
     fontSize: 22,
-    fontWeight: "800",
+    fontWeight: "900",
     color: W.text,
     letterSpacing: -0.5,
+    lineHeight: 28,
   },
   sub: {
     marginTop: 6,
@@ -140,36 +152,36 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   galleryTitle: {
-    marginTop: 18,
-    fontSize: 13,
+    marginTop: 16,
+    fontSize: 11,
     fontWeight: "800",
-    color: W.text,
-    letterSpacing: 1,
+    color: W.muted,
+    letterSpacing: 1.2,
     textTransform: "uppercase",
   },
   galleryRow: {
-    gap: 12,
-    paddingVertical: 10,
+    gap: 10,
+    paddingVertical: 12,
     paddingEnd: 4,
   },
   card: {
     width: "100%",
     borderRadius: weretRadius.card,
     overflow: "hidden",
+    backgroundColor: W.sheet,
   },
   cardIdle: {
     borderWidth: 1,
     borderColor: W.border,
-    backgroundColor: W.sheet,
   },
   cardSelected: {
     borderWidth: 2,
     borderColor: W.ink,
-    backgroundColor: W.surfaceMuted,
+    ...weretElevation.heroFloat,
   },
   cardImageWrap: {
     width: "100%",
-    height: 88,
+    height: 96,
     backgroundColor: W.field,
     position: "relative",
   },
@@ -177,26 +189,39 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
   },
+  selectedBadge: {
+    position: "absolute",
+    top: 8,
+    end: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: W.ink,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   motoBadge: {
     ...StyleSheet.absoluteFillObject,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: W.scrim,
   },
-  cardLabel: {
+  cardBody: {
     paddingHorizontal: 10,
-    paddingTop: 8,
-    paddingBottom: 4,
-    fontSize: 12,
-    fontWeight: "700",
+    paddingTop: 10,
+    paddingBottom: 10,
+    minHeight: 56,
+  },
+  cardLabel: {
+    fontSize: 13,
+    fontWeight: "800",
     color: W.text,
-    minHeight: 34,
+    lineHeight: 17,
   },
   capRow: {
     alignItems: "center",
-    gap: 3,
-    paddingHorizontal: 10,
-    paddingBottom: 8,
+    gap: 4,
+    marginTop: 6,
   },
   capText: {
     fontSize: 11,

@@ -8,6 +8,17 @@ import { useDispatch, useSelector } from "react-redux";
 import { switchRoleThunk } from "../../store/slices/authSlice";
 import { showAlert } from "../../utils/showAlert";
 
+const MENU_ROWS = [
+  { key: "wallet", icon: "wallet-outline", titleKey: "walletTitle", subKey: "featureWalletSubtitle", nav: "WalletOverview" },
+  { key: "driver", icon: "car-sport-outline", titleKey: "becomeDriverTitle", subKey: "becomeDriverSubtitle", nav: "DriverOnboarding" },
+  { key: "tips", icon: "map-outline", titleKey: "featureRideTips", subKey: "featureRideTipsSubtitle", nav: "RideTips" },
+  { key: "places", icon: "bookmark-outline", titleKey: "featureSavedPlaces", subKey: "featureSavedPlacesSubtitle", nav: "SavedPlaces" },
+  { key: "notif", icon: "notifications-outline", titleKey: "featureNotifications", subKey: "featureNotificationsSubtitle", nav: "NotificationSettings" },
+  { key: "help", icon: "help-circle-outline", titleKey: "featureHelp", subKey: "featureHelpSubtitle", nav: "HelpCenter" },
+  { key: "safety", icon: "shield-checkmark-outline", titleKey: "featureSafety", subKey: "featureSafetySubtitle", nav: "SafetyTips" },
+  { key: "about", icon: "information-circle-outline", titleKey: "featureAbout", subKey: "featureAboutSubtitle", nav: "AboutWeret" },
+];
+
 export default function PassengerMoreMenuScreen({ navigation }) {
   const { t } = useTranslation();
   const dispatch = useDispatch();
@@ -36,78 +47,19 @@ export default function PassengerMoreMenuScreen({ navigation }) {
         radius={radius}
         t={t}
       />
-      <MoreMenuRow
-        icon="wallet-outline"
-        title={t("walletTitle")}
-        subtitle={t("featureWalletSubtitle")}
-        onPress={() => navigation.navigate("WalletOverview")}
-        colors={colors}
-        spacing={spacing}
-        radius={radius}
-      />
-      <MoreMenuRow
-        icon="car-sport-outline"
-        title={t("becomeDriverTitle")}
-        subtitle={t("becomeDriverSubtitle")}
-        onPress={() => navigation.navigate("DriverOnboarding")}
-        colors={colors}
-        spacing={spacing}
-        radius={radius}
-      />
-      <MoreMenuRow
-        icon="map-outline"
-        title={t("featureRideTips")}
-        subtitle={t("featureRideTipsSubtitle")}
-        onPress={() => navigation.navigate("RideTips")}
-        colors={colors}
-        spacing={spacing}
-        radius={radius}
-      />
-      <MoreMenuRow
-        icon="bookmark-outline"
-        title={t("featureSavedPlaces")}
-        subtitle={t("featureSavedPlacesSubtitle")}
-        onPress={() => navigation.navigate("SavedPlaces")}
-        colors={colors}
-        spacing={spacing}
-        radius={radius}
-      />
-      <MoreMenuRow
-        icon="notifications-outline"
-        title={t("featureNotifications")}
-        subtitle={t("featureNotificationsSubtitle")}
-        onPress={() => navigation.navigate("NotificationSettings")}
-        colors={colors}
-        spacing={spacing}
-        radius={radius}
-      />
-      <MoreMenuRow
-        icon="help-circle-outline"
-        title={t("featureHelp")}
-        subtitle={t("featureHelpSubtitle")}
-        onPress={() => navigation.navigate("HelpCenter")}
-        colors={colors}
-        spacing={spacing}
-        radius={radius}
-      />
-      <MoreMenuRow
-        icon="shield-checkmark-outline"
-        title={t("featureSafety")}
-        subtitle={t("featureSafetySubtitle")}
-        onPress={() => navigation.navigate("SafetyTips")}
-        colors={colors}
-        spacing={spacing}
-        radius={radius}
-      />
-      <MoreMenuRow
-        icon="information-circle-outline"
-        title={t("featureAbout")}
-        subtitle={t("featureAboutSubtitle")}
-        onPress={() => navigation.navigate("AboutAmeen")}
-        colors={colors}
-        spacing={spacing}
-        radius={radius}
-      />
+      {MENU_ROWS.map((row, index) => (
+        <MoreMenuRow
+          key={row.key}
+          index={index}
+          icon={row.icon}
+          title={t(row.titleKey)}
+          subtitle={t(row.subKey)}
+          onPress={() => navigation.navigate(row.nav)}
+          colors={colors}
+          spacing={spacing}
+          radius={radius}
+        />
+      ))}
     </WeretListScreen>
   );
 }

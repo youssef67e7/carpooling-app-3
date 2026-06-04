@@ -149,7 +149,6 @@ const walletSlice = createSlice({
         state.lastWithdrawMeta = {
           requestId: action.payload.requestId,
           expiresAt: action.payload.expiresAt,
-          devOtp: action.payload._devOtp,
         };
       })
       .addCase(fetchWalletTransactions.fulfilled, (state, action) => {

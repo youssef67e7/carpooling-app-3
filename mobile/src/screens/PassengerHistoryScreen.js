@@ -4,7 +4,8 @@ import { useTranslation } from "react-i18next";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchHistory } from "../store/slices/rideSlice";
 import { useWeretScreenChrome } from "../hooks/useWeretScreenChrome";
-import WeretAmbientBackground from "../components/ui/weret/WeretAmbientBackground";
+import WeretListScreen from "../components/ui/weret/WeretListScreen";
+import WeretStepHeader from "../components/ui/weret/WeretStepHeader";
 import RideCard from "../components/RideCard";
 import EmptyState from "../components/EmptyState";
 
@@ -34,12 +35,13 @@ export default function PassengerHistoryScreen({ navigation }) {
   }, [load]);
 
   return (
-    <WeretAmbientBackground>
+    <WeretListScreen scroll={false} contentContainerStyle={{ flex: 1, padding: spacing.md }}>
+      <WeretStepHeader title={t("history")} subtitle={t("pullToRefresh")} colors={colors} spacing={spacing} />
       <FlatList
         style={{ flex: 1 }}
         data={history}
         keyExtractor={(item) => item._id}
-        contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xl * 2, flexGrow: 1 }}
+        contentContainerStyle={{ paddingBottom: spacing.xl * 2, flexGrow: 1 }}
         refreshing={refreshing}
         onRefresh={onRefresh}
         showsVerticalScrollIndicator={false}
@@ -50,6 +52,6 @@ export default function PassengerHistoryScreen({ navigation }) {
           </View>
         )}
       />
-    </WeretAmbientBackground>
+    </WeretListScreen>
   );
 }

@@ -16,6 +16,26 @@ const router = Router();
 
 router.use(authRequired, blockCheck, roleRequired("admin"), fixedAdminOnly);
 
+function wantsPaginatedList(req) {
+  return req.query.page != null || req.query.limit != null;
+}
+
+function parsePagination(req, { defaultLimit = 7, maxLimit = 100 } = {}) {
+  const limit = Math.min(maxLimit, Math.max(1, Number(req.query.limit) || defaultLimit));
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const skip = (page - 1) * limit;
+  return { limit, page, skip };
+}
+
+function paginationMeta(total, page, limit) {
+  const totalPages = Math.max(1, Math.ceil(total / limit) || 1);
+  return { page, limit, total, totalPages };
+}
+
+function escapeRegex(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 async function audit(req, { action, targetType, targetId, summary = "", detail = null }) {
   try {
     const ip =
@@ -38,14 +58,38 @@ async function audit(req, { action, targetType, targetId, summary = "", detail =
   }
 }
 
-router.get("/users", async (req, res, next) => {
-  try {
-    const users = await User.find().sort({ createdAt: -1 }).limit(500);
-    return res.json({ users: users.map((u) => u.toJSON()) });
-  } catch (e) {
-    next(e);
+router.get(
+  "/users",
+  query("page").optional().isInt({ min: 1 }),
+  query("limit").optional().isInt({ min: 1, max: 100 }),
+  query("search").optional().trim().isLength({ max: 120 }),
+  validateRequest,
+  async (req, res, next) => {
+    try {
+      const filter = {};
+      const search = String(req.query.search || "").trim();
+      if (search) {
+        const rx = new RegExp(escapeRegex(search), "i");
+        filter.$or = [{ name: rx }, { email: rx }, { phone: rx }];
+      }
+      if (!wantsPaginatedList(req)) {
+        const users = await User.find(filter).sort({ createdAt: -1 }).limit(500);
+        return res.json({ users: users.map((u) => u.toJSON()) });
+      }
+      const { limit, page, skip } = parsePagination(req);
+      const [users, total] = await Promise.all([
+        User.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
+        User.countDocuments(filter),
+      ]);
+      return res.json({
+        users: users.map((u) => u.toJSON()),
+        pagination: paginationMeta(total, page, limit),
+      });
+    } catch (e) {
+      next(e);
+    }
   }
-});
+);
 
 router.patch(
   "/users/:userId",
@@ -146,19 +190,46 @@ router.delete("/users/:userId", param("userId").isMongoId(), validateRequest, as
   }
 });
 
-router.get("/reports", async (req, res, next) => {
-  try {
-    const reports = await Report.find()
-      .sort({ createdAt: -1 })
-      .limit(400)
-      .populate("reporterId", "name email role")
-      .populate("reportedUserId", "name email role")
-      .lean();
-    return res.json({ reports });
-  } catch (e) {
-    next(e);
+router.get(
+  "/reports",
+  query("page").optional().isInt({ min: 1 }),
+  query("limit").optional().isInt({ min: 1, max: 100 }),
+  query("search").optional().trim().isLength({ max: 120 }),
+  validateRequest,
+  async (req, res, next) => {
+    try {
+      const filter = {};
+      const search = String(req.query.search || "").trim();
+      if (search) {
+        const rx = new RegExp(escapeRegex(search), "i");
+        filter.$or = [{ reason: rx }, { description: rx }, { status: rx }];
+      }
+      if (!wantsPaginatedList(req)) {
+        const reports = await Report.find(filter)
+          .sort({ createdAt: -1 })
+          .limit(400)
+          .populate("reporterId", "name email role")
+          .populate("reportedUserId", "name email role")
+          .lean();
+        return res.json({ reports });
+      }
+      const { limit, page, skip } = parsePagination(req);
+      const [reports, total] = await Promise.all([
+        Report.find(filter)
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .populate("reporterId", "name email role")
+          .populate("reportedUserId", "name email role")
+          .lean(),
+        Report.countDocuments(filter),
+      ]);
+      return res.json({ reports, pagination: paginationMeta(total, page, limit) });
+    } catch (e) {
+      next(e);
+    }
   }
-});
+);
 
 router.patch(
   "/reports/:id",
@@ -194,21 +265,42 @@ router.patch(
 
 router.get(
   "/transactions",
-  query("limit").optional().isInt({ min: 1, max: 200 }),
+  query("page").optional().isInt({ min: 1 }),
+  query("limit").optional().isInt({ min: 1, max: 100 }),
   query("flagged").optional().isIn(["0", "1", "true", "false"]),
+  query("search").optional().trim().isLength({ max: 120 }),
   validateRequest,
   async (req, res, next) => {
     try {
-      const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 80));
       const q = {};
       if (req.query.flagged === "1" || req.query.flagged === "true") q.flagged = true;
-      const txs = await Transaction.find(q)
-        .sort({ createdAt: -1 })
-        .limit(limit)
-        .populate("userId", "name email role")
-        .populate("walletAccountId", "walletType phoneNumber label balance")
-        .lean();
-      return res.json({ transactions: txs });
+      const search = String(req.query.search || "").trim();
+      if (search) {
+        const rx = new RegExp(escapeRegex(search), "i");
+        q.$or = [{ type: rx }, { status: rx }, { flaggedReason: rx }];
+      }
+      if (!wantsPaginatedList(req)) {
+        const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 80));
+        const txs = await Transaction.find(q)
+          .sort({ createdAt: -1 })
+          .limit(limit)
+          .populate("userId", "name email role")
+          .populate("walletAccountId", "walletType phoneNumber label balance")
+          .lean();
+        return res.json({ transactions: txs });
+      }
+      const { limit, page, skip } = parsePagination(req);
+      const [txs, total] = await Promise.all([
+        Transaction.find(q)
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .populate("userId", "name email role")
+          .populate("walletAccountId", "walletType phoneNumber label balance")
+          .lean(),
+        Transaction.countDocuments(q),
+      ]);
+      return res.json({ transactions: txs, pagination: paginationMeta(total, page, limit) });
     } catch (e) {
       next(e);
     }
@@ -245,35 +337,82 @@ router.patch(
 
 router.get(
   "/audit",
-  query("limit").optional().isInt({ min: 1, max: 200 }),
+  query("page").optional().isInt({ min: 1 }),
+  query("limit").optional().isInt({ min: 1, max: 100 }),
+  query("search").optional().trim().isLength({ max: 120 }),
   validateRequest,
   async (req, res, next) => {
     try {
-      const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 80));
-      const logs = await AdminAuditLog.find()
-        .sort({ createdAt: -1 })
-        .limit(limit)
-        .populate("actorAdminId", "name email")
-        .lean();
-      return res.json({ logs });
+      const filter = {};
+      const search = String(req.query.search || "").trim();
+      if (search) {
+        const rx = new RegExp(escapeRegex(search), "i");
+        filter.$or = [{ action: rx }, { targetType: rx }, { summary: rx }];
+      }
+      if (!wantsPaginatedList(req)) {
+        const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 80));
+        const logs = await AdminAuditLog.find(filter)
+          .sort({ createdAt: -1 })
+          .limit(limit)
+          .populate("actorAdminId", "name email")
+          .lean();
+        return res.json({ logs });
+      }
+      const { limit, page, skip } = parsePagination(req);
+      const [logs, total] = await Promise.all([
+        AdminAuditLog.find(filter)
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .populate("actorAdminId", "name email")
+          .lean(),
+        AdminAuditLog.countDocuments(filter),
+      ]);
+      return res.json({ logs, pagination: paginationMeta(total, page, limit) });
     } catch (e) {
       next(e);
     }
   }
 );
 
-router.get("/rides", async (req, res, next) => {
-  try {
-    const rides = await Ride.find()
-      .sort({ createdAt: -1 })
-      .limit(200)
-      .populate("passengerId", "name email role profileImageUrl")
-      .populate("driverId", "name email role profileImageUrl");
-    return res.json({ rides });
-  } catch (e) {
-    next(e);
+router.get(
+  "/rides",
+  query("page").optional().isInt({ min: 1 }),
+  query("limit").optional().isInt({ min: 1, max: 100 }),
+  query("search").optional().trim().isLength({ max: 120 }),
+  validateRequest,
+  async (req, res, next) => {
+    try {
+      const filter = {};
+      const search = String(req.query.search || "").trim();
+      if (search) {
+        const rx = new RegExp(escapeRegex(search), "i");
+        filter.$or = [{ status: rx }];
+      }
+      if (!wantsPaginatedList(req)) {
+        const rides = await Ride.find(filter)
+          .sort({ createdAt: -1 })
+          .limit(200)
+          .populate("passengerId", "name email role profileImageUrl")
+          .populate("driverId", "name email role profileImageUrl");
+        return res.json({ rides });
+      }
+      const { limit, page, skip } = parsePagination(req);
+      const [rides, total] = await Promise.all([
+        Ride.find(filter)
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .populate("passengerId", "name email role profileImageUrl")
+          .populate("driverId", "name email role profileImageUrl"),
+        Ride.countDocuments(filter),
+      ]);
+      return res.json({ rides, pagination: paginationMeta(total, page, limit) });
+    } catch (e) {
+      next(e);
+    }
   }
-});
+);
 
 router.get("/stats", async (req, res, next) => {
   try {

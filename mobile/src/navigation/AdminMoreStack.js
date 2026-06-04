@@ -2,7 +2,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useTranslation } from "react-i18next";
 import { useTabScreenOptions } from "./useTabScreenOptions";
 import AdminMoreMenuScreen from "../screens/more/AdminMoreMenuScreen";
-import AboutAmeenScreen from "../screens/more/AboutAmeenScreen";
+import AboutWeretScreen from "../screens/more/AboutWeretScreen";
 import AdminToolsScreen from "../screens/more/AdminToolsScreen";
 import AdminReportsScreen from "../screens/AdminReportsScreen";
 import AdminTransactionsScreen from "../screens/AdminTransactionsScreen";
@@ -21,7 +21,7 @@ export default function AdminMoreStack() {
       <Stack.Screen name="AdminReports" component={AdminReportsScreen} options={{ title: t("adminReportsTitle") }} />
       <Stack.Screen name="AdminTransactions" component={AdminTransactionsScreen} options={{ title: t("adminTransactionsTitle") }} />
       <Stack.Screen name="AdminAuditLog" component={AdminAuditLogScreen} options={{ title: t("adminAuditTitle") }} />
-      <Stack.Screen name="AboutAmeen" component={AboutAmeenScreen} options={{ title: t("featureAbout") }} />
+      <Stack.Screen name="AboutWeret" component={AboutWeretScreen} options={{ title: t("featureAbout") }} />
     </Stack.Navigator>
   );
 }

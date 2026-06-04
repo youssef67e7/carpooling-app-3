@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet, I18nManager } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import Animated, { FadeInUp } from "react-native-reanimated";
 import { weretElevation, weretRadius } from "../../../theme/weretDesignSystem";
 
 export default function WeretMenuHero({ name, roleLabel, colors, spacing }) {
@@ -10,7 +11,8 @@ export default function WeretMenuHero({ name, roleLabel, colors, spacing }) {
     .toUpperCase();
 
   return (
-    <View
+    <Animated.View
+      entering={FadeInUp.duration(400).springify().damping(20)}
       style={[
         styles.card,
         {
@@ -22,9 +24,12 @@ export default function WeretMenuHero({ name, roleLabel, colors, spacing }) {
         },
       ]}
     >
+      <View style={[styles.topStripe, { backgroundColor: colors.text }]} />
       <View style={{ flexDirection: rtl ? "row-reverse" : "row", alignItems: "center", gap: spacing.md }}>
-        <View style={[styles.avatar, { backgroundColor: colors.text }]}>
-          <Text style={[styles.initial, { color: colors.primaryText }]}>{initial}</Text>
+        <View style={[styles.avatarOuter, { borderColor: colors.border }]}>
+          <View style={[styles.avatar, { backgroundColor: colors.text }]}>
+            <Text style={[styles.initial, { color: colors.primaryText }]}>{initial}</Text>
+          </View>
         </View>
         <View style={{ flex: 1 }}>
           <Text style={[styles.hello, { color: colors.textMuted, textAlign: rtl ? "right" : "left" }]}>WERET</Text>
@@ -32,19 +37,33 @@ export default function WeretMenuHero({ name, roleLabel, colors, spacing }) {
             {name || "—"}
           </Text>
           {roleLabel ? (
-            <View style={[styles.rolePill, { alignSelf: rtl ? "flex-end" : "flex-start", backgroundColor: colors.surfaceMuted }]}>
-              <Ionicons name="shield-checkmark-outline" size={12} color={colors.text} />
-              <Text style={[styles.roleText, { color: colors.text }]}>{roleLabel}</Text>
+            <View
+              style={[
+                styles.rolePill,
+                {
+                  alignSelf: rtl ? "flex-end" : "flex-start",
+                  backgroundColor: colors.text,
+                },
+              ]}
+            >
+              <Ionicons name="shield-checkmark" size={12} color={colors.primaryText} />
+              <Text style={[styles.roleText, { color: colors.primaryText }]}>{roleLabel}</Text>
             </View>
           ) : null}
         </View>
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { borderRadius: weretRadius.card, borderWidth: 1 },
+  card: { borderRadius: weretRadius.card, borderWidth: 1.5, overflow: "hidden" },
+  topStripe: { height: 4, width: "100%", marginBottom: 14, borderRadius: 2 },
+  avatarOuter: {
+    padding: 3,
+    borderRadius: 32,
+    borderWidth: 1.5,
+  },
   avatar: {
     width: 56,
     height: 56,
@@ -53,16 +72,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   initial: { fontSize: 22, fontWeight: "900" },
-  hello: { fontSize: 11, fontWeight: "800", letterSpacing: 1.2, textTransform: "uppercase" },
-  name: { fontSize: 20, fontWeight: "900", marginTop: 2, letterSpacing: -0.3 },
+  hello: { fontSize: 10, fontWeight: "800", letterSpacing: 1.4, textTransform: "uppercase" },
+  name: { fontSize: 22, fontWeight: "900", marginTop: 2, letterSpacing: -0.4 },
   rolePill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    marginTop: 8,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
+    gap: 5,
+    marginTop: 10,
+    paddingVertical: 5,
+    paddingHorizontal: 12,
     borderRadius: weretRadius.pill,
   },
-  roleText: { fontSize: 11, fontWeight: "800" },
+  roleText: { fontSize: 11, fontWeight: "800", letterSpacing: 0.3 },
 });

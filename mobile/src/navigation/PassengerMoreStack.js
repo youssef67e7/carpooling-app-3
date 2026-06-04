@@ -5,7 +5,7 @@ import { useTabScreenOptions } from "./useTabScreenOptions";
 import PassengerMoreMenuScreen from "../screens/more/PassengerMoreMenuScreen";
 import HelpCenterScreen from "../screens/more/HelpCenterScreen";
 import SafetyTipsScreen from "../screens/more/SafetyTipsScreen";
-import AboutAmeenScreen from "../screens/more/AboutAmeenScreen";
+import AboutWeretScreen from "../screens/more/AboutWeretScreen";
 import SavedPlacesScreen from "../screens/more/SavedPlacesScreen";
 import RideTipsScreen from "../screens/more/RideTipsScreen";
 import NotificationSettingsScreen from "../screens/more/NotificationSettingsScreen";
@@ -46,7 +46,7 @@ export default function PassengerMoreStack() {
       />
       <Stack.Screen name="HelpCenter" component={HelpCenterScreen} options={{ title: t("featureHelp") }} />
       <Stack.Screen name="SafetyTips" component={SafetyTipsScreen} options={{ title: t("featureSafety") }} />
-      <Stack.Screen name="AboutAmeen" component={AboutAmeenScreen} options={{ title: t("featureAbout") }} />
+      <Stack.Screen name="AboutWeret" component={AboutWeretScreen} options={{ title: t("featureAbout") }} />
     </Stack.Navigator>
   );
 }

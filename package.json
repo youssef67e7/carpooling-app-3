@@ -1,7 +1,7 @@
 {
-  "name": "reachnative-car",
+  "name": "weret",
   "private": true,
-  "description": "Ride-hail monorepo: npm start = Expo from /mobile (use npm start; global `expo` CLI is not required). npm run backend for API.",
+  "description": "WERET monorepo: npm start = Expo from /mobile. npm run backend for API.",
   "scripts": {
     "install:all": "npm install --prefix backend && npm install --prefix mobile",
     "mobile": "node scripts/start-mobile.cjs",
@@ -14,9 +14,16 @@
     "dev:lan": "concurrently -n backend,proxy,mobile -c blue,green,magenta \"npm run backend\" \"npm run api-proxy\" \"npm run mobile\"",
     "test": "npm test --prefix backend && npm run test:smoke --prefix backend",
     "test:unit": "npm test --prefix backend",
-    "test:smoke": "npm run test:smoke --prefix backend"
+    "test:smoke": "npm run test:smoke --prefix backend",
+    "setup:firebase": "node scripts/setup-firebase.cjs",
+    "apk": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-apk.ps1"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
+  },
+  "dependencies": {
+    "expo-auth-session": "~55.0.16",
+    "expo-crypto": "~55.0.15",
+    "expo-web-browser": "~55.0.16"
   }
 }

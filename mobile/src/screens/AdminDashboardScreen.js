@@ -51,7 +51,7 @@ export default function AdminDashboardScreen({ navigation }) {
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      title: t("admin"),
+      title: t("appName"),
       headerRight: () => (
         <View style={{ flexDirection: rtl ? "row-reverse" : "row", gap: 12, alignItems: "center" }}>
           <Pressable onPress={() => navigation.navigate("Users")}>

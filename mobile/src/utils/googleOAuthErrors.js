@@ -12,8 +12,11 @@ export function formatGoogleOAuthError(raw, t, redirectUri = "") {
   ) {
     return t("weretGoogleApisConsole");
   }
+  if (s.includes("invalid_request") || s.includes("oauth 2.0 policy") || s.includes("doesn't comply")) {
+    return t("weretGooglePolicyBlocked");
+  }
   if (s.includes("redirect_uri_mismatch") || s.includes("redirect_uri")) {
-    return t("weretGoogleRedirectMismatch", { uri: redirectUri || "weret:/oauthredirect" });
+    return t("weretGoogleRedirectMismatch", { uri: redirectUri || "com.ridehail.app:/oauthredirect" });
   }
   if (s.includes("invalid_client")) {
     return t("weretGoogleInvalidClient");

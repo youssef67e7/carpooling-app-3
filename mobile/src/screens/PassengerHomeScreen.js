@@ -11,8 +11,10 @@ import {
   useWindowDimensions,
   TextInput,
   ActivityIndicator,
-  Animated,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { showAlert } from "../utils/showAlert";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import MapView, { Marker, Polyline } from "react-native-maps";
@@ -32,7 +34,7 @@ import {
   updatePassengerMinFareThunk,
 } from "../store/slices/rideSlice";
 import { haversineKm, fareFromVehicle } from "../utils/tripFare";
-import { useTheme } from "../context/ThemeProvider";
+import { useWeretScreenChrome } from "../hooks/useWeretScreenChrome";
 import { usePolling } from "../hooks/usePolling";
 import { routePathToCoords } from "../utils/mapCoords";
 import { interpolateMapCoords } from "../utils/routePolyline";
@@ -47,8 +49,10 @@ import { computeSeatUnits } from "../constants/passengerSeatUnits";
 import RideStatusBanner from "../components/RideStatusBanner";
 import RateDriverModal from "../components/RateDriverModal";
 import PassengerWeretHero from "../components/passenger/PassengerWeretHero";
+import PassengerMapPickerModal from "../components/passenger/PassengerMapPickerModal";
 import { weretPassenger as W } from "../theme/weretPassenger";
 import { weretElevation, weretRadius } from "../theme/weretDesignSystem";
+import WeretSurfaceCard from "../components/ui/weret/WeretSurfaceCard";
 import i18n from "../i18n";
 import { mapboxAutocomplete } from "../utils/mapboxPlaces";
 import { aiRerankPlaces } from "../utils/aiPlaceRerank";
@@ -77,7 +81,8 @@ const TRACKING_STATUSES = ["pending", "accepted", "ongoing"];
 export default function PassengerHomeScreen({ navigation }) {
   const { t } = useTranslation();
   const dispatch = useDispatch();
-  const { colors, spacing, radius, isDark } = useTheme();
+  const { colors, spacing, radius, isDark } = useWeretScreenChrome();
+  const insets = useSafeAreaInsets();
   const isFocused = useIsFocused();
   const rtl = I18nManager.isRTL;
 
@@ -87,6 +92,9 @@ export default function PassengerHomeScreen({ navigation }) {
   const [selectedVehicleType, setSelectedVehicleType] = useState("delivery");
   const [passengerCount, setPassengerCount] = useState(1);
   const [passengerSize, setPassengerSize] = useState("MEDIUM");
+  /** shared: normal booking; private: reserve the whole vehicle (slightly higher fare) */
+  const [rideMode, setRideMode] = useState("shared");
+  const prevSharedCountRef = useRef(1);
   const [parcelDescription, setParcelDescription] = useState("");
   const [parcelReceiverName, setParcelReceiverName] = useState("");
   const [parcelReceiverPhone, setParcelReceiverPhone] = useState("");
@@ -98,7 +106,7 @@ export default function PassengerHomeScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [locationAllowed, setLocationAllowed] = useState(false);
   /** ما الذي تضبطه الخريطة عند الضغط: انطلاق أو وجهة — مربوط ببطاقتي «مكاني» و«الوجهة» */
-  const [mapEditTarget, setMapEditTarget] = useState("pickup");
+  const [mapEditTarget, setMapEditTarget] = useState("destination");
   const [pickupPlaceQuery, setPickupPlaceQuery] = useState("");
   const [pickupPlaceSuggest, setPickupPlaceSuggest] = useState([]);
   const [pickupPlaceLoading, setPickupPlaceLoading] = useState(false);
@@ -107,15 +115,12 @@ export default function PassengerHomeScreen({ navigation }) {
   const [destPlaceLoading, setDestPlaceLoading] = useState(false);
   const [destPlaceFocused, setDestPlaceFocused] = useState(false);
   const [recentDestinations, setRecentDestinations] = useState([]);
+  const [mapPickerOpen, setMapPickerOpen] = useState(false);
   const mapRef = useRef(null);
   const pickupRef = useRef(null);
   const destinationRef = useRef(null);
   const prevActiveRideIdRef = useRef(null);
   const { height: windowHeight } = useWindowDimensions();
-  const sheetMaxHeight = Math.round(windowHeight * 0.52);
-  const mapMinHeight = Math.round(windowHeight * 0.34);
-  const mapAnim = useRef(new Animated.Value(1)).current;
-  const mapShownRef = useRef(true);
 
   const rideId = activeRide?._id;
   const rideStatus = activeRide?.status;
@@ -123,6 +128,20 @@ export default function PassengerHomeScreen({ navigation }) {
   const mapLocked =
     !!activeRide &&
     (["pending", "accepted", "ongoing"].includes(activeRide.status) || needsRating);
+
+  const mapCompactHeight = activeRide
+    ? Math.min(172, Math.round(windowHeight * 0.22))
+    : Math.min(152, Math.round(windowHeight * 0.2));
+  const pageBg = W.sheet;
+
+  const openMapPicker = useCallback(
+    (target) => {
+      if (mapLocked) return;
+      if (target) setMapEditTarget(target);
+      setMapPickerOpen(true);
+    },
+    [mapLocked]
+  );
 
   useEffect(() => {
     (async () => {
@@ -380,18 +399,27 @@ export default function PassengerHomeScreen({ navigation }) {
   const priceInfoAmount = useMemo(() => {
     if (!selectedVehicleDoc) return null;
     if (routeDistanceKm != null) {
-      return fareFromVehicle(selectedVehicleDoc.baseFare, selectedVehicleDoc.pricePerKm, routeDistanceKm).toFixed(0);
+      return (
+        fareFromVehicle(selectedVehicleDoc.baseFare, selectedVehicleDoc.pricePerKm, routeDistanceKm) *
+        privateFareMultiplier
+      ).toFixed(0);
     }
-    return Number(selectedVehicleDoc.baseFare).toFixed(0);
-  }, [routeDistanceKm, selectedVehicleDoc]);
+    return (Number(selectedVehicleDoc.baseFare) * privateFareMultiplier).toFixed(0);
+  }, [routeDistanceKm, selectedVehicleDoc, privateFareMultiplier]);
 
   const suggestedAmountNum = useMemo(() => {
     if (!selectedVehicleDoc) return 0;
     if (routeDistanceKm != null) {
-      return Math.round(fareFromVehicle(selectedVehicleDoc.baseFare, selectedVehicleDoc.pricePerKm, routeDistanceKm) * 100) / 100;
+      return (
+        Math.round(
+          fareFromVehicle(selectedVehicleDoc.baseFare, selectedVehicleDoc.pricePerKm, routeDistanceKm) *
+            privateFareMultiplier *
+            100
+        ) / 100
+      );
     }
-    return Math.round(Number(selectedVehicleDoc.baseFare || 0) * 100) / 100;
-  }, [routeDistanceKm, selectedVehicleDoc]);
+    return Math.round(Number(selectedVehicleDoc.baseFare || 0) * privateFareMultiplier * 100) / 100;
+  }, [routeDistanceKm, selectedVehicleDoc, privateFareMultiplier]);
 
   const [passengerMinOffer, setPassengerMinOffer] = useState(0);
   useEffect(() => {
@@ -602,6 +630,21 @@ export default function PassengerHomeScreen({ navigation }) {
     [passengerCount, passengerSize]
   );
   const isShipping = selectedVehicleType === "shipping";
+  const canBePrivate =
+    !isShipping && selectedCapacity > 1 && String(selectedVehicleType || "").toLowerCase() !== "motorcycle";
+  const privateFareMultiplier = canBePrivate && rideMode === "private" ? 1.1 : 1;
+
+  useEffect(() => {
+    if (!canBePrivate && rideMode === "private") setRideMode("shared");
+  }, [canBePrivate, rideMode]);
+
+  useEffect(() => {
+    if (!canBePrivate) return;
+    if (rideMode === "private") {
+      setPassengerCount(selectedCapacity);
+      setPassengerSize("MEDIUM");
+    }
+  }, [rideMode, canBePrivate, selectedCapacity]);
   const canRequestRide = Boolean(
     pickup &&
       destination &&
@@ -647,6 +690,7 @@ export default function PassengerHomeScreen({ navigation }) {
           passengerMinFare: minFare,
           passengerCount,
           passengerSize,
+          rideMode,
           parcel: isShipping
             ? {
                 description: parcelDescription,
@@ -717,228 +761,221 @@ export default function PassengerHomeScreen({ navigation }) {
     }
   }, [dispatch, selectedVehicleType]);
 
-  return (
-    <View style={[styles.root, { backgroundColor: colors.bg }]}>
-      <Animated.View
-        style={[
-          styles.mapShell,
-          mapLtrContainerStyle,
-          {
-            minHeight: mapMinHeight,
-            opacity: mapAnim,
-            transform: [
-              {
-                translateY: mapAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [-mapMinHeight, 0],
-                }),
-              },
-            ],
-          },
-        ]}
-      >
-        {!activeRide ? (
-          <View
-            style={[
-              styles.mapLinkBanner,
-              {
-                flexDirection: rtl ? "row-reverse" : "row",
-                backgroundColor: W.pillOverlay,
-                borderColor: "transparent",
-              },
-            ]}
-            pointerEvents="none"
-          >
-            <MaterialCommunityIcons
-              name={mapEditTarget === "pickup" ? "map-marker-radius" : "map-marker"}
-              size={18}
-              color={W.onPrimary}
-            />
-            <Text style={[styles.mapLinkBannerText, { color: W.onPrimary }]}>
-              {mapEditTarget === "pickup" ? t("mapLinkedPickup") : t("mapLinkedDestination")}
-            </Text>
-          </View>
-        ) : null}
-        <MapView
-          ref={mapRef}
-          style={styles.map}
-          provider={mapProvider}
-          initialRegion={DEFAULT_REGION}
-          onPress={onMapPress}
-          showsUserLocation={locationAllowed}
-          showsMyLocationButton={false}
-          userInterfaceStyle={isDark ? "dark" : "light"}
-          pitchEnabled={false}
-          rotateEnabled={false}
-        >
-          <Fragment>
-            {pickupCoord ? <Marker coordinate={pickupCoord} title={t("pickup")} /> : null}
-            {destCoord ? <Marker coordinate={destCoord} pinColor={colors.danger} title={t("destination")} /> : null}
-            {driverCoord ? (
-              <Marker coordinate={driverCoord} title={t("driverOnMap")} pinColor={colors.success} />
-            ) : null}
-            {activeRide && rideStatus === "pending" && tripRouteCoords.length > 1 ? (
-              <Polyline coordinates={tripRouteCoords} strokeColor={colors.primary} strokeWidth={4} />
-            ) : null}
-            {activeRide && rideStatus === "ongoing" && tripRouteCoords.length > 1 ? (
-              <Polyline coordinates={tripRouteCoords} strokeColor={colors.primary} strokeWidth={4} />
-            ) : null}
-            {activeRide && rideStatus === "accepted" && tripRouteCoords.length > 1 ? (
-              <Polyline
-                coordinates={tripRouteCoords}
-                strokeColor={colors.textMuted}
-                strokeWidth={2}
-                lineDashPattern={[10, 6]}
+  const recenterMap = useCallback(async () => {
+    try {
+      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      mapRef.current?.animateToRegion(
+        {
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+          latitudeDelta: DEFAULT_REGION.latitudeDelta,
+          longitudeDelta: DEFAULT_REGION.longitudeDelta,
+        },
+        400
+      );
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!mapPickerOpen) return;
+    const coord =
+      mapEditTarget === "destination" && destCoord
+        ? destCoord
+        : pickupCoord || destCoord;
+    if (!coord || !mapRef.current) return;
+    mapRef.current.animateToRegion(
+      {
+        latitude: coord.latitude,
+        longitude: coord.longitude,
+        latitudeDelta: 0.045,
+        longitudeDelta: 0.045,
+      },
+      320
+    );
+  }, [mapPickerOpen, mapEditTarget, pickupCoord, destCoord]);
+
+  const mapMarkers = (
+    <Fragment>
+      {pickupCoord ? <Marker coordinate={pickupCoord} title={t("pickup")} /> : null}
+      {destCoord ? <Marker coordinate={destCoord} pinColor={colors.danger} title={t("destination")} /> : null}
+      {driverCoord ? <Marker coordinate={driverCoord} title={t("driverOnMap")} pinColor={colors.success} /> : null}
+      {activeRide && rideStatus === "pending" && tripRouteCoords.length > 1 ? (
+        <Polyline coordinates={tripRouteCoords} strokeColor={colors.primary} strokeWidth={4} />
+      ) : null}
+      {activeRide && rideStatus === "ongoing" && tripRouteCoords.length > 1 ? (
+        <Polyline coordinates={tripRouteCoords} strokeColor={colors.primary} strokeWidth={4} />
+      ) : null}
+      {activeRide && rideStatus === "accepted" && tripRouteCoords.length > 1 ? (
+        <Polyline coordinates={tripRouteCoords} strokeColor={colors.textMuted} strokeWidth={2} lineDashPattern={[10, 6]} />
+      ) : null}
+      {activeRide && rideStatus === "accepted" && driverApproachCoords.length > 1 ? (
+        <Polyline coordinates={driverApproachCoords} strokeColor="#f59e0b" strokeWidth={4} />
+      ) : null}
+      {!activeRide && tripRouteCoords.length > 1 ? (
+        <Polyline coordinates={tripRouteCoords} strokeColor={W.accent} strokeWidth={4} />
+      ) : null}
+      {showOtherDriversOnMap
+        ? nearbyDrivers.map((d) =>
+            d.location?.lat && d.location?.lng ? (
+              <DriverMapMarker
+                key={d._id}
+                identifier={`drv-${d._id}`}
+                coordinate={{ latitude: d.location.lat, longitude: d.location.lng }}
+                title={d.name}
+                pinColor={driverMarkerColor(d.vehicleType)}
+                selected={String(selectedNearbyDriverId) === String(d._id)}
+                onPress={() => setSelectedNearbyDriverId(d._id)}
               />
-            ) : null}
-            {activeRide && rideStatus === "accepted" && driverApproachCoords.length > 1 ? (
-              <Polyline coordinates={driverApproachCoords} strokeColor="#f59e0b" strokeWidth={4} />
-            ) : null}
-            {!activeRide && tripRouteCoords.length > 1 ? (
-              <Polyline coordinates={tripRouteCoords} strokeColor={W.accent} strokeWidth={4} />
-            ) : null}
-            {showOtherDriversOnMap
-              ? nearbyDrivers.map((d) =>
-                  d.location?.lat && d.location?.lng ? (
-                    <DriverMapMarker
-                      key={d._id}
-                      identifier={`drv-${d._id}`}
-                      coordinate={{ latitude: d.location.lat, longitude: d.location.lng }}
-                      title={d.name}
-                      pinColor={driverMarkerColor(d.vehicleType)}
-                      selected={String(selectedNearbyDriverId) === String(d._id)}
-                      onPress={() => setSelectedNearbyDriverId(d._id)}
-                    />
-                  ) : null
-                )
-              : null}
-          </Fragment>
-        </MapView>
-        {activeRide && (rideStatus === "accepted" || rideStatus === "ongoing") ? (
-          <View
+            ) : null
+          )
+        : null}
+    </Fragment>
+  );
+
+  const bookingFooter = !activeRide ? (
+    <View
+      style={[
+        styles.pageFooter,
+        {
+          backgroundColor: W.sheet,
+          borderTopColor: W.border,
+          paddingBottom: Math.max(insets.bottom, spacing.sm),
+          paddingHorizontal: spacing.md,
+        },
+      ]}
+    >
+      {creating ? (
+        <View style={styles.footerMascot}>
+          <CarMascot mode="searching" size={72} />
+          <Text style={[styles.footerMascotText, { color: W.muted, textAlign: "center" }]}>{t("ridePhaseWaitingDriver")}</Text>
+        </View>
+      ) : null}
+      <CustomButton
+        title={t("searchDriverCta")}
+        variant="ink"
+        onPress={requestRide}
+        disabled={creating || mapLocked || !canRequestRide}
+        loading={creating}
+      />
+      {!canRequestRide && !creating ? (
+        <Text style={[styles.footerHint, { color: W.muted, textAlign: rtl ? "right" : "left" }]}>
+          {!pickup ? t("requestRideHintPickup") : !destination ? t("requestRideHintDestination") : null}
+        </Text>
+      ) : null}
+      {error ? <Text style={[styles.footerError, { color: colors.danger, textAlign: rtl ? "right" : "left" }]}>{error}</Text> : null}
+    </View>
+  ) : null;
+
+  const compactMapPreview = (
+    <Pressable
+      onPress={() => openMapPicker()}
+      disabled={mapLocked}
+      style={({ pressed }) => [
+        styles.compactMap,
+        weretElevation.card,
+        { height: mapCompactHeight, opacity: mapLocked ? 0.92 : pressed ? 0.94 : 1 },
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel={t("passengerMapCompactTap")}
+    >
+      <View style={[styles.compactMapInner, mapLtrContainerStyle]}>
+        {!mapPickerOpen ? (
+          <MapView
+            ref={mapRef}
+            style={StyleSheet.absoluteFillObject}
+            provider={mapProvider}
+            initialRegion={DEFAULT_REGION}
             pointerEvents="none"
-            style={{
-              position: "absolute",
-              bottom: 56,
-              start: 10,
-              end: 10,
-              backgroundColor: (colors.surface || "#1c1c1c") + "EE",
-              borderRadius: 10,
-              paddingVertical: 6,
-              paddingHorizontal: 10,
-              borderWidth: 1,
-              borderColor: colors.border,
-            }}
+            scrollEnabled={false}
+            zoomEnabled={false}
+            rotateEnabled={false}
+            pitchEnabled={false}
+            showsUserLocation={locationAllowed}
+            showsMyLocationButton={false}
+            userInterfaceStyle={isDark ? "dark" : "light"}
           >
-            <Text style={{ color: colors.text, fontSize: 12, fontWeight: "700", textAlign: rtl ? "right" : "left" }}>
-              {rideStatus === "accepted" ? t("mapLegendToPickupPassenger") : t("mapLegendTripPassenger")}
-            </Text>
+            {mapMarkers}
+          </MapView>
+        ) : (
+          <View style={[StyleSheet.absoluteFillObject, styles.compactMapPlaceholder]}>
+            <MaterialCommunityIcons name="map-outline" size={28} color={W.muted} />
           </View>
-        ) : null}
-        {locationAllowed ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t("recenterMap")}
-            style={({ pressed }) => [
-              styles.gpsFab,
-              {
-                backgroundColor: W.sheet,
-                opacity: pressed ? 0.85 : 1,
-                borderColor: W.border,
-              },
-            ]}
-            onPress={async () => {
-              try {
-                const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-                mapRef.current?.animateToRegion(
-                  {
-                    latitude: pos.coords.latitude,
-                    longitude: pos.coords.longitude,
-                    latitudeDelta: DEFAULT_REGION.latitudeDelta,
-                    longitudeDelta: DEFAULT_REGION.longitudeDelta,
-                  },
-                  400
-                );
-              } catch {
-                /* ignore */
-              }
-            }}
-          >
-            <MaterialCommunityIcons name="crosshairs-gps" size={22} color={W.ink} />
-          </Pressable>
-        ) : null}
-      </Animated.View>
+        )}
+      </View>
+      {!mapLocked ? (
+        <View style={[styles.compactMapChip, { flexDirection: rtl ? "row-reverse" : "row" }]} pointerEvents="none">
+          <MaterialCommunityIcons name="arrow-expand" size={16} color={W.onPrimary} />
+          <Text style={styles.compactMapChipText} numberOfLines={1}>
+            {t("passengerMapCompactTap")}
+          </Text>
+        </View>
+      ) : null}
+      {locationAllowed && !mapLocked ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t("recenterMap")}
+          style={({ pressed }) => [styles.compactGps, { opacity: pressed ? 0.85 : 1 }]}
+          onPress={(e) => {
+            e?.stopPropagation?.();
+            void recenterMap();
+          }}
+        >
+          <MaterialCommunityIcons name="crosshairs-gps" size={20} color={W.ink} />
+        </Pressable>
+      ) : null}
+    </Pressable>
+  );
+
+  return (
+    <View style={[styles.root, { backgroundColor: pageBg }]}>
+      <KeyboardAvoidingView
+        style={styles.pageBody}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
+      >
       <ScrollView
-        style={[
-          styles.panel,
-          {
-            maxHeight: sheetMaxHeight,
-            flexGrow: 0,
-            backgroundColor: W.sheet,
-            borderTopLeftRadius: 24,
-            borderTopRightRadius: 24,
-            ...weretElevation.heroFloat,
-          },
+        style={[styles.pageScroll, { backgroundColor: pageBg }]}
+        contentContainerStyle={[
+          styles.pageScrollContent,
+          { paddingHorizontal: spacing.md, paddingBottom: activeRide ? spacing.xl * 2 : spacing.md },
         ]}
-        contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xl }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         keyboardShouldPersistTaps="handled"
         nestedScrollEnabled
-        scrollEventThrottle={16}
-        onScroll={(e) => {
-          const y = e?.nativeEvent?.contentOffset?.y ?? 0;
-          if (activeRide) return;
-          if (y > 40 && mapShownRef.current) {
-            mapShownRef.current = false;
-            Animated.timing(mapAnim, { toValue: 0, duration: 160, useNativeDriver: true }).start();
-          } else if (y < 10 && !mapShownRef.current) {
-            mapShownRef.current = true;
-            Animated.timing(mapAnim, { toValue: 1, duration: 180, useNativeDriver: true }).start();
-          }
-        }}
+        showsVerticalScrollIndicator={false}
       >
-        {activeRide && rideStatus !== "completed" ? <RideStatusBanner status={rideStatus} /> : null}
+        <View style={styles.mapTopBlock}>{compactMapPreview}</View>
+
+        {activeRide && rideStatus !== "completed" ? (
+          <View style={styles.pageSection}>
+            <RideStatusBanner status={rideStatus} />
+          </View>
+        ) : null}
 
         {activeRide && rideStatus === "pending" && activeRide.awaitingDriverConfirm ? (
-          <View
-            style={{
-              marginTop: spacing.md,
-              padding: spacing.md,
-              borderRadius: radius.md,
-              borderWidth: 1,
-              borderColor: colors.border,
-              backgroundColor: colors.surfaceMuted,
-            }}
-          >
-            <Text style={{ color: colors.text, fontWeight: "800", textAlign: rtl ? "right" : "left" }}>
+          <WeretSurfaceCard colors={colors} spacing={spacing} variant="warning" style={{ marginTop: spacing.md }}>
+            <Text style={{ color: W.text, fontWeight: "800", textAlign: rtl ? "right" : "left" }}>
               {t("passengerAwaitingDriverConfirm")}
             </Text>
-            <Text style={{ color: colors.textMuted, marginTop: 6, textAlign: rtl ? "right" : "left" }}>
+            <Text style={{ color: W.muted, marginTop: 6, textAlign: rtl ? "right" : "left" }}>
               {t("passengerAwaitingDriverConfirmSub", {
                 amount: Number(activeRide.preassignedFare ?? 0).toFixed(0),
               })}
             </Text>
-          </View>
+          </WeretSurfaceCard>
         ) : null}
 
         {activeRide && rideStatus === "pending" && activeRide.driverProposal?.driverId ? (
-          <View
-            style={{
-              marginTop: spacing.md,
-              padding: spacing.md,
-              borderRadius: radius.md,
-              borderWidth: 1,
-              borderColor: colors.primary,
-              backgroundColor: colors.surfaceMuted,
-            }}
-          >
-            <Text style={{ color: colors.text, fontWeight: "800", textAlign: rtl ? "right" : "left" }}>
+          <WeretSurfaceCard colors={colors} spacing={spacing} variant="accent" style={{ marginTop: spacing.md }}>
+            <Text style={{ color: W.text, fontWeight: "800", textAlign: rtl ? "right" : "left" }}>
               {t("passengerDriverOfferTitle", {
                 name: activeRide.driverProposal.driverId?.name || t("driver"),
                 amount: Number(activeRide.driverProposal.proposedFare ?? 0).toFixed(0),
               })}
             </Text>
-            <Text style={{ color: colors.textMuted, marginTop: 6, textAlign: rtl ? "right" : "left" }}>
+            <Text style={{ color: W.muted, marginTop: 6, textAlign: rtl ? "right" : "left" }}>
               {t("passengerYourMinIs", {
                 amount: Number(activeRide.passengerMinFare ?? activeRide.estimatedFare ?? 0).toFixed(0),
               })}
@@ -960,12 +997,12 @@ export default function PassengerHomeScreen({ navigation }) {
                 loading={proposalBusy}
               />
             </View>
-          </View>
+          </WeretSurfaceCard>
         ) : null}
 
         {activeRide && rideStatus === "pending" && !activeRide.driverId && !activeRide.awaitingDriverConfirm ? (
-          <View style={{ marginTop: spacing.md }}>
-            <Text style={{ color: colors.textMuted, fontSize: 13, marginBottom: spacing.xs, textAlign: rtl ? "right" : "left" }}>
+          <WeretSurfaceCard colors={colors} spacing={spacing} variant="muted" animate={false} style={{ marginTop: spacing.md }}>
+            <Text style={{ color: W.muted, fontSize: 13, marginBottom: spacing.xs, textAlign: rtl ? "right" : "left" }}>
               {t("passengerUpdateMinWhileWaiting")}
             </Text>
             <View style={{ flexDirection: rtl ? "row-reverse" : "row", alignItems: "center", gap: spacing.sm }}>
@@ -975,199 +1012,54 @@ export default function PassengerHomeScreen({ navigation }) {
                 keyboardType="decimal-pad"
                 style={{
                   flex: 1,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  borderRadius: radius.md,
+                  borderWidth: 1.5,
+                  borderColor: W.border,
+                  borderRadius: weretRadius.sm,
                   paddingVertical: 10,
                   paddingHorizontal: 12,
-                  color: colors.text,
+                  backgroundColor: W.field,
+                  color: W.text,
+                  fontWeight: "600",
                   textAlign: rtl ? "right" : "left",
                 }}
               />
               <CustomButton title={t("passengerSaveMinFare")} onPress={savePendingMinFare} disabled={proposalBusy} loading={proposalBusy} />
             </View>
-          </View>
+          </WeretSurfaceCard>
         ) : null}
 
         {!activeRide ? (
           <>
-            <PassengerWeretHero
-              appName={t("appName")}
-              nearbyCount={nearbyDrivers.length}
-              vehicleList={vehicleList}
-              selectedVehicleType={selectedVehicleType}
-              onSelectVehicleType={setSelectedVehicleType}
-            />
-            <Text style={[styles.sheetTitle, { color: W.text, textAlign: rtl ? "right" : "left" }]}>
-              {t("rideSheetTitle")}
-            </Text>
+            <View style={styles.pageSection}>
+              <PassengerWeretHero
+                appName={t("appName")}
+                nearbyCount={nearbyDrivers.length}
+                vehicleList={vehicleList}
+                selectedVehicleType={selectedVehicleType}
+                onSelectVehicleType={setSelectedVehicleType}
+                showBrand={false}
+              />
+            </View>
 
-            <Text
-              style={{
-                color: W.muted,
-                fontSize: 11,
-                fontWeight: "800",
-                letterSpacing: 1.2,
-                textTransform: "uppercase",
-                marginBottom: spacing.sm,
-                textAlign: rtl ? "right" : "left",
-              }}
-            >
-              {t("routeSectionTitle")}
-            </Text>
-
+            <View style={styles.tripPlannerBlock}>
+            <View style={[styles.routePlanner, weretElevation.card, { backgroundColor: W.sheet, borderColor: W.border }]}>
             <View
               style={[
-                styles.routeCard,
-                {
-                  backgroundColor: W.field,
-                  borderColor: mapEditTarget === "pickup" ? W.ink : W.border,
-                  borderWidth: mapEditTarget === "pickup" ? 2 : 1,
-                },
+                styles.routeStep,
+                mapEditTarget === "destination" && styles.routeStepActive,
+                !pickup && styles.routeStepDisabled,
               ]}
             >
               <Pressable
-                onPress={() => setMapEditTarget("pickup")}
+                onPress={() => openMapPicker("destination")}
                 accessibilityRole="button"
-                accessibilityState={{ selected: mapEditTarget === "pickup" }}
+                accessibilityState={{ selected: mapEditTarget === "destination" }}
                 style={({ pressed }) => [{ opacity: pressed ? 0.88 : 1 }]}
               >
                 <View style={[styles.routeCardHeader, { flexDirection: rtl ? "row-reverse" : "row" }]}>
-                  <MaterialCommunityIcons name="map-marker-radius" size={22} color={W.ink} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ color: W.muted, fontSize: 11, fontWeight: "800", letterSpacing: 0.8, textTransform: "uppercase", textAlign: rtl ? "right" : "left" }}>
-                      {t("pickupFromMyLocationLabel")}
-                    </Text>
-                    <Text style={{ color: W.text, fontWeight: "700", textAlign: rtl ? "right" : "left", marginTop: 2 }}>
-                      {pickup ? formatCoordShort(pickup) : t("pickupNotSet")}
-                    </Text>
+                  <View style={[styles.stepIcon, styles.stepIconDest]}>
+                    <MaterialCommunityIcons name="map-marker" size={18} color={W.onPrimary} />
                   </View>
-                  <MaterialCommunityIcons name={rtl ? "chevron-left" : "chevron-right"} size={22} color={W.muted} />
-                </View>
-              </Pressable>
-              <Pressable
-                onPress={() => {
-                  setMapEditTarget("pickup");
-                  void setPickupFromMyLocation();
-                }}
-                disabled={!locationAllowed}
-                style={({ pressed }) => [
-                  styles.routeActionBtn,
-                  {
-                    flexDirection: rtl ? "row-reverse" : "row",
-                    backgroundColor: W.sheet,
-                    borderColor: W.ink,
-                    opacity: pressed ? 0.88 : !locationAllowed ? 0.45 : 1,
-                  },
-                ]}
-              >
-                <MaterialCommunityIcons name="crosshairs-gps" size={18} color={W.ink} />
-                <Text style={{ color: W.ink, fontWeight: "800", marginHorizontal: 8 }}>{t("useMyLocationForPickup")}</Text>
-              </Pressable>
-              <Text style={{ color: W.muted, fontSize: 11, marginTop: spacing.sm, textAlign: rtl ? "right" : "left" }}>
-                {mapEditTarget === "pickup"
-                  ? t("mapTapAppliesToPickup")
-                  : pickup
-                    ? t("pickupSetTapDestinationCard")
-                    : t("orTapMapForPickup")}
-              </Text>
-              <Text
-                style={{
-                  color: W.muted,
-                  fontSize: 11,
-                  marginTop: spacing.sm,
-                  textAlign: rtl ? "right" : "left",
-                  fontWeight: "600",
-                }}
-              >
-                {t("placeSearchByNameHint")}
-              </Text>
-              <View
-                style={{
-                  flexDirection: rtl ? "row-reverse" : "row",
-                  alignItems: "center",
-                  marginTop: spacing.xs,
-                  borderWidth: 1,
-                  borderColor: W.border,
-                  borderRadius: 14,
-                  backgroundColor: W.sheet,
-                  paddingHorizontal: 10,
-                }}
-              >
-                <MaterialCommunityIcons name="magnify" size={20} color={W.muted} />
-                <TextInput
-                  value={pickupPlaceQuery}
-                  onChangeText={setPickupPlaceQuery}
-                  placeholder={t("placeSearchInputPlaceholder")}
-                  placeholderTextColor={W.muted}
-                  style={{
-                    flex: 1,
-                    paddingVertical: 12,
-                    color: W.text,
-                    textAlign: rtl ? "right" : "left",
-                  }}
-                  editable={!mapLocked}
-                />
-                {pickupPlaceLoading ? <ActivityIndicator size="small" color={W.accent} /> : null}
-              </View>
-              {pickupPlaceSuggest.length > 0 ? (
-                <ScrollView
-                  style={{ maxHeight: 140, marginTop: spacing.xs }}
-                  keyboardShouldPersistTaps="handled"
-                  nestedScrollEnabled
-                >
-                  {pickupPlaceSuggest.map((row) => (
-                    <Pressable
-                      key={row.id}
-                      onPress={() => applyPickupSuggestion(row)}
-                      style={({ pressed }) => ({
-                        paddingVertical: 10,
-                        paddingHorizontal: 8,
-                        borderBottomWidth: StyleSheet.hairlineWidth,
-                        borderColor: colors.border,
-                        opacity: pressed ? 0.85 : 1,
-                      })}
-                    >
-                      <Text
-                        style={{ color: colors.text, fontSize: 13, textAlign: rtl ? "right" : "left" }}
-                        numberOfLines={3}
-                      >
-                        {row.label}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </ScrollView>
-              ) : null}
-            </View>
-
-            <View style={[styles.routeConnector, { flexDirection: rtl ? "row-reverse" : "row" }]}>
-              <View style={[styles.routeConnectorLine, { backgroundColor: W.border }]} />
-              <Text style={{ color: W.muted, fontSize: 11, fontWeight: "600", paddingHorizontal: 8 }}>
-                {t("routeConnectorLabel")}
-              </Text>
-              <View style={[styles.routeConnectorLine, { backgroundColor: W.border }]} />
-            </View>
-
-            <View
-              style={[
-                styles.routeCard,
-                {
-                  backgroundColor: W.field,
-                  borderColor: mapEditTarget === "destination" ? W.ink : W.border,
-                  borderWidth: mapEditTarget === "destination" ? 2 : 1,
-                  marginTop: 0,
-                },
-              ]}
-            >
-              <Pressable
-                onPress={() => setMapEditTarget("destination")}
-                accessibilityRole="button"
-                accessibilityState={{ selected: mapEditTarget === "destination" }}
-                disabled={!pickup}
-                style={({ pressed }) => [{ opacity: pressed ? 0.88 : !pickup ? 0.5 : 1 }]}
-              >
-                <View style={[styles.routeCardHeader, { flexDirection: rtl ? "row-reverse" : "row" }]}>
-                  <MaterialCommunityIcons name="map-marker" size={22} color={W.ink} />
                   <View style={{ flex: 1 }}>
                     <Text style={{ color: W.muted, fontSize: 11, fontWeight: "800", letterSpacing: 0.8, textTransform: "uppercase", textAlign: rtl ? "right" : "left" }}>
                       {t("destinationSectionLabel")}
@@ -1176,6 +1068,7 @@ export default function PassengerHomeScreen({ navigation }) {
                       {destination ? formatCoordShort(destination) : t("destinationNotSet")}
                     </Text>
                   </View>
+                  <MaterialCommunityIcons name={rtl ? "chevron-left" : "chevron-right"} size={22} color={W.muted} />
                 </View>
               </Pressable>
               <Text
@@ -1189,19 +1082,7 @@ export default function PassengerHomeScreen({ navigation }) {
               >
                 {t("placeSearchDestinationHint")}
               </Text>
-              <View
-                style={{
-                  flexDirection: rtl ? "row-reverse" : "row",
-                  alignItems: "center",
-                  marginTop: spacing.xs,
-                  borderWidth: 1,
-                  borderColor: W.border,
-                  borderRadius: 14,
-                  backgroundColor: W.sheet,
-                  paddingHorizontal: 10,
-                  opacity: pickup ? 1 : 0.5,
-                }}
-              >
+              <View style={[styles.searchField, { flexDirection: rtl ? "row-reverse" : "row" }]}>
                 <MaterialCommunityIcons name="magnify" size={20} color={W.muted} />
                 <TextInput
                   value={destPlaceQuery}
@@ -1216,7 +1097,7 @@ export default function PassengerHomeScreen({ navigation }) {
                     color: W.text,
                     textAlign: rtl ? "right" : "left",
                   }}
-                  editable={!mapLocked && !!pickup}
+                  editable={!mapLocked}
                 />
                 {destPlaceLoading ? <ActivityIndicator size="small" color={W.accent} /> : null}
               </View>
@@ -1280,17 +1161,15 @@ export default function PassengerHomeScreen({ navigation }) {
                 </ScrollView>
               ) : null}
               <Pressable
-                onPress={() => pickup && setMapEditTarget("destination")}
-                disabled={!pickup}
+                onPress={() => openMapPicker("destination")}
                 style={[
                   styles.destFakeInput,
                   {
-                    backgroundColor: W.sheet,
+                    backgroundColor: W.field,
                     borderColor: W.border,
                     flexDirection: rtl ? "row-reverse" : "row",
                     marginTop: spacing.sm,
                     marginBottom: 0,
-                    opacity: pickup ? 1 : 0.5,
                   },
                 ]}
               >
@@ -1307,15 +1186,121 @@ export default function PassengerHomeScreen({ navigation }) {
                   {destination ? t("destinationSetShort") : t("destinationMapTapHint")}
                 </Text>
               </Pressable>
-              <Text style={{ color: W.muted, fontSize: 11, marginTop: spacing.sm, textAlign: rtl ? "right" : "left" }}>
-                {!pickup
-                  ? t("destinationLockedUntilPickup")
-                  : mapEditTarget === "destination"
-                    ? t("mapTapAppliesToDestination")
-                    : t("tapDestinationCardForMap")}
-              </Text>
             </View>
 
+            <View style={styles.routeConnectorV}>
+              <View style={[styles.routeConnectorDot, { backgroundColor: W.ink }]} />
+              <View style={[styles.routeConnectorLineV, { backgroundColor: W.border }]} />
+              <View style={styles.routeConnectorDot} />
+            </View>
+
+            <View
+              style={[
+                styles.routeStep,
+                mapEditTarget === "pickup" && styles.routeStepActive,
+              ]}
+            >
+              <Pressable
+                onPress={() => openMapPicker("pickup")}
+                accessibilityRole="button"
+                accessibilityState={{ selected: mapEditTarget === "pickup" }}
+                style={({ pressed }) => [{ opacity: pressed ? 0.88 : 1 }]}
+              >
+                <View style={[styles.routeCardHeader, { flexDirection: rtl ? "row-reverse" : "row" }]}>
+                  <View style={[styles.stepIcon, styles.stepIconPickup]}>
+                    <MaterialCommunityIcons name="record-circle" size={14} color="#16a34a" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: W.muted, fontSize: 11, fontWeight: "800", letterSpacing: 0.8, textTransform: "uppercase", textAlign: rtl ? "right" : "left" }}>
+                      {t("pickupFromMyLocationLabel")}
+                    </Text>
+                    <Text style={{ color: W.text, fontWeight: "700", textAlign: rtl ? "right" : "left", marginTop: 2 }}>
+                      {pickup ? formatCoordShort(pickup) : t("pickupNotSet")}
+                    </Text>
+                  </View>
+                  <MaterialCommunityIcons name={rtl ? "chevron-left" : "chevron-right"} size={22} color={W.muted} />
+                </View>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setMapEditTarget("pickup");
+                  void setPickupFromMyLocation();
+                }}
+                disabled={!locationAllowed}
+                style={({ pressed }) => [
+                  styles.routeActionBtn,
+                  {
+                    flexDirection: rtl ? "row-reverse" : "row",
+                    backgroundColor: W.sheet,
+                    borderColor: W.ink,
+                    opacity: pressed ? 0.88 : !locationAllowed ? 0.45 : 1,
+                  },
+                ]}
+              >
+                <MaterialCommunityIcons name="crosshairs-gps" size={18} color={W.ink} />
+                <Text style={{ color: W.ink, fontWeight: "800", marginHorizontal: 8 }}>{t("useMyLocationForPickup")}</Text>
+              </Pressable>
+              <Text
+                style={{
+                  color: W.muted,
+                  fontSize: 11,
+                  marginTop: spacing.sm,
+                  textAlign: rtl ? "right" : "left",
+                  fontWeight: "600",
+                }}
+              >
+                {t("placeSearchByNameHint")}
+              </Text>
+              <View style={[styles.searchField, { flexDirection: rtl ? "row-reverse" : "row" }]}>
+                <MaterialCommunityIcons name="magnify" size={20} color={W.muted} />
+                <TextInput
+                  value={pickupPlaceQuery}
+                  onChangeText={setPickupPlaceQuery}
+                  placeholder={t("placeSearchInputPlaceholder")}
+                  placeholderTextColor={W.muted}
+                  style={{
+                    flex: 1,
+                    paddingVertical: 12,
+                    color: W.text,
+                    textAlign: rtl ? "right" : "left",
+                  }}
+                  editable={!mapLocked}
+                />
+                {pickupPlaceLoading ? <ActivityIndicator size="small" color={W.accent} /> : null}
+              </View>
+              {pickupPlaceSuggest.length > 0 ? (
+                <ScrollView
+                  style={{ maxHeight: 140, marginTop: spacing.xs }}
+                  keyboardShouldPersistTaps="handled"
+                  nestedScrollEnabled
+                >
+                  {pickupPlaceSuggest.map((row) => (
+                    <Pressable
+                      key={row.id}
+                      onPress={() => applyPickupSuggestion(row)}
+                      style={({ pressed }) => ({
+                        paddingVertical: 10,
+                        paddingHorizontal: 8,
+                        borderBottomWidth: StyleSheet.hairlineWidth,
+                        borderColor: colors.border,
+                        opacity: pressed ? 0.85 : 1,
+                      })}
+                    >
+                      <Text
+                        style={{ color: colors.text, fontSize: 13, textAlign: rtl ? "right" : "left" }}
+                        numberOfLines={3}
+                      >
+                        {row.label}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              ) : null}
+            </View>
+            </View>
+            </View>
+
+            <View style={styles.pageSection}>
             {routeDistanceKm != null ? (
               <Text
                 style={{
@@ -1449,20 +1434,94 @@ export default function PassengerHomeScreen({ navigation }) {
             ) : null}
 
             {pickup && destination && selectedVehicleType !== "shipping" ? (
-              <PassengerSeatBookingBlock
-                passengerCount={passengerCount}
-                onPassengerCount={setPassengerCount}
-                passengerSize={passengerSize}
-                onPassengerSize={setPassengerSize}
-                vehicleCapacity={selectedCapacity}
-              />
+              <>
+                {canBePrivate ? (
+                  <WeretSurfaceCard style={{ marginTop: spacing.md, padding: spacing.md }}>
+                    <Text style={{ color: W.text, fontWeight: "900", marginBottom: spacing.xs, textAlign: rtl ? "right" : "left" }}>
+                      {t("rideModeTitle")}
+                    </Text>
+                    <Text style={{ color: W.muted, fontSize: 12, textAlign: rtl ? "right" : "left" }}>{t("rideModeHint")}</Text>
+
+                    <View style={{ flexDirection: rtl ? "row-reverse" : "row", gap: 10, marginTop: spacing.sm }}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: rideMode === "shared" }}
+                        onPress={() => {
+                          setRideMode("shared");
+                          setPassengerCount(Math.max(1, prevSharedCountRef.current || 1));
+                        }}
+                        style={({ pressed }) => ({
+                          flex: 1,
+                          borderWidth: 1,
+                          borderColor: rideMode === "shared" ? W.primary : W.line,
+                          backgroundColor: rideMode === "shared" ? W.primary + "22" : W.surface,
+                          paddingVertical: 12,
+                          paddingHorizontal: 12,
+                          borderRadius: 14,
+                          opacity: pressed ? 0.88 : 1,
+                        })}
+                      >
+                        <Text style={{ color: W.text, fontWeight: "900", textAlign: rtl ? "right" : "left" }}>
+                          {t("rideModeSharedTitle")}
+                        </Text>
+                        <Text style={{ color: W.muted, fontSize: 12, marginTop: 4, textAlign: rtl ? "right" : "left" }}>
+                          {t("rideModeSharedBody")}
+                        </Text>
+                      </Pressable>
+
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: rideMode === "private" }}
+                        onPress={() => {
+                          prevSharedCountRef.current = passengerCount;
+                          setRideMode("private");
+                          setPassengerCount(selectedCapacity);
+                          setPassengerSize("MEDIUM");
+                        }}
+                        style={({ pressed }) => ({
+                          flex: 1,
+                          borderWidth: 1,
+                          borderColor: rideMode === "private" ? "#f59e0b" : W.line,
+                          backgroundColor: rideMode === "private" ? "#f59e0b22" : W.surface,
+                          paddingVertical: 12,
+                          paddingHorizontal: 12,
+                          borderRadius: 14,
+                          opacity: pressed ? 0.88 : 1,
+                        })}
+                      >
+                        <Text style={{ color: W.text, fontWeight: "900", textAlign: rtl ? "right" : "left" }}>
+                          {t("rideModePrivateTitle")}
+                        </Text>
+                        <Text style={{ color: W.muted, fontSize: 12, marginTop: 4, textAlign: rtl ? "right" : "left" }}>
+                          {t("rideModePrivateBody", { n: selectedCapacity })}
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </WeretSurfaceCard>
+                ) : null}
+
+                {rideMode !== "private" ? (
+                  <PassengerSeatBookingBlock
+                    passengerCount={passengerCount}
+                    onPassengerCount={setPassengerCount}
+                    passengerSize={passengerSize}
+                    onPassengerSize={setPassengerSize}
+                    vehicleCapacity={selectedCapacity}
+                  />
+                ) : (
+                  <WeretSurfaceCard style={{ marginTop: spacing.md, padding: spacing.md }}>
+                    <Text style={{ color: W.text, fontWeight: "900", textAlign: rtl ? "right" : "left" }}>
+                      {t("rideModePrivateLockedLine", { n: selectedCapacity })}
+                    </Text>
+                    <Text style={{ color: W.muted, fontSize: 12, marginTop: 6, textAlign: rtl ? "right" : "left" }}>
+                      {t("rideModePrivatePriceNote")}
+                    </Text>
+                  </WeretSurfaceCard>
+                )}
+              </>
             ) : null}
 
-            <Text style={{ color: W.muted, fontSize: 12, marginBottom: spacing.sm, textAlign: rtl ? "right" : "left" }}>
-              {t("tapMapShortLinked")}
-            </Text>
-
-            <Text style={{ color: W.muted, marginBottom: spacing.xs, fontSize: 13, textAlign: rtl ? "right" : "left" }}>
+            <Text style={{ color: W.muted, marginTop: spacing.md, marginBottom: spacing.xs, fontSize: 13, textAlign: rtl ? "right" : "left" }}>
               {t("driversNearbyCount", { count: nearbyDrivers.length })}
             </Text>
             <Text style={{ color: W.muted, fontSize: 12, marginBottom: spacing.md, textAlign: rtl ? "right" : "left" }}>
@@ -1472,6 +1531,7 @@ export default function PassengerHomeScreen({ navigation }) {
             <View
               style={[
                 styles.infoBar,
+                weretElevation.card,
                 {
                   backgroundColor: W.ink,
                   flexDirection: rtl ? "row-reverse" : "row",
@@ -1564,57 +1624,25 @@ export default function PassengerHomeScreen({ navigation }) {
                 </View>
               </View>
             ) : null}
+            </View>
           </>
         ) : null}
 
         {!locationAllowed ? (
-          <Text style={{ color: colors.danger, marginBottom: spacing.sm, fontSize: 13 }}>{t("locationPermission")}</Text>
+          <Text style={{ color: colors.danger, marginBottom: spacing.sm, fontSize: 13, paddingHorizontal: spacing.md }}>
+            {t("locationPermission")}
+          </Text>
         ) : null}
 
         {needsRating ? (
-          <Text style={{ color: colors.textMuted, marginBottom: spacing.sm, textAlign: rtl ? "right" : "left" }}>
+          <Text style={{ color: colors.textMuted, marginBottom: spacing.sm, textAlign: rtl ? "right" : "left", paddingHorizontal: spacing.md }}>
             {t("rateToContinue")}
           </Text>
         ) : null}
-        {!activeRide ? (
-          <View style={{ marginTop: spacing.md }}>
-            {creating ? (
-              <View style={{ alignItems: "center", marginBottom: spacing.md }}>
-                <CarMascot mode="searching" size={88} />
-                <Text
-                  style={{
-                    marginTop: spacing.sm,
-                    color: colors.textMuted,
-                    fontSize: 13,
-                    textAlign: "center",
-                  }}
-                >
-                  {t("ridePhaseWaitingDriver")}
-                </Text>
-              </View>
-            ) : null}
-            <CustomButton
-              title={t("searchDriverCta")}
-              variant="ink"
-              onPress={requestRide}
-              disabled={creating || mapLocked || !canRequestRide}
-              loading={creating}
-            />
-            {!canRequestRide && !creating ? (
-              <Text style={{ color: W.muted, fontSize: 12, marginTop: spacing.sm, textAlign: rtl ? "right" : "left" }}>
-                {!pickup ? t("requestRideHintPickup") : !destination ? t("requestRideHintDestination") : null}
-              </Text>
-            ) : null}
-          </View>
-        ) : null}
-
-        {error ? (
-          <Text style={{ color: colors.danger, marginTop: spacing.sm, textAlign: rtl ? "right" : "left" }}>{error}</Text>
-        ) : null}
 
         {activeRide ? (
-          <View style={{ marginTop: spacing.md }}>
-            <Text style={{ color: colors.text, fontWeight: "700", marginBottom: spacing.xs, textAlign: rtl ? "right" : "left" }}>
+          <View style={styles.pageSection}>
+            <Text style={{ color: W.text, fontWeight: "800", marginBottom: spacing.xs, textAlign: rtl ? "right" : "left" }}>
               {t("trackRide")}
             </Text>
             <RideCard ride={activeRide} compact emphasis={rideStatus === "pending"} />
@@ -1630,6 +1658,24 @@ export default function PassengerHomeScreen({ navigation }) {
           </View>
         ) : null}
       </ScrollView>
+      {bookingFooter}
+      </KeyboardAvoidingView>
+
+      <PassengerMapPickerModal
+        visible={mapPickerOpen}
+        onClose={() => setMapPickerOpen(false)}
+        mapEditTarget={mapEditTarget}
+        onChangeTarget={setMapEditTarget}
+        mapRef={mapRef}
+        mapProvider={mapProvider}
+        initialRegion={DEFAULT_REGION}
+        onMapPress={onMapPress}
+        showsUserLocation={locationAllowed}
+        userInterfaceStyle={isDark ? "dark" : "light"}
+        mapLocked={mapLocked}
+      >
+        {mapMarkers}
+      </PassengerMapPickerModal>
 
       <RateDriverModal visible={!!needsRating} ride={activeRide} />
       <SuccessFlash visible={bookingSuccessVisible} title={t("rideRequestSentTitle")} showHappyMascot />
@@ -1639,40 +1685,160 @@ export default function PassengerHomeScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  mapShell: { flex: 1, position: "relative" },
-  mapLinkBanner: {
-    position: "absolute",
-    top: 10,
-    left: 10,
-    right: 10,
-    zIndex: 2,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 999,
-    borderWidth: 0,
+  pageBody: { flex: 1 },
+  pageScroll: { flex: 1 },
+  pageScrollContent: {
+    paddingTop: 4,
+    flexGrow: 1,
   },
-  mapLinkBannerText: { flex: 1, fontSize: 13, fontWeight: "700" },
-  map: { flex: 1 },
-  gpsFab: {
-    position: "absolute",
-    bottom: 12,
-    end: 12,
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+  mapTopBlock: {
+    marginBottom: 12,
+  },
+  pageSection: {
+    marginBottom: 16,
+  },
+  tripPlannerBlock: {
+    marginBottom: 16,
+    gap: 12,
+  },
+  compactMap: {
+    borderRadius: weretRadius.card,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: W.border,
+    backgroundColor: W.field,
+  },
+  compactMapInner: {
+    flex: 1,
+    overflow: "hidden",
+  },
+  compactMapPlaceholder: {
+    backgroundColor: W.field,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    elevation: 4,
-    shadowColor: W.shadow,
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 1 },
   },
-  sheetTitle: { fontSize: 18, fontWeight: "800", marginBottom: 6, letterSpacing: -0.3 },
+  compactMapChip: {
+    position: "absolute",
+    bottom: 10,
+    start: 10,
+    end: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: weretRadius.pill,
+    backgroundColor: W.pillOverlay,
+  },
+  compactMapChipText: {
+    flex: 1,
+    color: W.onPrimary,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  compactGps: {
+    position: "absolute",
+    top: 10,
+    end: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: W.sheet,
+    borderWidth: 1,
+    borderColor: W.border,
+    ...weretElevation.fab,
+  },
+  pageFooter: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: 12,
+    ...weretElevation.card,
+  },
+  footerMascot: {
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  footerMascotText: {
+    marginTop: 6,
+    fontSize: 12,
+  },
+  footerHint: {
+    fontSize: 12,
+    marginTop: 8,
+  },
+  footerError: {
+    fontSize: 12,
+    marginTop: 8,
+  },
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
+    marginBottom: 10,
+    marginTop: 4,
+  },
+  routePlanner: {
+    borderWidth: 1,
+    borderRadius: weretRadius.card,
+    padding: 14,
+    marginBottom: 8,
+    overflow: "hidden",
+  },
+  routeStep: {
+    paddingVertical: 4,
+    borderRadius: weretRadius.field,
+  },
+  routeStepActive: {
+    backgroundColor: W.field,
+    marginHorizontal: -8,
+    paddingHorizontal: 8,
+    paddingVertical: 10,
+  },
+  routeStepDisabled: {
+    opacity: 0.55,
+  },
+  stepIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  stepIconPickup: {
+    backgroundColor: "#dcfce7",
+  },
+  stepIconDest: {
+    backgroundColor: W.ink,
+  },
+  routeConnectorV: {
+    alignItems: "center",
+    paddingVertical: 4,
+    marginStart: 19,
+  },
+  routeConnectorDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#16a34a",
+  },
+  routeConnectorLineV: {
+    width: 2,
+    height: 20,
+    borderRadius: 1,
+    marginVertical: 2,
+  },
+  searchField: {
+    alignItems: "center",
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: W.border,
+    borderRadius: weretRadius.field,
+    backgroundColor: W.field,
+    paddingHorizontal: 12,
+    gap: 8,
+  },
   pickupRow: { alignItems: "center", gap: 10, marginBottom: 8 },
   dotPickup: { width: 10, height: 10, borderRadius: 5 },
   destFakeInput: {
@@ -1717,7 +1883,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   routeConnectorLine: { flex: 1, height: 1, maxHeight: 1 },
-  panel: {},
   offerAdjBtn: {
     minWidth: 44,
     paddingVertical: 10,

@@ -12,7 +12,7 @@ param(
 )
 
 $port = if ($Port -gt 0) { $Port } elseif ($env:PORT) { [int]$env:PORT } else { 3000 }
-$name = "ReachNative Car API (dev $port)"
+$name = "WERET API (dev $port)"
 
 # Remove older rule from this project if it lacked Public profile (otherwise it blocks recreating).
 Remove-NetFirewallRule -DisplayName $name -ErrorAction SilentlyContinue

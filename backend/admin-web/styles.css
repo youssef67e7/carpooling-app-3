@@ -1,5 +1,4 @@
-/* Admin web — inspired by Figma passenger/driver apps (high contrast, blue accent, pills)
-   Distinct twist: dark sidebar + dashboard chrome so it feels “console”, not consumer app. */
+/* WERET Admin — same tokens as mobile (weretDesignSystem / weretPassenger) */
 
 /* —— Google sign-in (admin login) —— */
 .google-signin-wrap {
@@ -19,37 +18,40 @@
 }
 
 :root {
-  --bg: #f2f2f2;
+  --bg: #f5f5f5;
   --surface: #ffffff;
-  --surface-2: #f7f7f7;
-  --border: #e5e5e5;
+  --surface-2: #ececec;
+  --field: #ececec;
+  --border: #c4c4c4;
+  --border-subtle: #d8d8d8;
   --text: #0a0a0a;
-  --muted: #737373;
-  /* Vibrant action blue (RideShare / WERET-adjacent) */
+  --muted: #525252;
+  --muted-light: #6b6b6b;
   --accent: #0095ff;
   --accent-hover: #0080e0;
-  --accent-soft: rgba(0, 149, 255, 0.12);
-  /* Primary solid actions = black pills like mobile auth */
+  --accent-soft: rgba(0, 149, 255, 0.1);
   --ink: #111111;
   --ink-hover: #000000;
   --on-ink: #ffffff;
-  --sidebar-bg: #121212;
-  --sidebar-border: #2a2a2a;
-  --sidebar-text: #a3a3a3;
-  --sidebar-text-strong: #fafafa;
-  --primary: var(--accent);
-  --primary-hover: var(--accent-hover);
-  --primary-soft: var(--accent-soft);
-  --primary-text-on: #ffffff;
+  --sidebar-bg: #ffffff;
+  --sidebar-border: #c4c4c4;
+  --sidebar-text: #525252;
+  --sidebar-text-strong: #0a0a0a;
+  --primary: var(--ink);
+  --primary-hover: var(--ink-hover);
+  --primary-soft: rgba(17, 17, 17, 0.06);
+  --primary-text-on: var(--on-ink);
   --success: #16a34a;
   --success-soft: #dcfce7;
   --danger: #dc2626;
   --danger-soft: #fee2e2;
   --radius: 20px;
-  --radius-sm: 14px;
+  --radius-sm: 16px;
   --radius-pill: 999px;
-  --sidebar-w: 288px;
+  --sidebar-w: 280px;
   --top-h: 72px;
+  --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.06);
+  --shadow-float: 0 14px 40px rgba(0, 0, 0, 0.1);
   --font: "Inter", "IBM Plex Sans Arabic", system-ui, -apple-system, sans-serif;
   font-family: var(--font);
 }
@@ -153,6 +155,23 @@ body {
   }
 }
 
+/* —— WERET wordmark (matches mobile WeretWordmarkOnLight) —— */
+.weret-wordmark {
+  display: block;
+  font-size: 2.35rem;
+  font-weight: 900;
+  letter-spacing: 0.28em;
+  text-indent: 0.28em;
+  color: var(--ink);
+  line-height: 1.1;
+  margin: 0;
+}
+.weret-wordmark-sm {
+  font-size: 1.15rem;
+  letter-spacing: 0.22em;
+  text-indent: 0.22em;
+}
+
 /* —— Login —— */
 .layout-login {
   min-height: 100vh;
@@ -160,7 +179,34 @@ body {
   align-items: center;
   justify-content: center;
   padding: 1.5rem;
-  background: linear-gradient(165deg, #ffffff 0%, var(--bg) 55%, #e8f4ff 100%);
+  background: var(--bg);
+  position: relative;
+  overflow: hidden;
+}
+.layout-login::before,
+.layout-login::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.layout-login::before {
+  width: 280px;
+  height: 280px;
+  top: -90px;
+  inset-inline-end: -70px;
+  background: rgba(0, 0, 0, 0.035);
+}
+.layout-login::after {
+  width: 320px;
+  height: 320px;
+  bottom: -120px;
+  inset-inline-start: -80px;
+  background: rgba(0, 0, 0, 0.05);
+}
+.layout-login .login-panel {
+  position: relative;
+  z-index: 1;
 }
 
 .login-panel {
@@ -173,7 +219,7 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 1.85rem;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--shadow-card);
 }
 
 .brand-row {
@@ -184,15 +230,40 @@ body {
   padding-bottom: 1rem;
   border-bottom: 1px solid var(--border);
 }
-.brand-row h1 {
+.brand-row--stacked {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+.brand-row .brand-title {
   margin: 0;
-  font-size: 1.65rem;
+  font-size: 1.15rem;
   font-weight: 800;
   letter-spacing: -0.02em;
   color: var(--text);
 }
+.brand-row .brand-sub {
+  margin: 0;
+}
+.sidebar-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  padding-bottom: 1.1rem;
+  border-bottom: 1px solid var(--sidebar-border);
+  margin-bottom: 1.1rem;
+}
+.sidebar-brand .weret-wordmark-sm {
+  margin: 0;
+}
+.sidebar-brand .sub {
+  color: var(--sidebar-text);
+  font-size: 0.82rem;
+  margin: 0;
+}
 .brand-accent {
-  color: var(--accent);
+  color: var(--ink);
   flex-shrink: 0;
 }
 .shield-wrap {
@@ -208,8 +279,8 @@ body {
     filter: drop-shadow(0 0 0 transparent);
   }
   50% {
-    transform: scale(1.04);
-    filter: drop-shadow(0 0 10px rgba(0, 149, 255, 0.45));
+    transform: scale(1.03);
+    filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.12));
   }
 }
 
@@ -235,9 +306,16 @@ body {
 
 label {
   display: block;
-  font-size: 0.92rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--muted);
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.4rem;
+}
+html[dir="rtl"] label {
+  text-transform: none;
+  letter-spacing: 0;
 }
 input[type="text"],
 input[type="email"],
@@ -245,17 +323,19 @@ input[type="password"],
 input[type="url"],
 input[type="search"] {
   width: 100%;
-  padding: 0.72rem 0.95rem;
+  padding: 0.78rem 1rem;
   border-radius: var(--radius-sm);
-  border: 1px solid transparent;
-  background: var(--surface-2);
+  border: 1.5px solid var(--border);
+  background: var(--field);
   color: var(--text);
   margin-bottom: 0.85rem;
+  font-weight: 600;
 }
 input:focus {
-  outline: 2px solid var(--accent-soft);
-  border-color: var(--accent);
+  outline: none;
+  border-color: var(--ink);
   background: var(--surface);
+  box-shadow: 0 0 0 3px rgba(17, 17, 17, 0.08);
 }
 
 button {
@@ -285,12 +365,12 @@ button:active {
 }
 
 .btn-accent {
-  background: var(--accent);
-  color: #fff;
-  box-shadow: 0 4px 18px rgba(0, 149, 255, 0.35);
+  background: var(--ink);
+  color: var(--on-ink);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.18);
 }
 .btn-accent:hover {
-  background: var(--accent-hover);
+  background: var(--ink-hover);
 }
 
 .btn-compact {
@@ -335,8 +415,8 @@ button:active {
   font-weight: 600;
 }
 .btn-inline:hover {
-  border-color: var(--accent);
-  background: var(--accent-soft);
+  border-color: var(--ink);
+  background: var(--primary-soft);
   color: var(--ink);
 }
 .btn-inline.danger {
@@ -379,27 +459,12 @@ button:active {
   display: flex;
   flex-direction: column;
   padding: 1.25rem 1rem;
-  box-shadow: none;
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.04);
+}
+html[dir="rtl"] .sidebar {
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.04);
 }
 
-.sidebar-brand {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding-bottom: 1.1rem;
-  border-bottom: 1px solid var(--sidebar-border);
-  margin-bottom: 1.1rem;
-}
-.sidebar-brand strong {
-  color: var(--sidebar-text-strong);
-  font-size: 1.05rem;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-}
-.sidebar-brand .sub {
-  color: var(--sidebar-text);
-  font-size: 0.82rem;
-}
 
 .nav-side {
   display: flex;
@@ -419,20 +484,23 @@ button:active {
 }
 .nav-item:hover {
   color: var(--sidebar-text-strong);
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--bg);
+  border-color: var(--border-subtle);
 }
 .nav-item.active {
-  color: var(--sidebar-text-strong);
-  border-color: transparent;
-  background: var(--accent-soft);
-  box-shadow: inset 3px 0 0 0 var(--accent);
+  color: var(--on-ink);
+  border-color: var(--ink);
+  background: var(--ink);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14);
 }
 html[dir="rtl"] .nav-item.active {
-  box-shadow: inset -3px 0 0 0 var(--accent);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14);
 }
 
 .sidebar-footer {
   padding-top: 1rem;
+  padding-bottom: 1.35rem;
+  margin-bottom: 0.5rem;
   border-top: 1px solid var(--sidebar-border);
 }
 .sidebar .whoami {
@@ -443,16 +511,16 @@ html[dir="rtl"] .nav-item.active {
   margin-bottom: 0.4rem;
 }
 .sidebar .secondary {
-  background: transparent;
-  border: 2px solid rgba(255, 255, 255, 0.35);
-  color: var(--sidebar-text-strong);
+  background: var(--surface);
+  border: 2px solid var(--ink);
+  color: var(--ink);
 }
 .sidebar .secondary:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.55);
+  background: var(--bg);
+  border-color: var(--ink-hover);
 }
 .sidebar .brand-accent {
-  color: var(--accent);
+  color: var(--ink);
 }
 
 .main-column {
@@ -487,12 +555,14 @@ html[dir="rtl"] .nav-item.active {
   padding: 0.58rem 1.1rem !important;
   border-radius: var(--radius-pill) !important;
   font-size: 0.92rem !important;
-  border: 1px solid var(--border) !important;
-  background: var(--surface-2) !important;
+  border: 1.5px solid var(--border) !important;
+  background: var(--field) !important;
+  font-weight: 600 !important;
 }
 .search-input:focus {
-  border-color: var(--accent) !important;
+  border-color: var(--ink) !important;
   background: var(--surface) !important;
+  box-shadow: 0 0 0 3px rgba(17, 17, 17, 0.08) !important;
 }
 .top-bar-end {
   display: flex;
@@ -535,9 +605,9 @@ html[dir="rtl"] .nav-item.active {
 }
 .stat .num {
   font-size: 1.75rem;
-  font-weight: 800;
-  color: var(--accent);
-  letter-spacing: -0.02em;
+  font-weight: 900;
+  color: var(--ink);
+  letter-spacing: -0.03em;
 }
 .stat .lbl {
   font-size: 0.82rem;
@@ -587,7 +657,7 @@ html[dir="rtl"] .nav-item.active {
 .skeleton-card {
   height: 96px;
   border-radius: var(--radius);
-  background: linear-gradient(90deg, var(--surface-2) 25%, #e8f4ff 50%, var(--surface-2) 75%);
+  background: linear-gradient(90deg, var(--field) 25%, #e0e0e0 50%, var(--field) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.2s infinite;
 }
@@ -600,7 +670,7 @@ html[dir="rtl"] .nav-item.active {
 .skeleton-row {
   height: 46px;
   border-radius: var(--radius-sm);
-  background: linear-gradient(90deg, var(--surface-2) 25%, #e8f4ff 50%, var(--surface-2) 75%);
+  background: linear-gradient(90deg, var(--field) 25%, #e0e0e0 50%, var(--field) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.2s infinite;
 }
@@ -620,6 +690,49 @@ html[dir="rtl"] .nav-item.active {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: 0 6px 28px rgba(0, 0, 0, 0.05);
+}
+
+.pagination-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  margin-top: 0.85rem;
+  padding: 0.65rem 0.85rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.pagination-bar.hidden {
+  display: none;
+}
+
+.pagination-info {
+  font-size: 0.86rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pagination-pages {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text);
+  padding: 0 0.35rem;
+  min-width: 5.5rem;
+  text-align: center;
+}
+
+.pagination-bar button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 .data-table {
   width: 100%;
@@ -675,10 +788,14 @@ html[dir="rtl"] .data-table th {
   }
 }
 .data-table tbody tr:hover td {
-  background: var(--accent-soft);
+  background: rgba(17, 17, 17, 0.04);
 }
 .data-table tbody tr.row-selected td {
-  background: rgba(0, 149, 255, 0.16);
+  background: rgba(17, 17, 17, 0.08);
+  box-shadow: inset 3px 0 0 0 var(--ink);
+}
+html[dir="rtl"] .data-table tbody tr.row-selected td {
+  box-shadow: inset -3px 0 0 0 var(--ink);
 }
 .data-table tbody tr.row-danger td {
   background: rgba(220, 38, 38, 0.06);
@@ -731,10 +848,17 @@ html[dir="rtl"] .data-table th {
   font-size: 0.84rem;
   padding: 0.42rem 0.6rem;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--surface);
+  border: 1.5px solid var(--border);
+  background: var(--field);
   color: var(--text);
+  font-weight: 600;
   max-width: 180px;
+}
+.select-compact:focus {
+  outline: none;
+  border-color: var(--ink);
+  background: var(--surface);
+  box-shadow: 0 0 0 3px rgba(17, 17, 17, 0.08);
 }
 
 /* Language switch */
@@ -759,24 +883,9 @@ html[dir="rtl"] .data-table th {
   border-color: var(--ink);
 }
 .lang-switch .lang-btn.active {
-  color: #fff;
-  border-color: var(--accent);
-  background: var(--accent);
-}
-.sidebar .lang-switch .lang-btn {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.2);
-  color: var(--sidebar-text);
-}
-.sidebar .lang-switch .lang-btn:hover {
-  color: var(--sidebar-text-strong);
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.35);
-}
-.sidebar .lang-switch .lang-btn.active {
-  color: #fff;
-  background: var(--accent);
-  border-color: var(--accent);
+  color: var(--on-ink);
+  border-color: var(--ink);
+  background: var(--ink);
 }
 .login-panel .login-top {
   display: flex;

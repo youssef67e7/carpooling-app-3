@@ -65,7 +65,7 @@ async function searchPlacesNominatim(query, opts = {}) {
       headers: {
         Accept: "application/json",
         // RN may ignore User-Agent; still set for stacks that forward it
-        "User-Agent": "ReachNativeCar/1.0 (passenger-app; nominatim)",
+        "User-Agent": "WERET/1.0 (passenger-app; nominatim)",
       },
     });
 

@@ -1,5 +1,5 @@
 import { useLayoutEffect, useState, useEffect } from "react";
-import { View, Text, StyleSheet, Pressable, I18nManager, ScrollView, Linking } from "react-native";
+import { View, Text, StyleSheet, Pressable, I18nManager, Linking } from "react-native";
 import { showAlert } from "../utils/showAlert";
 import { useTranslation } from "react-i18next";
 import { useDispatch, useSelector } from "react-redux";
@@ -8,10 +8,34 @@ import { updateProfileThunk, clearError } from "../store/slices/authSlice";
 import { setAppLanguage } from "../i18n";
 import { useWeretScreenChrome } from "../hooks/useWeretScreenChrome";
 import CustomButton from "../components/CustomButton";
-import InputField from "../components/InputField";
+import WeretTextField from "../components/auth/WeretTextField";
+import WeretListScreen from "../components/ui/weret/WeretListScreen";
+import WeretStepHeader from "../components/ui/weret/WeretStepHeader";
 import SectionSurface from "../components/ui/SectionSurface";
 import { DRIVER_VEHICLE_TYPES } from "../constants/vehicleTypes";
 import { adminWebURL, apiBaseURL } from "../api/client";
+import { weretRadius } from "../theme/weretDesignSystem";
+
+function WeretChip({ label, selected, onPress, disabled, colors }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      style={[
+        styles.chip,
+        {
+          borderColor: selected ? colors.primary : colors.border,
+          backgroundColor: selected ? colors.primary : colors.surface,
+          borderWidth: selected ? 2 : 1.5,
+        },
+      ]}
+    >
+      <Text style={{ color: selected ? colors.primaryText : colors.text, fontWeight: selected ? "800" : "600" }}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
 
 export default function SettingsScreen({ navigation }) {
   const { t, i18n } = useTranslation();
@@ -65,12 +89,12 @@ export default function SettingsScreen({ navigation }) {
   }
 
   return (
-    <ScrollView style={[styles.root, { backgroundColor: colors.bg }]} contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xl }}>
-      <Text style={[styles.title, { color: colors.text, textAlign: rtl ? "right" : "left" }]}>{t("settings")}</Text>
+    <WeretListScreen contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xl * 2 }}>
+      <WeretStepHeader title={t("settings")} colors={colors} spacing={spacing} />
 
       {user?.role === "admin" ? (
-        <>
-          <Text style={[styles.section, { color: colors.textMuted, marginTop: spacing.sm, textAlign: rtl ? "right" : "left" }]}>
+        <SectionSurface style={{ marginBottom: spacing.md }}>
+          <Text style={[styles.section, { color: colors.textMuted, textAlign: rtl ? "right" : "left" }]}>
             {t("adminWebPanel")}
           </Text>
           <Text style={{ color: colors.textMuted, fontSize: 13, marginBottom: spacing.sm, textAlign: rtl ? "right" : "left" }}>
@@ -78,6 +102,7 @@ export default function SettingsScreen({ navigation }) {
           </Text>
           <CustomButton
             title={t("openAdminWeb")}
+            variant="ink"
             onPress={() => {
               const openUrl = `${adminWebURL}?api=${encodeURIComponent(apiBaseURL)}`;
               Linking.openURL(openUrl).catch(() => showAlert(t("error"), adminWebURL));
@@ -89,27 +114,27 @@ export default function SettingsScreen({ navigation }) {
           >
             {adminWebURL}
           </Text>
-        </>
+        </SectionSurface>
       ) : null}
 
-      {(user?.role === "admin" ? false : true) ? (
-        <SectionSurface style={{ marginTop: spacing.sm }}>
+      {user?.role !== "admin" ? (
+        <SectionSurface style={{ marginBottom: spacing.md }}>
           <Text style={[styles.section, { color: colors.textMuted, marginBottom: spacing.sm, textAlign: rtl ? "right" : "left" }]}>
             {t("phoneForCalls")}
           </Text>
-          <InputField
+          <WeretTextField
             label={t("phoneOptional")}
             value={phone}
             onChangeText={setPhone}
             keyboardType="phone-pad"
             placeholder={t("phonePlaceholder")}
           />
-          <CustomButton title={t("savePhone")} onPress={savePhone} loading={savingPhone} disabled={savingPhone} />
+          <CustomButton title={t("savePhone")} variant="ink" onPress={savePhone} loading={savingPhone} disabled={savingPhone} />
         </SectionSurface>
       ) : null}
 
       {(user?.active_role || user?.role) === "driver" ? (
-        <SectionSurface style={{ marginTop: spacing.lg }} noEntering>
+        <SectionSurface style={{ marginBottom: spacing.md }} noEntering>
           <Text style={[styles.section, { color: colors.textMuted, marginBottom: spacing.xs, textAlign: rtl ? "right" : "left" }]}>
             {t("driverVehicleClass")}
           </Text>
@@ -118,51 +143,33 @@ export default function SettingsScreen({ navigation }) {
           </Text>
           <View style={[styles.row, { flexDirection: rtl ? "row-reverse" : "row" }]}>
             {DRIVER_VEHICLE_TYPES.map((vt) => (
-              <Pressable
+              <WeretChip
                 key={vt}
+                label={t(`vehicleType_${vt}`)}
+                selected={(user?.vehicleType || "delivery") === vt}
                 onPress={() => saveDriverVehicle(vt)}
                 disabled={savingVehicle}
-                style={[
-                  styles.chip,
-                  {
-                    borderColor: (user?.vehicleType || "delivery") === vt ? colors.primary : colors.border,
-                    backgroundColor: (user?.vehicleType || "delivery") === vt ? colors.surfaceMuted : colors.surface,
-                  },
-                ]}
-              >
-                <Text style={{ color: colors.text, fontWeight: (user?.vehicleType || "delivery") === vt ? "800" : "500" }}>
-                  {t(`vehicleType_${vt}`)}
-                </Text>
-              </Pressable>
+                colors={colors}
+              />
             ))}
           </View>
         </SectionSurface>
       ) : null}
 
-      <SectionSurface style={{ marginTop: spacing.md }} noEntering>
+      <SectionSurface style={{ marginBottom: spacing.md }} noEntering>
         <Text style={[styles.section, { color: colors.textMuted, marginBottom: spacing.sm, textAlign: rtl ? "right" : "left" }]}>
           {t("language")}
         </Text>
         <View style={[styles.row, { flexDirection: rtl ? "row-reverse" : "row" }]}>
-          <Pressable
-            style={[styles.chip, { borderColor: colors.border, backgroundColor: colors.surface }]}
-            onPress={() => switchLang("en")}
-          >
-            <Text style={{ color: colors.text }}>{t("english")}</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.chip, { borderColor: colors.border, backgroundColor: colors.surface }]}
-            onPress={() => switchLang("ar")}
-          >
-            <Text style={{ color: colors.text }}>{t("arabic")}</Text>
-          </Pressable>
+          <WeretChip label={t("english")} selected={i18n.language === "en"} onPress={() => switchLang("en")} colors={colors} />
+          <WeretChip label={t("arabic")} selected={i18n.language === "ar"} onPress={() => switchLang("ar")} colors={colors} />
         </View>
         <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: spacing.sm, textAlign: rtl ? "right" : "left" }}>
           {t("rtlHint")}
         </Text>
       </SectionSurface>
 
-      <SectionSurface style={{ marginTop: spacing.md }}>
+      <SectionSurface style={{ marginBottom: spacing.md }}>
         <Text style={[styles.section, { color: colors.textMuted, marginBottom: spacing.sm, textAlign: rtl ? "right" : "left" }]}>
           {t("theme")}
         </Text>
@@ -175,12 +182,19 @@ export default function SettingsScreen({ navigation }) {
                 styles.option,
                 {
                   borderColor: themeMode === m ? colors.primary : colors.border,
-                  backgroundColor: colors.surface,
+                  backgroundColor: themeMode === m ? colors.primary : colors.surface,
                   borderRadius: radius.md,
+                  borderWidth: themeMode === m ? 2 : 1.5,
                 },
               ]}
             >
-              <Text style={{ color: colors.text, fontWeight: themeMode === m ? "700" : "500", textAlign: rtl ? "right" : "left" }}>
+              <Text
+                style={{
+                  color: themeMode === m ? colors.primaryText : colors.text,
+                  fontWeight: themeMode === m ? "800" : "500",
+                  textAlign: rtl ? "right" : "left",
+                }}
+              >
                 {m === "system" ? t("themeSystem") : m === "light" ? t("themeLight") : t("themeDark")}
               </Text>
             </Pressable>
@@ -188,18 +202,16 @@ export default function SettingsScreen({ navigation }) {
         </View>
       </SectionSurface>
 
-      <View style={{ marginTop: spacing.xl }}>
+      {navigation.canGoBack() ? (
         <CustomButton title={t("back")} variant="outline" onPress={() => navigation.goBack()} />
-      </View>
-    </ScrollView>
+      ) : null}
+    </WeretListScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
-  title: { fontSize: 22, fontWeight: "800", marginBottom: 8 },
-  section: { fontSize: 14, fontWeight: "600", marginBottom: 8 },
+  section: { fontSize: 12, fontWeight: "800", letterSpacing: 0.6, textTransform: "uppercase", marginBottom: 8 },
   row: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
-  chip: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 999, borderWidth: 1 },
-  option: { borderWidth: 1, padding: 12 },
+  chip: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: weretRadius.pill },
+  option: { padding: 14 },
 });

@@ -41,6 +41,8 @@ const userSchema = new mongoose.Schema(
     },
     /** Google account subject (`sub` claim); sparse unique for OAuth users */
     googleSub: { type: String, default: null, sparse: true, unique: true, trim: true },
+    /** Firebase Auth uid when signed in via Firebase Google provider */
+    firebaseUid: { type: String, default: null, sparse: true, unique: true, trim: true },
   },
   { timestamps: true }
 );

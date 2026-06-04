@@ -28,7 +28,7 @@ export default function DriverMoreMenuScreen({ navigation }) {
     { icon: "star-half-outline", title: t("featureDriverRatings"), sub: t("featureDriverRatingsSubtitle"), nav: "DriverRatings" },
     { icon: "help-circle-outline", title: t("featureHelp"), sub: t("featureHelpSubtitle"), nav: "HelpCenter" },
     { icon: "shield-checkmark-outline", title: t("featureSafety"), sub: t("featureSafetySubtitle"), nav: "SafetyTips" },
-    { icon: "information-circle-outline", title: t("featureAbout"), sub: t("featureAboutSubtitle"), nav: "AboutAmeen" },
+    { icon: "information-circle-outline", title: t("featureAbout"), sub: t("featureAboutSubtitle"), nav: "AboutWeret" },
   ];
 
   return (
@@ -51,9 +51,10 @@ export default function DriverMoreMenuScreen({ navigation }) {
         radius={radius}
         t={t}
       />
-      {rows.map((r) => (
+      {rows.map((r, index) => (
         <MoreMenuRow
           key={r.nav}
+          index={index}
           icon={r.icon}
           title={r.title}
           subtitle={r.sub}

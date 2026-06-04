@@ -32,7 +32,7 @@ export default function AdminTabNavigator() {
       <Tab.Screen
         name="Dashboard"
         component={AdminDashboardScreen}
-        options={{ title: t("admin"), tabBarLabel: t("tabAdminHome") }}
+        options={{ title: t("appName"), tabBarLabel: t("tabAdminHome") }}
       />
       <Tab.Screen name="Users" component={AdminUsersScreen} options={{ title: t("adminUsers"), tabBarLabel: t("adminUsers") }} />
       <Tab.Screen name="Rides" component={AdminRidesScreen} options={{ title: t("adminRides"), tabBarLabel: t("adminRides") }} />

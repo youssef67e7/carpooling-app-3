@@ -37,7 +37,11 @@ export default function LoginScreen({ navigation }) {
   const { t } = useTranslation();
   const dispatch = useDispatch();
   const { loading, error } = useSelector((s) => s.auth);
-  const { signIn: signInWithGoogle, configured: googleConfigured, ready: googleReady } = useWeretGoogleSignIn();
+  const {
+    signIn: signInWithGoogle,
+    configured: googleConfigured,
+    signingIn: googleSigningIn,
+  } = useWeretGoogleSignIn();
   const insets = useSafeAreaInsets();
   const rtl = I18nManager.isRTL;
   /** welcome | phone | phoneOtp | email */
@@ -46,7 +50,6 @@ export default function LoginScreen({ navigation }) {
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
-  const [devOtpHint, setDevOtpHint] = useState("");
 
   async function onLogin() {
     dispatch(clearError());
@@ -55,14 +58,10 @@ export default function LoginScreen({ navigation }) {
 
   async function onSendPhoneOtp() {
     dispatch(clearError());
-    setDevOtpHint("");
     const trimmed = phone.trim();
     if (!trimmed) return;
     const result = await dispatch(phoneOtpRequestThunk(trimmed));
     if (phoneOtpRequestThunk.fulfilled.match(result)) {
-      if (result.payload?._devOtp) {
-        setDevOtpHint(t("phoneLoginDevOtp", { code: result.payload._devOtp }));
-      }
       setStep("phoneOtp");
     }
   }
@@ -102,8 +101,8 @@ export default function LoginScreen({ navigation }) {
               title={t("weretContinueGoogle")}
               icon={<MaterialCommunityIcons name="google" size={22} color={A.onPrimary} />}
               onPress={() => signInWithGoogle()}
-              disabled={loading || !googleReady}
-              loading={loading && googleConfigured}
+              disabled={loading || googleSigningIn || !googleConfigured}
+              loading={googleSigningIn}
               style={styles.welcomeCta}
             />
             {!googleConfigured ? (
@@ -209,9 +208,6 @@ export default function LoginScreen({ navigation }) {
                 placeholder="123456"
                 autoFocus
               />
-              {devOtpHint ? (
-                <Text style={[styles.devOtp, { textAlign: rtl ? "right" : "left" }]}>{devOtpHint}</Text>
-              ) : null}
               <FormErrorCallout message={error} />
               <CustomButton
                 title={t("phoneLoginVerify")}
@@ -284,7 +280,6 @@ const styles = StyleSheet.create({
     alignSelf: "center",
   },
   phoneSent: { color: A.muted, fontSize: 14, fontWeight: "600", marginBottom: 12, marginTop: 4 },
-  devOtp: { color: A.ink, fontSize: 13, fontWeight: "800", marginBottom: 8, backgroundColor: A.field, padding: 10, borderRadius: 10 },
   link: { color: A.muted, fontWeight: "700", fontSize: 15 },
   backLink: { color: A.ink, fontWeight: "800", fontSize: 15 },
   hint: { color: A.muted, fontSize: 12, fontWeight: "600", paddingHorizontal: 4 },

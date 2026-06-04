@@ -1,4 +1,4 @@
-# RideHail — full-stack ride-hailing demo
+# WERET — full-stack ride-hailing app
 
 **GitHub:** [youssef67e7/carpooling-app-3](https://github.com/youssef67e7/carpooling-app-3) — setup: [`GITHUB_SETUP.md`](GITHUB_SETUP.md)  
 **Vercel (API + admin):** [`VERCEL.md`](VERCEL.md) — Root Directory: `backend`
@@ -10,7 +10,7 @@ End-to-end **Expo (React Native) + Express + MongoDB** app: JWT auth, ride lifec
 ## Folder structure
 
 ```
-ReachNative Car/
+WERET/
 ├── package.json              # optional: npm run mobile | npm run backend from repo root
 ├── backend/
 │   ├── docker-compose.yml      # optional local MongoDB

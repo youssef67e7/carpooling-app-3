@@ -32,9 +32,11 @@ import {
   setActiveRide,
   driverConfirmBookingThunk,
 } from "../store/slices/rideSlice";
-import { useTheme } from "../context/ThemeProvider";
+import { useWeretScreenChrome } from "../hooks/useWeretScreenChrome";
 import { weretPassenger as W } from "../theme/weretPassenger";
 import { weretRadius, weretElevation, weretPalette } from "../theme/weretDesignSystem";
+import WeretSheetHandle from "../components/ui/weret/WeretSheetHandle";
+import WeretSurfaceCard from "../components/ui/weret/WeretSurfaceCard";
 import { usePolling } from "../hooks/usePolling";
 import { routePathToCoords } from "../utils/mapCoords";
 import { interpolateMapCoords } from "../utils/routePolyline";
@@ -58,7 +60,7 @@ const REGION = {
 export default function DriverHomeScreen({ navigation }) {
   const { t } = useTranslation();
   const dispatch = useDispatch();
-  const { spacing } = useTheme();
+  const { colors, spacing } = useWeretScreenChrome();
   const isFocused = useIsFocused();
   const rtl = I18nManager.isRTL;
 
@@ -610,13 +612,15 @@ export default function DriverHomeScreen({ navigation }) {
           styles.panel,
           {
             backgroundColor: W.sheet,
-            borderTopLeftRadius: 24,
-            borderTopRightRadius: 24,
-            padding: spacing.md,
-            ...weretElevation.heroFloat,
+            borderTopLeftRadius: weretRadius.sheet,
+            borderTopRightRadius: weretRadius.sheet,
+            paddingHorizontal: spacing.md,
+            paddingBottom: spacing.md,
+            ...weretElevation.sheet,
           },
         ]}
       >
+        <WeretSheetHandle />
         {!locationAllowed ? (
           <Text style={{ color: weretPalette.danger, marginBottom: spacing.sm, fontSize: 13 }}>{t("locationPermission")}</Text>
         ) : null}
@@ -673,17 +677,21 @@ export default function DriverHomeScreen({ navigation }) {
         <Pressable
           style={[
             styles.toggle,
-            { borderRadius: weretRadius.pill },
-            user?.isOnline ? { backgroundColor: W.accent } : { backgroundColor: W.muted },
+            { borderRadius: weretRadius.pill, ...weretElevation.fab },
+            user?.isOnline
+              ? { backgroundColor: W.ink }
+              : { backgroundColor: W.sheet, borderWidth: 2, borderColor: W.ink },
             busy && { opacity: 0.6 },
           ]}
           onPress={toggleOnline}
           disabled={busy}
         >
           {busy ? (
-            <ActivityIndicator color={W.onPrimary} />
+            <ActivityIndicator color={user?.isOnline ? W.onPrimary : W.ink} />
           ) : (
-            <Text style={styles.toggleText}>{user?.isOnline ? t("goOffline") : t("goOnline")}</Text>
+            <Text style={[styles.toggleText, !user?.isOnline && { color: W.ink }]}>
+              {user?.isOnline ? t("goOffline") : t("goOnline")}
+            </Text>
           )}
         </Pressable>
         {activeRide ? (
@@ -695,7 +703,7 @@ export default function DriverHomeScreen({ navigation }) {
               </Text>
             ) : null}
             {awaitingDriverConfirmBooking ? (
-              <View style={{ marginBottom: spacing.sm, gap: spacing.sm }}>
+              <WeretSurfaceCard colors={colors} spacing={spacing} variant="success" style={{ marginBottom: spacing.sm }}>
                 <Text style={{ color: W.text, fontWeight: "800", textAlign: rtl ? "right" : "left" }}>
                   {t("driverPassengerAcceptedPrice")}
                 </Text>
@@ -704,7 +712,7 @@ export default function DriverHomeScreen({ navigation }) {
                     amount: Number(activeRide.preassignedFare ?? 0).toFixed(0),
                   })}
                 </Text>
-                <View style={{ flexDirection: rtl ? "row-reverse" : "row", gap: spacing.sm }}>
+                <View style={{ flexDirection: rtl ? "row-reverse" : "row", gap: spacing.sm, marginTop: spacing.sm }}>
                   <CustomButton
                     style={{ flex: 1 }}
                     title={t("driverDeclineTrip")}
@@ -721,9 +729,9 @@ export default function DriverHomeScreen({ navigation }) {
                     loading={busy}
                   />
                 </View>
-              </View>
+              </WeretSurfaceCard>
             ) : null}
-            <RideCard ride={activeRide} compact />
+            <RideCard ride={activeRide} compact emphasis />
             {activeRide.status === "accepted" ? (
               <CustomButton title={t("startTrip")} variant="ink" onPress={start} disabled={busy} loading={busy} />
             ) : null}
@@ -889,7 +897,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
   },
   toggle: { paddingVertical: 14, alignItems: "center" },
-  toggleText: { color: "#fff", fontWeight: "700", fontSize: 16 },
+  toggleText: { color: "#fff", fontWeight: "800", fontSize: 16, letterSpacing: 0.2 },
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -927,5 +935,10 @@ const styles = StyleSheet.create({
   },
   filterBadge: { fontWeight: "800", marginEnd: 8, fontSize: 14 },
   filterInput: { flex: 1, fontSize: 14, paddingVertical: 8 },
-  requestCard: { borderWidth: 1.5, padding: 14, borderRadius: weretRadius.card },
+  requestCard: {
+    borderWidth: 1.5,
+    padding: 14,
+    borderRadius: weretRadius.card,
+    ...weretElevation.card,
+  },
 });

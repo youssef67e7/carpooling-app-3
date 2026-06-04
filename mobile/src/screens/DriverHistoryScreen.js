@@ -14,6 +14,8 @@ import { useDispatch, useSelector } from "react-redux";
 import { useIsFocused } from "@react-navigation/native";
 import { fetchHistory } from "../store/slices/rideSlice";
 import { useWeretScreenChrome } from "../hooks/useWeretScreenChrome";
+import WeretAmbientBackground from "../components/ui/weret/WeretAmbientBackground";
+import WeretStepHeader from "../components/ui/weret/WeretStepHeader";
 import { weretPassenger as W } from "../theme/weretPassenger";
 import { weretRadius, weretPalette } from "../theme/weretDesignSystem";
 import RideCard from "../components/RideCard";
@@ -154,7 +156,8 @@ export default function DriverHistoryScreen({ navigation }) {
   const listEmpty = !history?.length;
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+    <WeretAmbientBackground style={{ flex: 1 }}>
+    <View style={{ flex: 1 }}>
       <View
         style={[
           styles.mapShell,
@@ -188,6 +191,9 @@ export default function DriverHistoryScreen({ navigation }) {
           keyExtractor={(item) => item._id}
           renderItem={renderItem}
           renderSectionHeader={renderSectionHeader}
+          ListHeaderComponent={
+            <WeretStepHeader title={t("history")} subtitle={t("tripsMapHint")} colors={colors} spacing={spacing} />
+          }
           contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xl, flexGrow: 1 }}
           refreshing={refreshing}
           onRefresh={onRefresh}
@@ -198,6 +204,7 @@ export default function DriverHistoryScreen({ navigation }) {
         />
       )}
     </View>
+    </WeretAmbientBackground>
   );
 }
 

@@ -1,5 +1,5 @@
 /**
- * Admin web — same APIs as mobile (`/auth`, `/admin/*`).
+ * WERET Admin web — same APIs and visual tokens as mobile (`/auth`, `/admin/*`).
  * PATCH /admin/users/:id — body: { is_verified, is_blocked, blocked_until, block_reason }
  */
 
@@ -18,11 +18,11 @@ try {
 /** @type {Record<'ar'|'en', Record<string, string>>} */
 const STR = {
   ar: {
-    pageTitle: "لوحة الإدارة — ReachNative",
+    pageTitle: "لوحة الإدارة — WERET",
     modal_default_title: "تأكيد",
     modal_cancel: "إلغاء",
     modal_ok: "تأكيد",
-    login_brand_title: "لوحة الإدارة",
+    login_brand_title: "لوحة إدارة WERET",
     login_brand_sub: "نفس API التطبيق — صلاحيات موحدة",
     login_heading: "تسجيل الدخول",
     login_secure_note: "مسؤولون ثابتون فقط (مصادقة الخادم).",
@@ -32,8 +32,8 @@ const STR = {
     label_password: "كلمة المرور",
     btn_login: "دخول",
     login_google_or: "أو",
-    nav_brand_sub: "إدارة",
-    nav_overview: "لوحة التحكم",
+    nav_brand_sub: "لوحة الإدارة",
+    nav_overview: "WERET · لوحة التحكم",
     nav_users: "المستخدمون",
     nav_rides: "الرحلات",
     nav_reports: "البلاغات",
@@ -42,7 +42,11 @@ const STR = {
     btn_logout: "تسجيل الخروج",
     ph_search: "بحث في القائمة الحالية…",
     btn_refresh: "تحديث",
-    sec_overview: "لوحة التحكم",
+    page_prev: "السابق",
+    page_next: "التالي",
+    page_of: "صفحة {page} من {totalPages}",
+    page_range: "عرض {from}–{to} من {total}",
+    sec_overview: "WERET · لوحة التحكم",
     sec_users: "المستخدمون",
     sec_rides: "الرحلات",
     sec_reports: "البلاغات",
@@ -138,11 +142,11 @@ const STR = {
     action_tx_unflag: "إزالة العلامة",
   },
   en: {
-    pageTitle: "Admin Panel — ReachNative",
+    pageTitle: "Admin Panel — WERET",
     modal_default_title: "Confirm",
     modal_cancel: "Cancel",
     modal_ok: "Confirm",
-    login_brand_title: "Admin panel",
+    login_brand_title: "WERET Admin",
     login_brand_sub: "Same app API — unified permissions",
     login_heading: "Sign in",
     login_secure_note: "Fixed admins only (server-validated).",
@@ -152,8 +156,8 @@ const STR = {
     label_password: "Password",
     btn_login: "Sign in",
     login_google_or: "Or",
-    nav_brand_sub: "Management",
-    nav_overview: "Dashboard",
+    nav_brand_sub: "Admin panel",
+    nav_overview: "WERET · Dashboard",
     nav_users: "Users",
     nav_rides: "Rides",
     nav_reports: "Reports",
@@ -162,7 +166,11 @@ const STR = {
     btn_logout: "Log out",
     ph_search: "Search current table…",
     btn_refresh: "Refresh",
-    sec_overview: "Dashboard",
+    page_prev: "Previous",
+    page_next: "Next",
+    page_of: "Page {page} of {totalPages}",
+    page_range: "Showing {from}–{to} of {total}",
+    sec_overview: "WERET · Dashboard",
     sec_users: "Users",
     sec_rides: "Rides",
     sec_reports: "Reports",
@@ -343,6 +351,86 @@ function setLang(next) {
 
 let adminSessionUser = null;
 let currentSection = "overview";
+
+const PAGE_SIZE = 7;
+/** @type {Record<string, { page: number, totalPages: number }>} */
+const pagers = {
+  users: { page: 1, totalPages: 1 },
+  rides: { page: 1, totalPages: 1 },
+  reports: { page: 1, totalPages: 1 },
+  tx: { page: 1, totalPages: 1 },
+  audit: { page: 1, totalPages: 1 },
+};
+
+function listQueryParams(page) {
+  const params = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE) });
+  const q = ($("global-search")?.value || "").trim();
+  if (q) params.set("search", q);
+  return params.toString();
+}
+
+function renderPagination(barId, pagination, sectionKey) {
+  const bar = $(barId);
+  if (!bar || !pagination) return;
+  const { page, totalPages, total, limit } = pagination;
+  pagers[sectionKey].page = page;
+  pagers[sectionKey].totalPages = totalPages;
+
+  if (total === 0) {
+    bar.classList.add("hidden");
+    bar.innerHTML = "";
+    return;
+  }
+
+  bar.classList.remove("hidden");
+  const from = (page - 1) * limit + 1;
+  const to = Math.min(page * limit, total);
+  bar.innerHTML = `
+    <div class="pagination-info">${esc(t("page_range", { from, to, total }))}</div>
+    <div class="pagination-controls">
+      <button type="button" class="secondary btn-compact" data-pg="prev" ${page <= 1 ? "disabled" : ""}>${esc(t("page_prev"))}</button>
+      <span class="pagination-pages">${esc(t("page_of", { page, totalPages }))}</span>
+      <button type="button" class="secondary btn-compact" data-pg="next" ${page >= totalPages ? "disabled" : ""}>${esc(t("page_next"))}</button>
+    </div>
+  `;
+}
+
+function reloadPagedSection(sectionKey) {
+  if (sectionKey === "users") return loadUsers();
+  if (sectionKey === "rides") return loadRides();
+  if (sectionKey === "reports") return loadReports();
+  if (sectionKey === "tx") return loadTransactions();
+  if (sectionKey === "audit") return loadAudit();
+  return Promise.resolve();
+}
+
+function bindPaginationBars() {
+  document.querySelectorAll("[data-pager]").forEach((bar) => {
+    if (bar.dataset.bound) return;
+    bar.dataset.bound = "1";
+    bar.addEventListener("click", async (e) => {
+      const btn = e.target.closest("[data-pg]");
+      if (!btn || btn.disabled) return;
+      const key = bar.getAttribute("data-pager");
+      const pg = pagers[key];
+      if (!pg) return;
+      if (btn.getAttribute("data-pg") === "prev") pg.page = Math.max(1, pg.page - 1);
+      else pg.page = Math.min(pg.totalPages || 1, pg.page + 1);
+      await reloadPagedSection(key);
+    });
+  });
+}
+
+let searchDebounce = null;
+function scheduleSearchReload() {
+  clearTimeout(searchDebounce);
+  searchDebounce = setTimeout(() => {
+    const key = currentSection;
+    if (!pagers[key]) return;
+    pagers[key].page = 1;
+    void reloadPagedSection(key);
+  }, 320);
+}
 let confirmResolver = null;
 
 function $(id) {
@@ -628,7 +716,6 @@ function setSection(name) {
   if (panel) panel.classList.remove("hidden");
   const navBtn = document.querySelector(`.nav-item[data-section="${name}"]`);
   if (navBtn) navBtn.classList.add("active");
-  applyTableFilter();
 }
 
 function skeletonStats(show) {
@@ -648,7 +735,7 @@ function skeletonStats(show) {
   }
 }
 
-function skeletonTable(id, show, rows = 6) {
+function skeletonTable(id, show, rows = 7) {
   const el = $(id);
   if (!el) return;
   if (show) {
@@ -709,8 +796,10 @@ async function loadUsers() {
   const body = $("users-body");
   body.innerHTML = "";
   try {
-    const { users } = await apiJson("/admin/users");
+    const page = pagers.users.page;
+    const { users, pagination } = await apiJson(`/admin/users?${listQueryParams(page)}`);
     skeletonTable("users-skeleton", false);
+    renderPagination("users-pagination", pagination, "users");
     const myId = adminSessionUser?._id;
     body.innerHTML = (users || [])
       .map((u) => {
@@ -770,8 +859,10 @@ async function loadRides() {
   const body = $("rides-body");
   body.innerHTML = "";
   try {
-    const { rides } = await apiJson("/admin/rides");
+    const page = pagers.rides.page;
+    const { rides, pagination } = await apiJson(`/admin/rides?${listQueryParams(page)}`);
     skeletonTable("rides-skeleton", false);
+    renderPagination("rides-pagination", pagination, "rides");
     body.innerHTML = (rides || [])
       .map((r) => {
         const p = r.passengerId?.name || r.passengerId?.email || "—";
@@ -801,8 +892,10 @@ async function loadReports() {
   const body = $("reports-body");
   body.innerHTML = "";
   try {
-    const { reports } = await apiJson("/admin/reports");
+    const page = pagers.reports.page;
+    const { reports, pagination } = await apiJson(`/admin/reports?${listQueryParams(page)}`);
     skeletonTable("reports-skeleton", false);
+    renderPagination("reports-pagination", pagination, "reports");
     body.innerHTML = (reports || [])
       .map((r) => {
         const rep = r.reporterId?.name || r.reporterId?.email || "—";
@@ -851,8 +944,10 @@ async function loadTransactions() {
   const body = $("tx-body");
   body.innerHTML = "";
   try {
-    const { transactions } = await apiJson("/admin/transactions?limit=100");
+    const page = pagers.tx.page;
+    const { transactions, pagination } = await apiJson(`/admin/transactions?${listQueryParams(page)}`);
     skeletonTable("tx-skeleton", false);
+    renderPagination("tx-pagination", pagination, "tx");
     body.innerHTML = (transactions || [])
       .map((tx) => {
         const u = tx.userId?.name || tx.userId?.email || "—";
@@ -913,8 +1008,10 @@ async function loadAudit() {
   const body = $("audit-body");
   if (body) body.innerHTML = "";
   try {
-    const { logs } = await apiJson("/admin/audit?limit=120");
+    const page = pagers.audit.page;
+    const { logs, pagination } = await apiJson(`/admin/audit?${listQueryParams(page)}`);
     skeletonTable("audit-skeleton", false);
+    renderPagination("audit-pagination", pagination, "audit");
     const rows = (logs || []).map((x) => {
       const when = x.createdAt ? new Date(x.createdAt).toLocaleString(localeForDates()) : "—";
       const act = esc(String(x.action || "—"));
@@ -941,7 +1038,7 @@ async function loadAudit() {
 }
 
 async function loadAll() {
-  await Promise.all([loadStats(), loadUsers(), loadRides(), loadReports(), loadTransactions(), loadAudit()]);
+  await loadStats();
 }
 
 function bindUsersTableActions() {
@@ -1042,15 +1139,8 @@ function bindUsersTableActions() {
 }
 
 function applyTableFilter() {
-  const q = ($("global-search")?.value || "").trim().toLowerCase();
-  const panel = $(`section-${currentSection === "overview" ? "overview" : currentSection}`);
-  if (!panel) return;
-  const tb = panel.querySelector("tbody");
-  if (!tb) return;
-  tb.querySelectorAll("tr").forEach((tr) => {
-    const t = tr.textContent.toLowerCase();
-    tr.style.display = !q || t.includes(q) ? "" : "none";
-  });
+  if (!pagers[currentSection]) return;
+  scheduleSearchReload();
 }
 
 function assertAdminSession(user) {
@@ -1075,6 +1165,7 @@ async function trySession() {
     showDashboard(user);
     setSection("overview");
     bindUsersTableActions();
+    bindPaginationBars();
     await loadAll();
   } catch {
     setToken(null);
@@ -1105,6 +1196,7 @@ if (formLogin) {
       showDashboard(data.user);
       setSection("overview");
       bindUsersTableActions();
+      bindPaginationBars();
       await loadAll();
     } catch (e) {
       $("login-error").textContent = e.message || t("err_login_failed");
@@ -1144,6 +1236,8 @@ document.querySelectorAll(".nav-item").forEach((btn) => {
     if (sec === "audit") loadAudit();
   });
 });
+
+bindPaginationBars();
 
 applyStaticI18n();
 bindLangButtons();

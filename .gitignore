@@ -10,6 +10,12 @@ node_modules/
 **/.env
 **/.env.local
 
+# Firebase (never commit)
+**/google-services.json
+**/firebase-service-account.json
+backend/firebase-service-account.json
+mobile/google-services.json
+
 # Expo / React Native
 .expo/
 .expo-shared/
@@ -30,8 +36,10 @@ mobile/android/local.properties
 mobile/ios/Pods/
 mobile/ios/build/
 *.ipa
+dist/
 *.apk
 *.aab
+!dist/.gitkeep
 
 # Logs & debug
 *.log

@@ -3,7 +3,6 @@ import {
   View,
   Image,
   StyleSheet,
-  ScrollView,
   Pressable,
   useWindowDimensions,
   I18nManager,
@@ -15,7 +14,6 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Animated from "react-native-reanimated";
 import WeretOutlineWordmark from "../components/auth/WeretOutlineWordmark";
-import WeretWordmarkOnLight from "../components/auth/WeretWordmarkOnLight";
 import { weretPalette as P, weretElevation, weretPress, weretRadius } from "../theme/weretDesignSystem";
 import { weretEnter } from "../theme/weretMotion";
 
@@ -26,25 +24,54 @@ const SUV = require("../assets/weret/onboarding/weret-onboard-2-suv.png");
 
 const SLIDE_COUNT = 2;
 
+function TawsilaWordmark({ width }) {
+  // Match icon typography: bold, spaced, subtle outline/shadow.
+  const fontSize = Math.min(46, Math.round(width * 0.12));
+  return (
+    <Text
+      style={{
+        fontSize,
+        fontWeight: "900",
+        letterSpacing: 2.6,
+        color: P.ink,
+        textTransform: "uppercase",
+        textShadowColor: "rgba(0,0,0,0.28)",
+        textShadowOffset: { width: 0, height: 3 },
+        textShadowRadius: 3,
+      }}
+    >
+      TAWSILA
+    </Text>
+  );
+}
+
 function SlideHero({ width, height, t }) {
   const rtl = I18nManager.isRTL;
-  const titleSize = Math.min(40, Math.round(width * 0.1));
-  const indent = rtl ? { paddingRight: width * 0.1 } : { paddingLeft: width * 0.12 };
+  const indent = rtl ? { paddingRight: width * 0.08 } : { paddingLeft: width * 0.08 };
 
   return (
     <View style={[styles.slideBox, { width, height }]}>
-      <View style={[styles.heroTop, { paddingTop: height * 0.05 }]}>
-        <View style={styles.centerMark}>
-          <WeretWordmarkOnLight label={t("appName")} fontSize={titleSize} />
+      <Image
+        source={HERO_TOPDOWN}
+        style={[StyleSheet.absoluteFill, { width, height }]}
+        resizeMode="cover"
+        accessibilityIgnoresInvertColors
+      />
+
+      <View style={[styles.heroOverlay, { paddingTop: height * 0.06, paddingBottom: height * 0.06 }]}>
+        <View style={[styles.centerMark, indent]}>
+          <TawsilaWordmark width={width} />
         </View>
-        <View style={[{ marginTop: 18, alignSelf: "stretch" }, indent]}>
-          <WeretWordmarkOnLight label={t("weretOnboardHeroPremium")} fontSize={15} compact disableUppercase />
-          <View style={{ height: 8 }} />
-          <WeretWordmarkOnLight label={t("weretOnboardHeroCars")} fontSize={15} compact disableUppercase />
+
+        <View style={[styles.heroTagline, { alignSelf: "stretch" }, indent]}>
+          <Text style={{ color: P.muted, fontWeight: "800", letterSpacing: 1.2 }}>
+            {t("weretOnboardHeroPremium")}
+          </Text>
+          <View style={{ height: 6 }} />
+          <Text style={{ color: P.muted, fontWeight: "800", letterSpacing: 1.2 }}>
+            {t("weretOnboardHeroCars")}
+          </Text>
         </View>
-      </View>
-      <View style={[styles.heroCarWrap, { width: width * 0.92, height: height * 0.36 }]}>
-        <Image source={HERO_TOPDOWN} style={styles.heroCarImg} resizeMode="contain" accessibilityIgnoresInvertColors />
       </View>
     </View>
   );
@@ -52,16 +79,17 @@ function SlideHero({ width, height, t }) {
 
 function SlideStory({ width, height, t }) {
   const rtl = I18nManager.isRTL;
-  const pull = rtl ? { marginRight: -width * 0.05 } : { marginLeft: -width * 0.06 };
 
   return (
     <View style={[styles.slideBox, { width, height }]}>
-      <View style={{ paddingTop: height * 0.045, alignItems: "center" }}>
-        <WeretWordmarkOnLight label={t("appName")} fontSize={Math.min(32, width * 0.085)} />
-      </View>
-      <View style={[styles.storyRow, { flexDirection: rtl ? "row-reverse" : "row" }]}>
-        <Image source={SUV} style={[styles.storyImg, { width: width * 0.52, height: height * 0.34 }, pull]} resizeMode="cover" />
-        <View style={styles.storyCopy}>
+      <Image source={SUV} style={[StyleSheet.absoluteFill, { width, height }]} resizeMode="cover" accessibilityIgnoresInvertColors />
+
+      <View style={[styles.storyOverlay, { paddingTop: height * 0.06, paddingBottom: height * 0.06 }]}>
+        <View style={{ alignItems: rtl ? "flex-end" : "flex-start" }}>
+          <TawsilaWordmark width={width} />
+        </View>
+
+        <View style={[styles.storyCard, { flexDirection: "column" }]}>
           <Text style={[styles.storyTitle, { textAlign: rtl ? "right" : "left" }]}>{t("weretOnboardStoryTitle")}</Text>
           <Text style={[styles.storyBody, { textAlign: rtl ? "right" : "left" }]}>{t("weretOnboardStoryBody")}</Text>
         </View>
@@ -74,7 +102,6 @@ export default function WeretOnboardingScreen({ navigation }) {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
-  const scrollRef = useRef(null);
   const [hydrated, setHydrated] = useState(false);
   const [page, setPage] = useState(0);
 
@@ -110,22 +137,15 @@ export default function WeretOnboardingScreen({ navigation }) {
 
   const goNext = useCallback(() => {
     if (page < SLIDE_COUNT - 1) {
-      const next = page + 1;
-      scrollRef.current?.scrollTo({ x: width * next, animated: true });
-      setPage(next);
+      setPage((p) => Math.min(p + 1, SLIDE_COUNT - 1));
     } else {
       finish();
     }
-  }, [page, width, finish]);
+  }, [page, finish]);
 
-  const onScrollEnd = useCallback(
-    (e) => {
-      const x = e.nativeEvent.contentOffset.x;
-      const i = Math.round(x / Math.max(width, 1));
-      setPage(Math.min(Math.max(i, 0), SLIDE_COUNT - 1));
-    },
-    [width],
-  );
+  const goPrev = useCallback(() => {
+    setPage((p) => Math.max(0, p - 1));
+  }, []);
 
   if (!hydrated) {
     return (
@@ -142,19 +162,7 @@ export default function WeretOnboardingScreen({ navigation }) {
   return (
     <View style={styles.root}>
       <Animated.View entering={weretEnter.screen} style={styles.ltrScrollHost}>
-        <ScrollView
-          ref={scrollRef}
-          horizontal
-          pagingEnabled
-          bounces={false}
-          showsHorizontalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          onMomentumScrollEnd={onScrollEnd}
-          scrollEventThrottle={16}
-        >
-          <SlideHero width={width} height={height} t={t} />
-          <SlideStory width={width} height={height} t={t} />
-        </ScrollView>
+        {page === 0 ? <SlideHero width={width} height={height} t={t} /> : <SlideStory width={width} height={height} t={t} />}
       </Animated.View>
 
       <Pressable
@@ -204,6 +212,23 @@ export default function WeretOnboardingScreen({ navigation }) {
       >
         <MaterialCommunityIcons name={rtl ? "chevron-left" : "chevron-right"} size={28} color={P.onPrimary} />
       </Pressable>
+
+      {page > 0 ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={goPrev}
+          style={({ pressed }) => [
+            styles.backFab,
+            {
+              bottom: insets.bottom + 28,
+              ...(rtl ? { right: 24 } : { left: 24 }),
+              opacity: pressed ? weretPress.opacity : 1,
+            },
+          ]}
+        >
+          <MaterialCommunityIcons name={rtl ? "chevron-right" : "chevron-left"} size={28} color={P.ink} />
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -229,36 +254,35 @@ const styles = StyleSheet.create({
   slideBox: {
     backgroundColor: P.surface,
   },
-  heroTop: {
+  heroOverlay: {
     flex: 1,
-    paddingHorizontal: 16,
+    paddingHorizontal: 18,
+    justifyContent: "space-between",
   },
   centerMark: {
-    alignItems: "center",
-  },
-  heroCarWrap: {
-    alignSelf: "center",
-    marginBottom: 28,
-    ...weretElevation.heroFloat,
-  },
-  heroCarImg: {
-    width: "100%",
-    height: "100%",
-  },
-  storyRow: {
-    flex: 1,
-    marginTop: 12,
-    paddingHorizontal: 8,
     alignItems: "flex-start",
   },
-  storyImg: {
-    borderRadius: 0,
+  heroTagline: {
+    backgroundColor: "rgba(255,255,255,0.82)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(0,0,0,0.08)",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    alignSelf: "flex-start",
   },
-  storyCopy: {
+  storyOverlay: {
     flex: 1,
-    paddingTop: 8,
-    paddingHorizontal: 12,
-    justifyContent: "flex-start",
+    paddingHorizontal: 18,
+    justifyContent: "space-between",
+  },
+  storyCard: {
+    backgroundColor: "rgba(255,255,255,0.9)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(0,0,0,0.08)",
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: 18,
   },
   storyTitle: {
     fontSize: 22,
@@ -307,6 +331,19 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: 28,
     backgroundColor: P.ink,
+    alignItems: "center",
+    justifyContent: "center",
+    ...weretElevation.fab,
+  },
+  backFab: {
+    position: "absolute",
+    zIndex: 2,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: P.overlayLight,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: P.border,
     alignItems: "center",
     justifyContent: "center",
     ...weretElevation.fab,

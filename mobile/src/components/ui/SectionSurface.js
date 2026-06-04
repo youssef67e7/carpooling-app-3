@@ -21,7 +21,7 @@ export default function SectionSurface({ children, style, noEntering, elevated }
         {
           backgroundColor: colors.surface,
           borderRadius: radius.lg,
-          borderWidth: 1,
+          borderWidth: 1.5,
           borderColor: colors.border,
           ...shadow,
         },

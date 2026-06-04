@@ -139,11 +139,6 @@ export default function WalletWithdrawScreen({ navigation }) {
             <Text style={{ color: colors.text, fontWeight: "700", textAlign: rtl ? "right" : "left" }}>
               {t("walletEnterOtpTitle")}
             </Text>
-            {lastWithdrawMeta.devOtp ? (
-              <Text style={{ color: colors.danger, marginTop: spacing.sm, fontSize: 13, textAlign: rtl ? "right" : "left" }}>
-                {t("walletDevOtp", { code: lastWithdrawMeta.devOtp })}
-              </Text>
-            ) : null}
             <TextInput
               value={otp}
               onChangeText={setOtp}

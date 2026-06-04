@@ -34,9 +34,19 @@ export const weretPalette = {
 export const weretRadius = {
   field: 16,
   card: 20,
+  sheet: 28,
   chip: 14,
   pill: 999,
   dot: 4,
+};
+
+/** Status tones for banners & pills */
+export const weretStatus = {
+  pending: { bg: "#fffbeb", border: "#f59e0b", text: "#92400e", icon: "#d97706" },
+  accepted: { bg: "#f0fdf4", border: "#22c55e", text: "#166534", icon: "#16a34a" },
+  ongoing: { bg: "#eff6ff", border: weretPalette.accent, text: "#1e40af", icon: weretPalette.accent },
+  completed: { bg: weretPalette.field, border: weretPalette.border, text: weretPalette.muted, icon: weretPalette.muted },
+  info: { bg: "#f5f5f5", border: weretPalette.ink, text: weretPalette.text, icon: weretPalette.ink },
 };
 
 export const weretPress = {
@@ -81,6 +91,26 @@ export const weretElevation = {
       shadowRadius: 22,
     },
     android: { elevation: 10 },
+    default: {},
+  }),
+  sheet: Platform.select({
+    ios: {
+      shadowColor: "#000000",
+      shadowOffset: { width: 0, height: -8 },
+      shadowOpacity: 0.12,
+      shadowRadius: 24,
+    },
+    android: { elevation: 14 },
+    default: {},
+  }),
+  pressed: Platform.select({
+    ios: {
+      shadowColor: "#000000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.06,
+      shadowRadius: 6,
+    },
+    android: { elevation: 2 },
     default: {},
   }),
   fab: Platform.select({

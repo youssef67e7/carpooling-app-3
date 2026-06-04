@@ -2,9 +2,23 @@ import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { api, setAuthToken } from "../../api/client";
 
-const TOKEN_KEY = "ridehail_token";
+const TOKEN_KEY = "weret_token";
+const TOKEN_KEY_LEGACY = "ridehail_token";
 /** Cached user JSON so cold start does not block on /auth/me (saves ~15s+ if API is slow or down). */
-const USER_CACHE_KEY = "ridehail_user_cache";
+const USER_CACHE_KEY = "weret_user_cache";
+const USER_CACHE_KEY_LEGACY = "ridehail_user_cache";
+
+async function migrateStorageKey(newKey, legacyKey) {
+  const current = await AsyncStorage.getItem(newKey);
+  if (current != null && current !== "") return current;
+  const legacy = await AsyncStorage.getItem(legacyKey);
+  if (legacy != null && legacy !== "") {
+    await AsyncStorage.setItem(newKey, legacy);
+    await AsyncStorage.removeItem(legacyKey);
+    return legacy;
+  }
+  return null;
+}
 
 async function persistUserCache(user) {
   if (user) await AsyncStorage.setItem(USER_CACHE_KEY, JSON.stringify(user));
@@ -49,7 +63,7 @@ export const validateSessionThunk = createAsyncThunk("auth/validateSession", asy
 
 export const hydrateAuth = createAsyncThunk("auth/hydrate", async (_, { dispatch, rejectWithValue }) => {
   try {
-    const token = await AsyncStorage.getItem(TOKEN_KEY);
+    const token = await migrateStorageKey(TOKEN_KEY, TOKEN_KEY_LEGACY);
     if (!token) {
       setAuthToken(null);
       return { token: null, user: null };

@@ -11,9 +11,15 @@ import { AppError } from "../errors/AppError.js";
 import { authWriteLimiter } from "../middleware/rateLimiters.js";
 import { isFixedAdminEmail, normalizeAdminEmail } from "../config/fixedAdmins.js";
 import { signUserToken } from "../utils/signUserToken.js";
-import { verifyGoogleIdToken, isGoogleAuthConfigured } from "../utils/verifyGoogleIdToken.js";
+import { isFirebaseAdminConfigured, resolveFirebaseProjectId } from "../config/firebaseAdmin.js";
+import {
+  isGoogleOrFirebaseSignInConfigured,
+  resolveGoogleSignInToken,
+} from "../utils/resolveGoogleSignInToken.js";
+import { upsertUserFromGoogleSignIn } from "../utils/googleSignInUser.js";
 import { PhoneLoginOtp } from "../models/PhoneLoginOtp.js";
 import { normalizePhone, hashPhoneOtp, randomPhoneOtp6, syntheticEmailForPhone } from "../utils/phoneOtp.js";
+import { sendSms, buildLoginOtpMessage } from "../services/sendSms.js";
 
 const router = Router();
 const PHONE_OTP_TTL_MS = 10 * 60 * 1000;
@@ -47,13 +53,15 @@ router.get("/google-config", (_req, res) => {
   const androidClientId = String(process.env.GOOGLE_OAUTH_ANDROID_CLIENT_ID || "").trim();
   const expoClientId = String(process.env.GOOGLE_OAUTH_EXPO_CLIENT_ID || "").trim();
   res.json({
-    enabled: isGoogleAuthConfigured(),
+    enabled: isGoogleOrFirebaseSignInConfigured(),
+    firebaseEnabled: isFirebaseAdminConfigured(),
+    firebaseProjectId: resolveFirebaseProjectId(),
     webClientId,
     iosClientId,
     androidClientId,
     expoClientId,
-    /** Hints for Google Cloud Console → Web client → Authorized redirect URIs */
-    redirectUriHints: ["weret:/oauthredirect", "com.ridehail.app:/oauthredirect"],
+    /** Use Web client ID from Firebase → Authentication → Google (same as GOOGLE_OAUTH_WEB_CLIENT_ID) */
+    redirectUriHints: ["com.ridehail.app:/oauthredirect"],
   });
 });
 
@@ -64,90 +72,28 @@ router.post(
   validateRequest,
   async (req, res, next) => {
     try {
-      if (!isGoogleAuthConfigured()) {
+      if (!isGoogleOrFirebaseSignInConfigured()) {
         throw new AppError("Google sign-in is not enabled on this server", 503);
       }
       let g;
       try {
-        g = await verifyGoogleIdToken(req.body.idToken);
+        g = await resolveGoogleSignInToken(req.body.idToken);
       } catch (e) {
-        if (e.code === "GOOGLE_EMAIL_UNVERIFIED") throw new AppError(e.message, 403);
-        if (e.code === "GOOGLE_NOT_CONFIGURED") {
+        if (e.code === "GOOGLE_EMAIL_UNVERIFIED" || e.code === "FIREBASE_EMAIL_UNVERIFIED") {
+          throw new AppError(e.message, 403);
+        }
+        if (e.code === "GOOGLE_NOT_CONFIGURED" || e.code === "FIREBASE_NOT_CONFIGURED" || e.code === "AUTH_NOT_CONFIGURED") {
           throw new AppError("Google sign-in is not enabled on this server", 503);
         }
         const devHint =
           process.env.NODE_ENV !== "production" && e?.message ? String(e.message).slice(0, 200) : null;
         throw new AppError(devHint || "Google sign-in failed", 401);
       }
-      const emailNorm = normalizeAdminEmail(g.email);
 
-      if (isFixedAdminEmail(emailNorm)) {
-        let user = await User.findOne({ $or: [{ googleSub: g.sub }, { email: emailNorm }] });
-        if (user && user.googleSub && user.googleSub !== g.sub) {
-          throw new AppError("This email is linked to another Google account", 409);
-        }
-        if (!user) {
-          user = await User.create({
-            name: g.name || "Administrator",
-            email: emailNorm,
-            password: await bcrypt.hash(randomBytes(32).toString("hex"), 12),
-            role: "admin",
-            active_role: "passenger",
-            isOnline: false,
-            googleSub: g.sub,
-            profileImageUrl: g.picture || "",
-            is_verified: true,
-            is_blocked: false,
-            location: { lat: 0, lng: 0 },
-          });
-        } else {
-          user.role = "admin";
-          user.googleSub = g.sub;
-          if (g.picture && !user.profileImageUrl) user.profileImageUrl = g.picture;
-          if (g.name) user.name = g.name;
-          await user.save();
-        }
-        await finalizeUserForSession(user);
-        const fresh = await User.findById(user._id);
-        const token = signUserToken(fresh);
-        return res.json({ token, user: fresh.toJSON() });
-      }
-
-      let user = await User.findOne({ googleSub: g.sub });
-      if (!user) {
-        user = await User.findOne({ email: emailNorm });
-      }
-      if (user) {
-        if (user.role === "admin") {
-          throw new AppError("Invalid credentials", 401);
-        }
-        if (user.googleSub && user.googleSub !== g.sub) {
-          throw new AppError("This email is registered with a different Google account", 409);
-        }
-        user.googleSub = g.sub;
-        if (g.picture) user.profileImageUrl = g.picture.slice(0, 500);
-        if (g.name) user.name = g.name;
-        await user.save();
-      } else {
-        user = await User.create({
-          name: g.name,
-          email: emailNorm,
-          password: await bcrypt.hash(randomBytes(32).toString("hex"), 12),
-          role: "passenger",
-          active_role: "passenger",
-          isOnline: false,
-          googleSub: g.sub,
-          profileImageUrl: g.picture || "",
-          phone: "",
-          is_verified: true,
-          is_blocked: false,
-          location: {
-            lat: Number(req.body.lat) || 24.7136,
-            lng: Number(req.body.lng) || 46.6753,
-          },
-        });
-        await PassengerProfile.updateOne({ userId: user._id }, { $set: { userId: user._id } }, { upsert: true });
-      }
+      const user = await upsertUserFromGoogleSignIn(g, {
+        lat: req.body.lat,
+        lng: req.body.lng,
+      });
       await finalizeUserForSession(user);
       const fresh = await User.findById(user._id);
       const token = signUserToken(fresh);
@@ -278,14 +224,15 @@ router.post(
       const expiresAt = new Date(Date.now() + PHONE_OTP_TTL_MS);
       await PhoneLoginOtp.deleteMany({ phone });
       await PhoneLoginOtp.create({ phone, otpDigest: hashPhoneOtp(otp), expiresAt, attempts: 0 });
-      if (process.env.NODE_ENV !== "production") {
-        console.log(`[auth] Phone OTP for ${phone}: ${otp}`);
-      }
+
+      const sms = await sendSms({ to: phone, body: buildLoginOtpMessage(otp) });
+
       return res.json({
         ok: true,
         phone,
-        message: "OTP sent",
-        _devOtp: process.env.NODE_ENV !== "production" ? otp : undefined,
+        message: sms.sent ? "OTP sent via SMS" : "OTP generated (check server log in dev)",
+        smsProvider: sms.provider,
+        _devOtp: sms.dev ? otp : undefined,
       });
     } catch (e) {
       next(e);

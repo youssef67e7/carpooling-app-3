@@ -41,6 +41,7 @@ export const createRideThunk = createAsyncThunk(
       passengerMinFare,
       passengerCount,
       passengerSize,
+      rideMode,
       parcel,
     },
     { rejectWithValue }
@@ -84,6 +85,9 @@ export const createRideThunk = createAsyncThunk(
       }
       if (passengerSize) {
         body.passengerSize = String(passengerSize).toUpperCase();
+      }
+      if (rideMode) {
+        body.rideMode = String(rideMode).toLowerCase().trim();
       }
       const { data } = await api.post("/rides/create", body);
       return data.ride;

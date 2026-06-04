@@ -4,7 +4,7 @@ import { mkdirSync } from "fs";
 /** Writable upload root — `/tmp` on Vercel (read-only project FS). */
 export function getUploadRoot() {
   if (process.env.VERCEL) {
-    return path.join("/tmp", "ridehail-uploads");
+    return path.join("/tmp", "weret-uploads");
   }
   return path.resolve(process.cwd(), "uploads");
 }

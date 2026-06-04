@@ -5,7 +5,7 @@ import { useWeretTabScreenOptions } from "./useWeretTabScreenOptions";
 import DriverMoreMenuScreen from "../screens/more/DriverMoreMenuScreen";
 import HelpCenterScreen from "../screens/more/HelpCenterScreen";
 import SafetyTipsScreen from "../screens/more/SafetyTipsScreen";
-import AboutAmeenScreen from "../screens/more/AboutAmeenScreen";
+import AboutWeretScreen from "../screens/more/AboutWeretScreen";
 import DriverInsightsScreen from "../screens/more/DriverInsightsScreen";
 import DriverTripFlowScreen from "../screens/more/DriverTripFlowScreen";
 import DriverEarningsScreen from "../screens/more/DriverEarningsScreen";
@@ -72,7 +72,7 @@ export default function DriverMoreStack() {
       <Stack.Screen name="DriverRatings" component={DriverRatingsScreen} options={{ title: t("featureDriverRatings") }} />
       <Stack.Screen name="HelpCenter" component={HelpCenterScreen} options={{ title: t("featureHelp") }} />
       <Stack.Screen name="SafetyTips" component={SafetyTipsScreen} options={{ title: t("featureSafety") }} />
-      <Stack.Screen name="AboutAmeen" component={AboutAmeenScreen} options={{ title: t("featureAbout") }} />
+      <Stack.Screen name="AboutWeret" component={AboutWeretScreen} options={{ title: t("featureAbout") }} />
     </Stack.Navigator>
   );
 }

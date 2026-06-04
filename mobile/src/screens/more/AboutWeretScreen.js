@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useWeretScreenChrome } from "../../hooks/useWeretScreenChrome";
 import WeretInfoScreen from "../../components/ui/weret/WeretInfoScreen";
 
-export default function AboutAmeenScreen() {
+export default function AboutWeretScreen() {
   const { t } = useTranslation();
   const { colors, spacing } = useWeretScreenChrome();
   const rtl = I18nManager.isRTL;
