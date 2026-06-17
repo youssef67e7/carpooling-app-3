@@ -3,7 +3,7 @@ import { Text, View, Pressable, I18nManager, ScrollView, StyleSheet } from "reac
 import Animated, { FadeIn } from "react-native-reanimated";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../context/ThemeProvider";
-import { apiBaseURL, isDevApiProxyActive } from "../api/client";
+import { apiBaseURL, getApiDiagnostics, isDevApiProxyActive } from "../api/client";
 import { D } from "../animation/presets";
 
 /** Scrollable callout for long troubleshooting copy (compact “details” expanded). */
@@ -52,6 +52,7 @@ export default function ConnectionStatusBanner({ compact = false }) {
   const rtl = I18nManager.isRTL;
   const [stackHealth, setStackHealth] = useState("loading");
   const [expanded, setExpanded] = useState(false);
+  const [lastError, setLastError] = useState(null);
 
   useEffect(() => {
     setExpanded(false);
@@ -61,21 +62,38 @@ export default function ConnectionStatusBanner({ compact = false }) {
     let cancelled = false;
     const ac = new AbortController();
     const timeout = setTimeout(() => ac.abort(), 8000);
+    const healthUrl = `${apiBaseURL}/health`;
+
     (async () => {
+      if (__DEV__) {
+        console.log("[api] health check →", healthUrl, getApiDiagnostics());
+      }
       try {
-        const r = await fetch(`${apiBaseURL}/health`, { method: "GET", signal: ac.signal });
+        const r = await fetch(healthUrl, { method: "GET", signal: ac.signal });
         const j = await r.json().catch(() => ({}));
         if (cancelled) return;
         if (!r.ok) {
+          const err = `HTTP ${r.status}`;
+          setLastError(err);
+          if (__DEV__) console.warn("[api] health check failed:", healthUrl, err, j);
           setStackHealth("api");
           return;
         }
+        setLastError(null);
+        if (__DEV__) console.log("[api] health check ok:", healthUrl, j);
         if (j.database === true) setStackHealth("ok");
         else if (j.ok && j.database === false) setStackHealth("db");
         else if (j.ok) setStackHealth("ok");
         else setStackHealth("api");
-      } catch {
-        if (!cancelled) setStackHealth("api");
+      } catch (err) {
+        if (!cancelled) {
+          const msg = err?.name === "AbortError" ? "timeout (8s)" : err?.message || String(err);
+          setLastError(msg);
+          if (__DEV__) {
+            console.warn("[api] health check network error:", healthUrl, msg, getApiDiagnostics());
+          }
+          setStackHealth("api");
+        }
       } finally {
         clearTimeout(timeout);
       }
@@ -143,6 +161,11 @@ export default function ConnectionStatusBanner({ compact = false }) {
     return (
       <View style={{ marginBottom: spacing.sm }}>
         <Text style={[{ color: colors.danger }, align]}>{t("connectionApiDownShort")}</Text>
+        {__DEV__ && lastError ? (
+          <Text style={[{ color: colors.textMuted, fontSize: 11, marginTop: 4 }, align]}>
+            {apiBaseURL}/health — {lastError}
+          </Text>
+        ) : null}
         <Pressable onPress={() => setExpanded(true)} accessibilityRole="button">
           <Text style={{ color: colors.primary, fontSize: 13, marginTop: 6, textAlign: rtl ? "right" : "left" }}>
             {t("connectionShowDetails")}

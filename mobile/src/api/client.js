@@ -58,11 +58,36 @@ function explicitLanHost() {
 }
 
 /**
+ * Metro tunnel hosts (ngrok, exp.direct) only serve the JS bundle — never the REST API.
+ * Using them as API host causes "Can't reach API" on physical devices.
+ */
+function isMetroTunnelHost(hostname) {
+  const h = String(hostname || "").toLowerCase();
+  if (!h) return false;
+  return (
+    h.includes("ngrok") ||
+    h.endsWith(".exp.direct") ||
+    h.endsWith(".exp.host") ||
+    h.includes(".exp.direct:") ||
+    h === "u.expo.dev" ||
+    h.endsWith(".expo.dev") ||
+    h.endsWith(".tunnel.dev")
+  );
+}
+
+function isUsableDevApiHost(host) {
+  if (!host || host === "localhost" || host === "127.0.0.1") return false;
+  if (isMetroTunnelHost(host)) return false;
+  return true;
+}
+
+/**
  * Dev machine LAN hostname for replacing localhost (phones cannot use your PC's "localhost").
+ * Skips Expo tunnel / ngrok hosts — those are Metro-only, not your API.
  */
 function inferLanHostnameFromExpo() {
   const manual = explicitLanHost();
-  if (manual) return manual;
+  if (manual && isUsableDevApiHost(manual)) return manual;
 
   const rawCandidates = [
     Constants.expoConfig?.hostUri,
@@ -74,11 +99,24 @@ function inferLanHostnameFromExpo() {
 
   for (const raw of rawCandidates) {
     const host = parseHostFromDevConnectionString(raw);
-    if (host && host !== "localhost" && host !== "127.0.0.1") return host;
+    if (isUsableDevApiHost(host)) return host;
   }
 
   const fromScript = hostFromScriptUrl();
-  if (fromScript && fromScript !== "localhost" && fromScript !== "127.0.0.1") return fromScript;
+  if (isUsableDevApiHost(fromScript)) return fromScript;
+
+  if (__DEV__ && platformOS() !== "web") {
+    const tunnelish = rawCandidates
+      .map(parseHostFromDevConnectionString)
+      .find((h) => h && isMetroTunnelHost(h));
+    if (tunnelish) {
+      console.warn(
+        `[api] Metro tunnel host (${tunnelish}) cannot serve the API. ` +
+          "Set EXPO_PUBLIC_API_FULL_URL=https://YOUR-VERCEL-URL in mobile/.env (works on any network), " +
+          "or use LAN mode (npm start, same Wi‑Fi) with EXPO_PUBLIC_API_URL=http://localhost:3000."
+      );
+    }
+  }
 
   return null;
 }
@@ -131,6 +169,41 @@ function isLanHostname(hostname) {
   );
 }
 
+function lanAutofixEnabled() {
+  return (
+    __DEV__ &&
+    platformOS() !== "web" &&
+    !truthyEnv(process.env.EXPO_PUBLIC_API_DISABLE_LAN_HOST_AUTOFIX) &&
+    !falsyEnv(extraCfg.disableLanHostAutofix)
+  );
+}
+
+/** Replace stale private LAN IP in env URL with current Metro LAN host (same port). */
+function applyLanHostAutofix(baseUrl, label = "API URL") {
+  const trimmed = String(baseUrl || "").trim().replace(/\/$/, "");
+  if (!trimmed || !lanAutofixEnabled()) return trimmed;
+
+  try {
+    const inferred = inferLanHostnameFromExpo();
+    if (!inferred) return trimmed;
+
+    const u = new URL(/^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`);
+    const h = u.hostname.toLowerCase();
+    if (h === inferred.toLowerCase()) return trimmed;
+    if (!isLanHostname(h)) return trimmed;
+
+    const fixed = new URL(u.toString());
+    fixed.hostname = inferred;
+    const out = fixed.toString().replace(/\/$/, "");
+    console.warn(
+      `[api] ${label} host (${h}) != current LAN (${inferred}). Using ${out} (set EXPO_PUBLIC_API_DISABLE_LAN_HOST_AUTOFIX=1 to disable).`
+    );
+    return out;
+  } catch {
+    return trimmed;
+  }
+}
+
 function inferDevApiBase() {
   const port = apiPortForDev();
   const host = inferLanHostnameFromExpo();
@@ -154,10 +227,17 @@ function rewriteLoopbackApiUrl(baseUrl) {
   }
   const h = u.hostname.toLowerCase();
   if (h !== "localhost" && h !== "127.0.0.1") {
+    if (isMetroTunnelHost(h)) {
+      console.warn(
+        `[api] Refusing tunnel host (${h}) as API base. Set EXPO_PUBLIC_API_FULL_URL to your public API (e.g. Vercel).`
+      );
+      return raw.replace(/\/$/, "");
+    }
     if (useDevApiProxy() && platformOS() !== "web" && isLanHostname(h)) {
       u.port = devApiListenPort();
     }
-    return u.toString().replace(/\/$/, "");
+    const out = u.toString().replace(/\/$/, "");
+    return applyLanHostAutofix(out, "EXPO_PUBLIC_API_URL");
   }
 
   const inferred = inferLanHostnameFromExpo();
@@ -195,40 +275,7 @@ function computeApiBaseURL() {
   const rawFull = process.env.EXPO_PUBLIC_API_FULL_URL || extraCfg.apiFullUrl;
   if (rawFull && String(rawFull).trim()) {
     const trimmed = String(rawFull).trim().replace(/\/$/, "");
-    /**
-     * Dev ergonomics: PCs often change Wi‑Fi IPs (.6 today, .7 tomorrow).
-     * If EXPO_PUBLIC_API_FULL_URL points to a stale private LAN IP but Expo/Metro reports
-     * a different LAN host for THIS machine, prefer the inferred host (same port).
-     *
-     * Opt-out: EXPO_PUBLIC_API_DISABLE_LAN_HOST_AUTOFIX=1
-     */
-    if (
-      __DEV__ &&
-      platformOS() !== "web" &&
-      !truthyEnv(process.env.EXPO_PUBLIC_API_DISABLE_LAN_HOST_AUTOFIX) &&
-      !falsyEnv(extraCfg.disableLanHostAutofix)
-    ) {
-      try {
-        const inferred = inferLanHostnameFromExpo();
-        if (!inferred) return trimmed;
-
-        const u = new URL(/^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`);
-        const h = u.hostname.toLowerCase();
-        if (h === inferred.toLowerCase()) return trimmed;
-        if (!isLanHostname(h)) return trimmed;
-
-        const fixed = new URL(u.toString());
-        fixed.hostname = inferred;
-        const out = fixed.toString().replace(/\/$/, "");
-        console.warn(
-          `[api] EXPO_PUBLIC_API_FULL_URL host (${h}) != Expo LAN host (${inferred}). Using ${out} (set EXPO_PUBLIC_API_DISABLE_LAN_HOST_AUTOFIX=1 to disable).`
-        );
-        return out;
-      } catch {
-        return trimmed;
-      }
-    }
-    return trimmed;
+    return applyLanHostAutofix(trimmed, "EXPO_PUBLIC_API_FULL_URL");
   }
 
   const fromEnv =
@@ -243,9 +290,27 @@ function computeApiBaseURL() {
 
 export const apiBaseURL = computeApiBaseURL();
 
+/** Debug snapshot for ConnectionStatusBanner / support. */
+export function getApiDiagnostics() {
+  return {
+    apiBaseURL,
+    proxyActive: isDevApiProxyActive(),
+    proxyPort: devApiListenPort(),
+    platform: platformOS(),
+    inferredLanHost: inferLanHostnameFromExpo(),
+    envApiUrl: process.env.EXPO_PUBLIC_API_URL || extraCfg.apiUrl || null,
+    envApiFullUrl: process.env.EXPO_PUBLIC_API_FULL_URL || extraCfg.apiFullUrl || null,
+    explicitLanHost: explicitLanHost(),
+    metroHostUri: Constants.expoConfig?.hostUri || null,
+  };
+}
+
 if (__DEV__) {
+  const diag = getApiDiagnostics();
+  console.log("[api] diagnostics", JSON.stringify(diag, null, 2));
   console.log(
-    `[api] baseURL=${apiBaseURL} proxy=${useDevApiProxy()} proxyPort=${devApiListenPort()} | Set EXPO_PUBLIC_API_FULL_URL for direct :3000 without proxy`
+    `[api] baseURL=${apiBaseURL} proxy=${useDevApiProxy()} proxyPort=${devApiListenPort()} | ` +
+      "Off-LAN / tunnel? Set EXPO_PUBLIC_API_FULL_URL=https://YOUR-VERCEL-URL in mobile/.env"
   );
 }
 
@@ -258,20 +323,62 @@ export const api = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
+if (__DEV__) {
+  api.interceptors.request.use((config) => {
+    const method = String(config.method || "get").toUpperCase();
+    const path = config.url || "";
+    const full = path.startsWith("http") ? path : `${config.baseURL || apiBaseURL}${path}`;
+    console.log(`[api] → ${method} ${full}`);
+    return config;
+  });
+}
+
+function logApiError(error, context = "response") {
+  if (!__DEV__) return;
+  const config = error?.config;
+  const path = config?.url || "";
+  const full = path.startsWith("http") ? path : `${config?.baseURL || apiBaseURL}${path}`;
+  console.warn(`[api] ✗ ${context}`, {
+    method: config?.method,
+    url: full,
+    code: error?.code,
+    message: error?.message,
+    status: error?.response?.status,
+    data: error?.response?.data,
+  });
+}
+
 /** Retry transient failures (timeout / 5xx) for idempotent GETs */
 api.interceptors.response.use(
-  (res) => res,
+  (res) => {
+    if (__DEV__) {
+      const path = res.config?.url || "";
+      const full = path.startsWith("http") ? path : `${res.config?.baseURL || apiBaseURL}${path}`;
+      console.log(`[api] ← ${res.status} ${full}`);
+    }
+    return res;
+  },
   async (error) => {
     const config = error.config;
     if (!config || config.method?.toLowerCase() !== "get") {
+      logApiError(error);
       return Promise.reject(error);
     }
     const status = error.response?.status;
     const retriable = !status || status >= 500 || error.code === "ECONNABORTED" || error.code === "ERR_NETWORK";
-    if (!retriable) return Promise.reject(error);
+    if (!retriable) {
+      logApiError(error);
+      return Promise.reject(error);
+    }
     const count = config.__retryCount || 0;
-    if (count >= 2) return Promise.reject(error);
+    if (count >= 2) {
+      logApiError(error, "response (retries exhausted)");
+      return Promise.reject(error);
+    }
     config.__retryCount = count + 1;
+    if (__DEV__) {
+      console.warn(`[api] retry ${config.__retryCount}/2 ${config.method?.toUpperCase()} ${config.url}`);
+    }
     const delay = 350 * config.__retryCount;
     await new Promise((r) => setTimeout(r, delay));
     return api(config);
