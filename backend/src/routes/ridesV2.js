@@ -1,5 +1,4 @@
 import { Router } from "express";
-import { ObjectId } from "mongodb";
 import { requestRide, getRideStatus, getRequestedRides, acceptRide } from "../services/rideNativeService.js";
 
 const router = Router();
@@ -21,9 +20,6 @@ router.post("/", async (req, res) => {
 router.get("/:id/status", async (req, res) => {
   try {
     const { id } = req.params;
-    if (!ObjectId.isValid(id)) {
-      return res.status(400).json({ success: false, error: { code: "RIDE_ERROR", message: "Invalid ride ID" } });
-    }
     const result = await getRideStatus(id);
     return res.status(200).json({ success: true, data: result });
   } catch (err) {
