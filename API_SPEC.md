@@ -1,5 +1,7 @@
 # Phase 8 — API Specification
-mongodb+srv://os5027817_db_user:Kz7bygXxewckgq8J@cluster0.bccjvvm.mongodb.net/weret?retryWrites=true&w=majority&appName=Cluster0
+
+ FIREBASE_WEB_API_KEY = AIzaSyCp7g5o_jZYL7ucmgK-olpgK44pOiTssB8
+
 ## Base URL
 ```
 Production: https://reachnativecar.vercel.app/api
