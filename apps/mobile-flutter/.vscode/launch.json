@@ -2,15 +2,11 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Flutter — Samsung A56 (USB)",
+      "name": "Flutter",
       "request": "launch",
       "type": "dart",
       "program": "lib/main.dart",
-      "flutterMode": "debug",
-      "deviceId": "RKGYC04CVDX",
-      "toolArgs": [
-        "--dart-define=API_URL=http://192.168.1.15:3000"
-      ]
+      "flutterMode": "debug"
     }
   ]
 }

@@ -12,30 +12,51 @@ UnauthorizedHandler? globalUnauthorizedHandler;
 class ApiConfig {
   ApiConfig._();
 
-  static String get baseUrl {
-    const fromEnv = String.fromEnvironment('API_URL');
-    if (fromEnv.isNotEmpty) {
-      final url = fromEnv.replaceAll(RegExp(r'/$'), '');
-      print('🌐 APP IS CONNECTING TO: $url');
-      return url;
-    }
-    if (kDebugMode) {
-      print('🌐 APP IS CONNECTING TO: http://192.168.1.15:3000 (default debug)');
-      return 'http://192.168.1.15:3000';
-    }
-    print('🌐 APP IS CONNECTING TO: http://localhost:3000 (default release)');
-    return 'http://localhost:3000';
-  }
+  static const String baseUrl = 'https://carpooling-app-3-virid.vercel.app/api';
 }
 
 class ApiClient {
   ApiClient(this._prefs) {
+    print('🌐 APP IS CONNECTING TO: ${ApiConfig.baseUrl}');
     _dio = Dio(
       BaseOptions(
         baseUrl: ApiConfig.baseUrl,
         connectTimeout: const Duration(seconds: 20),
         receiveTimeout: const Duration(seconds: 30),
         headers: {'Accept': 'application/json'},
+      ),
+    );
+    _dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          debugPrint('');
+          debugPrint('════════ REQUEST ════════');
+          debugPrint('${options.method} ${options.uri}');
+          debugPrint('Headers: ${options.headers}');
+          debugPrint('Data: ${options.data}');
+          debugPrint('═════════════════════════');
+          handler.next(options);
+        },
+        onResponse: (response, handler) {
+          debugPrint('');
+          debugPrint('════════ RESPONSE ════════');
+          debugPrint('${response.statusCode}');
+          debugPrint('${response.requestOptions.uri}');
+          debugPrint('${response.data}');
+          debugPrint('══════════════════════════');
+          handler.next(response);
+        },
+        onError: (error, handler) {
+          debugPrint('');
+          debugPrint('════════ ERROR ════════');
+          debugPrint('${error.requestOptions.method}');
+          debugPrint('${error.requestOptions.uri}');
+          debugPrint('Status: ${error.response?.statusCode}');
+          debugPrint('Message: ${error.message}');
+          debugPrint('Data: ${error.response?.data}');
+          debugPrint('═══════════════════════');
+          handler.next(error);
+        },
       ),
     );
     _dio.interceptors.add(

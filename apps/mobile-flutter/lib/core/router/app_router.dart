@@ -18,6 +18,13 @@ import 'passenger_shell.dart';
 import 'driver_shell.dart';
 import 'admin_shell.dart';
 
+class _ScreenLogObserver extends NavigatorObserver {
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    debugPrint('📱 OPENED ${route.settings.name ?? route.settings.toString()}');
+  }
+}
+
 final _rootKey = GlobalKey<NavigatorState>();
 
 final appRouterProvider = Provider<GoRouter>((ref) {
@@ -26,6 +33,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     navigatorKey: _rootKey,
     initialLocation: '/onboarding',
+    observers: [_ScreenLogObserver()],
     redirect: (context, state) {
       if (!auth.hydrated) return null;
       final loggedIn = auth.isAuthenticated;

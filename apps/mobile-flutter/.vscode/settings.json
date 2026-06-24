@@ -1,8 +1,5 @@
 {
   "dart.flutterSdkPath": "D:\\Games\\flutter",
-  "dart.flutterRunAdditionalArgs": [
-    "--dart-define=API_URL=http://192.168.1.15:3000"
-  ],
   "dart.debugExternalPackageLibraries": false,
   "dart.debugSdkLibraries": false,
   "code-runner.executorMap": {
