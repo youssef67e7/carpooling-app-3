@@ -55,17 +55,20 @@ router.post("/verify-otp", async (req, res) => {
 });
 
 router.post("/verify-firebase-phone", async (req, res) => {
+  const { firebaseIdToken, name } = req.body;
+  if (!firebaseIdToken) {
+    return res.status(400).json(validationError("firebaseIdToken is required"));
+  }
   try {
-    const { firebaseIdToken, name } = req.body;
-    if (!firebaseIdToken) {
-      return res.status(400).json(validationError("firebaseIdToken is required"));
-    }
     const result = await verifyFirebasePhoneToken(firebaseIdToken, name);
     return res.status(200).json({ success: true, data: result });
   } catch (err) {
-    const msg = err.message;
+    const msg = err.message || String(err);
     if (msg.includes("Invalid Firebase token")) {
       return res.status(401).json(authError(msg));
+    }
+    if (msg.includes("credentials not configured")) {
+      return res.status(500).json(internalError("Firebase is not configured on the server"));
     }
     return res.status(500).json(internalError(msg));
   }

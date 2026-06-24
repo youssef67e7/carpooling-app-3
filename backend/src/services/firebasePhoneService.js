@@ -32,7 +32,11 @@ function initFirebase() {
 }
 
 export async function verifyFirebasePhoneToken(firebaseIdToken, name) {
-  initFirebase();
+  try {
+    initFirebase();
+  } catch {
+    throw new Error("Firebase is not configured on the server");
+  }
   let decoded;
   try {
     decoded = await admin.auth().verifyIdToken(firebaseIdToken);
