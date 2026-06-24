@@ -48,7 +48,7 @@ export function createApp() {
   app.use(express.json());
 
   app.use(async (req, res, next) => {
-    if (req.path === "/health" || req.path.startsWith("/admin-ui")) return next();
+    if (req.path === "/health" || req.path === "/api/health" || req.path.startsWith("/admin-ui")) return next();
     try {
       const ok = await ensureDb().catch(() => false);
       if (!ok) {
@@ -63,7 +63,7 @@ export function createApp() {
     }
   });
 
-  app.get("/health", async (_req, res) => {
+  const healthHandler = async (_req, res) => {
     const dbConnected = isMongoReady();
     let collectionCounts = null;
     if (dbConnected) {
@@ -83,21 +83,22 @@ export function createApp() {
       fileStorage: describeFileStorage(),
       vercel: Boolean(process.env.VERCEL),
     });
-  });
+  };
+  app.get(["/health", "/api/health"], healthHandler);
 
   app.use(globalApiLimiter);
 
-  app.use("/auth", authRoutes);
+  app.use(["/auth", "/api/auth"], authRoutes);
   app.use("/api/v2/auth", authV2Router);
   app.use("/api/v2/rides", authRequired, blockCheck, ridesV2Router);
   app.use("/api/v2/upload", authRequired, uploadV2Router);
-  app.use("/rides", rideRoutes);
-  app.use("/driver", driverRoutes);
-  app.use("/passenger", passengerRoutes);
-  app.use("/admin", adminRoutes);
-  app.use("/vehicles", vehicleRoutes);
-  app.use("/reports", reportRoutes);
-  app.use("/wallet", walletRoutes);
+  app.use(["/rides", "/api/rides"], rideRoutes);
+  app.use(["/driver", "/api/driver"], driverRoutes);
+  app.use(["/passenger", "/api/passenger"], passengerRoutes);
+  app.use(["/admin", "/api/admin"], adminRoutes);
+  app.use(["/vehicles", "/api/vehicles"], vehicleRoutes);
+  app.use(["/reports", "/api/reports"], reportRoutes);
+  app.use(["/wallet", "/api/wallet"], walletRoutes);
 
   const uploadRoot = getUploadRoot();
   app.use(
@@ -105,7 +106,7 @@ export function createApp() {
     express.static(path.join(uploadRoot, "public"), { index: false, redirect: false })
   );
 
-  app.get("/uploads/private/:userId/:file", authRequired, blockCheck, async (req, res, next) => {
+  app.get(["/uploads/private/:userId/:file", "/api/uploads/private/:userId/:file"], authRequired, blockCheck, async (req, res, next) => {
     try {
       const uid = String(req.params.userId);
       const f = String(req.params.file);
@@ -123,9 +124,9 @@ export function createApp() {
     }
   });
 
-  app.use("/upload", uploadsRoutes);
-  app.use("/ai", aiSearchRoutes);
-  app.use("/driver-application", driverApplicationRoutes);
+  app.use(["/upload", "/api/upload"], uploadsRoutes);
+  app.use(["/ai", "/api/ai"], aiSearchRoutes);
+  app.use(["/driver-application", "/api/driver-application"], driverApplicationRoutes);
 
   app.get("/admin-ui/", (_req, res) => {
     if (!existsSync(adminIndex)) {
@@ -140,7 +141,7 @@ export function createApp() {
     express.static(adminWebPath, { index: false, redirect: false, extensions: ["html"] })
   );
 
-  app.use("/", roleSwitchRoutes);
+  app.use(["/", "/api"], roleSwitchRoutes);
 
   app.use((req, res) => {
     res.status(404).json({ message: "Not found" });
