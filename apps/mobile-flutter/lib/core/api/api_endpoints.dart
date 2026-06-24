@@ -72,4 +72,6 @@ class ApiEndpoints {
 
   static const reports = '/reports';
   static const upload = '/upload';
+
+  static const authVerifyFirebasePhone = '/v2/auth/verify-firebase-phone';
 }

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { sendPhoneOtp, verifyPhoneOtp } from "../services/authNativeService.js";
+import { verifyFirebasePhoneToken } from "../services/firebasePhoneService.js";
 
 const router = Router();
 
@@ -47,6 +48,23 @@ router.post("/verify-otp", async (req, res) => {
       return res.status(400).json(authError(msg));
     }
     if (msg.toLowerCase().includes("attempts") || msg.toLowerCase().includes("invalid")) {
+      return res.status(401).json(authError(msg));
+    }
+    return res.status(500).json(internalError(msg));
+  }
+});
+
+router.post("/verify-firebase-phone", async (req, res) => {
+  try {
+    const { firebaseIdToken, name } = req.body;
+    if (!firebaseIdToken) {
+      return res.status(400).json(validationError("firebaseIdToken is required"));
+    }
+    const result = await verifyFirebasePhoneToken(firebaseIdToken, name);
+    return res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    const msg = err.message;
+    if (msg.includes("Invalid Firebase token")) {
       return res.status(401).json(authError(msg));
     }
     return res.status(500).json(internalError(msg));

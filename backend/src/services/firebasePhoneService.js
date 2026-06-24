@@ -16,7 +16,7 @@ if (!admin.apps.length) {
   });
 }
 
-export async function verifyFirebasePhoneToken(firebaseIdToken) {
+export async function verifyFirebasePhoneToken(firebaseIdToken, name) {
   let decoded;
   try {
     decoded = await admin.auth().verifyIdToken(firebaseIdToken);
@@ -33,11 +33,15 @@ export async function verifyFirebasePhoneToken(firebaseIdToken) {
   let isNewUser = false;
 
   if (!user) {
-    const insertedId = await create({
+    const userData = {
       phone: phoneNumber,
       role: "user",
       created_at: new Date(),
-    });
+    };
+    if (name && typeof name === "string" && name.trim()) {
+      userData.name = name.trim();
+    }
+    const insertedId = await create(userData);
     user = await findByPhone(phoneNumber);
     isNewUser = true;
   }

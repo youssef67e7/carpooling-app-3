@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:easy_localization/easy_localization.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -35,6 +36,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _sendingOtp = false;
   int _resendSeconds = 0;
   Timer? _resendTimer;
+  String? _verificationId;
+  bool _firebaseLoading = false;
 
   @override
   void dispose() {
@@ -122,6 +125,71 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             _normalizedPhone ?? _phone.text.trim(),
             _otp.text.trim(),
           );
+      if (mounted) _goHome();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(localizedApiError(e))));
+      }
+    }
+  }
+
+  Future<void> _sendRealSmsOtp(String phoneNumber) async {
+    setState(() => _firebaseLoading = true);
+    try {
+      await FirebaseAuth.instance.verifyPhoneNumber(
+        phoneNumber: phoneNumber,
+        verificationCompleted: (PhoneAuthCredential credential) async {
+          String? idToken = await credential.user?.getIdToken();
+          if (idToken != null) {
+            await _sendTokenToBackend(idToken);
+          }
+        },
+        verificationFailed: (FirebaseAuthException e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message ?? 'Verification failed')));
+          }
+        },
+        codeSent: (String verificationId, int? resendToken) {
+          setState(() {
+            _verificationId = verificationId;
+            _step = 'phoneOtp';
+          });
+          _startResendCooldown();
+        },
+        codeAutoRetrievalTimeout: (String verificationId) {},
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    } finally {
+      if (mounted) setState(() => _firebaseLoading = false);
+    }
+  }
+
+  Future<void> _verifyRealSmsOtp(String smsCode) async {
+    if (_verificationId == null) return;
+    try {
+      final credential = PhoneAuthProvider.credential(
+        verificationId: _verificationId!,
+        smsCode: smsCode,
+      );
+      final userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
+      final idToken = await userCredential.user?.getIdToken();
+      if (idToken != null) {
+        await _sendTokenToBackend(idToken);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    }
+  }
+
+  Future<void> _sendTokenToBackend(String firebaseIdToken) async {
+    ref.read(authProvider.notifier).clearError();
+    try {
+      await ref.read(authProvider.notifier).verifyFirebasePhone(firebaseIdToken);
       if (mounted) _goHome();
     } catch (e) {
       if (mounted) {

@@ -267,6 +267,23 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  Future<void> verifyFirebasePhone(String firebaseIdToken, {String? name}) async {
+    state = state.copyWith(loading: true, clearError: true);
+    try {
+      final api = await _api;
+      final data = await api.postJson(ApiEndpoints.authVerifyFirebasePhone, {
+        'firebaseIdToken': firebaseIdToken,
+        if (name != null && name.isNotEmpty) 'name': name,
+      });
+      final token = '${data['data']['token']}';
+      final user = WeretUser.fromJson(data['data']['user'] as Map<String, dynamic>);
+      await applySession(token: token, user: user);
+    } catch (e) {
+      state = state.copyWith(loading: false, error: localizedApiError(e, fallbackKey: 'error'));
+      rethrow;
+    }
+  }
+
   Future<void> signInWithGoogle(String idToken, {String? accessToken}) async {
     state = state.copyWith(loading: true, clearError: true);
     try {
