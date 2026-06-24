@@ -6,6 +6,7 @@ let initPromise = null;
 let memoryServer = null;
 /** @type {"atlas"|"local"|"memory"|"off"} */
 let connectionMode = "off";
+let lastConnectError = null;
 
 export function resolveMongoUri() {
   return String(process.env.MONGODB_URI || "").trim();
@@ -35,6 +36,7 @@ export function getMongoConnectionInfo() {
     localUriConfigured: Boolean(resolveMongoLocalUri()),
     persistsInAtlasUi: connectionMode === "atlas",
     persistsOnDisk: connectionMode === "atlas" || connectionMode === "local",
+    tlsInsecure: String(process.env.MONGODB_TLS_INSECURE || "").trim() === "1",
     note:
       connectionMode === "memory"
         ? "In-memory dev DB — changes are real in MongoDB but reset on server restart and do NOT appear in Atlas UI."
@@ -43,6 +45,7 @@ export function getMongoConnectionInfo() {
           : connectionMode === "atlas"
             ? "MongoDB Atlas — changes appear in Atlas Data Explorer."
             : "Not connected",
+    lastError: lastConnectError ? lastConnectError.replace(/mongodb\+srv:\/\/[^@]+@/, "mongodb+srv://***:***@") : null,
   };
 }
 
@@ -189,6 +192,7 @@ export async function connectMongo() {
           return await connectToAtlas();
         } catch (err) {
           const msg = String(err?.message || err);
+          lastConnectError = msg.slice(0, 300);
           console.warn("[mongo] Atlas unreachable (", msg.slice(0, 120), ")");
         }
       }
