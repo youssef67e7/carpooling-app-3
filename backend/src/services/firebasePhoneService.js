@@ -1,22 +1,38 @@
 import admin from "firebase-admin";
-import { readFileSync } from "fs";
+import { readFileSync, existsSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { findByPhone, create } from "../mongo/queries/users.js";
 import { signUserToken } from "../utils/signUserToken.js";
 import { ObjectId } from "mongodb";
 
-if (!admin.apps.length) {
+let firebaseInitialized = false;
+
+function initFirebase() {
+  if (firebaseInitialized) return;
+  if (admin.apps.length) {
+    firebaseInitialized = true;
+    return;
+  }
   const __dirname = dirname(fileURLToPath(import.meta.url));
-  const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT
-    ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
-    : JSON.parse(readFileSync(resolve(__dirname, "../../firebase-service-account.json"), "utf8"));
+  let serviceAccount;
+  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+  } else {
+    const filePath = resolve(__dirname, "../../firebase-service-account.json");
+    if (!existsSync(filePath)) {
+      throw new Error("Firebase credentials not configured. Set FIREBASE_SERVICE_ACCOUNT env var or place firebase-service-account.json in backend/");
+    }
+    serviceAccount = JSON.parse(readFileSync(filePath, "utf8"));
+  }
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
   });
+  firebaseInitialized = true;
 }
 
 export async function verifyFirebasePhoneToken(firebaseIdToken, name) {
+  initFirebase();
   let decoded;
   try {
     decoded = await admin.auth().verifyIdToken(firebaseIdToken);
