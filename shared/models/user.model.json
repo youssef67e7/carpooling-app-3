@@ -1,0 +1,64 @@
+import 'package:equatable/equatable.dart';
+
+class WeretUser extends Equatable {
+  const WeretUser({
+    required this.id,
+    required this.name,
+    required this.email,
+    required this.role,
+    this.activeRole,
+    this.phone = '',
+    this.isOnline = false,
+    this.isVerified = true,
+    this.profileImageUrl = '',
+    this.vehicleType = '',
+    this.googleSub,
+  });
+
+  factory WeretUser.fromJson(Map<String, dynamic> json) {
+    return WeretUser(
+      id: '${json['_id'] ?? json['id'] ?? ''}',
+      name: '${json['name'] ?? ''}',
+      email: '${json['email'] ?? ''}',
+      role: '${json['role'] ?? 'passenger'}',
+      activeRole: '${json['activeRole'] ?? json['active_role'] ?? json['role'] ?? 'passenger'}',
+      phone: '${json['phone'] ?? ''}',
+      isOnline: json['isOnline'] == true || json['is_online'] == true,
+      isVerified: json['isVerified'] != false && json['is_verified'] != false,
+      profileImageUrl: '${json['profileImageUrl'] ?? json['profile_image_url'] ?? ''}',
+      vehicleType: '${json['vehicleType'] ?? json['vehicle_type'] ?? ''}',
+      googleSub: json['googleSub'] ?? json['google_sub'],
+    );
+  }
+
+  final String id;
+  final String name;
+  final String email;
+  final String role;
+  final String? activeRole;
+  final String phone;
+  final bool isOnline;
+  final bool isVerified;
+  final String profileImageUrl;
+  final String vehicleType;
+  final dynamic googleSub;
+
+  String get effectiveRole => activeRole ?? role;
+
+  Map<String, dynamic> toJson() => {
+        '_id': id,
+        'name': name,
+        'email': email,
+        'role': role,
+        'activeRole': effectiveRole,
+        'phone': phone,
+        'isOnline': isOnline,
+        'isVerified': isVerified,
+        'profileImageUrl': profileImageUrl,
+        'vehicleType': vehicleType,
+        'googleSub': googleSub,
+      };
+
+  @override
+  List<Object?> get props => [id, email, role, effectiveRole];
+}

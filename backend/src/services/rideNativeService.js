@@ -1,0 +1,61 @@
+import { ObjectId } from "mongodb";
+import { createRide, findRideById, findActiveRideByPassenger, updateRideStatus, findNearbyAvailableDrivers } from "../mongo/queries/rides.js";
+import { findById } from "../mongo/queries/users.js";
+import { getDb } from "../mongo/nativeClient.js";
+
+export async function requestRide(passengerId, pickup, dropoff, vehicleType) {
+  const existing = await findActiveRideByPassenger(passengerId);
+  if (existing) {
+    throw new Error("User already has an active ride");
+  }
+
+  const nearbyDrivers = await findNearbyAvailableDrivers(pickup.latitude, pickup.longitude, vehicleType, 5000);
+
+  const rideId = await createRide({
+    passenger_id: new ObjectId(passengerId),
+    pickup: {
+      address: pickup.address,
+      coordinates: [pickup.longitude, pickup.latitude],
+    },
+    dropoff: {
+      address: dropoff.address,
+      coordinates: [dropoff.longitude, dropoff.latitude],
+    },
+    vehicle_type: vehicleType,
+    status: "pending",
+    created_at: new Date(),
+  });
+
+  const ride = await findRideById(rideId.toString());
+  return { ride, nearbyDrivers };
+}
+
+export async function getRideStatus(rideId) {
+  const ride = await findRideById(rideId);
+  if (!ride) {
+    throw new Error("Ride not found");
+  }
+  return ride;
+}
+
+export async function getRequestedRides(vehicleType) {
+  const db = await getDb();
+  return db
+    .collection("rides")
+    .find({ status: "pending" })
+    .sort({ created_at: -1 })
+    .limit(20)
+    .toArray();
+}
+
+export async function acceptRide(rideId, driverId) {
+  const ride = await findRideById(rideId);
+  if (!ride) {
+    throw new Error("Ride not found");
+  }
+  if (ride.status !== "pending") {
+    throw new Error("Ride is no longer available");
+  }
+  await updateRideStatus(rideId, "accepted", { driver_id: new ObjectId(driverId), accepted_at: new Date() });
+  return findRideById(rideId);
+}

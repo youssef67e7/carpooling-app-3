@@ -1,0 +1,12 @@
+{
+  "dart.flutterSdkPath": "D:\\Games\\flutter",
+  "dart.flutterRunAdditionalArgs": [
+    "--dart-define=API_URL=http://192.168.1.15:3000"
+  ],
+  "dart.debugExternalPackageLibraries": false,
+  "dart.debugSdkLibraries": false,
+  "code-runner.executorMap": {
+    "dart": "cd $dir && D:\\Games\\flutter\\bin\\flutter.bat run -d RKGYC04CVDX"
+  },
+  "code-runner.runInTerminal": true
+}

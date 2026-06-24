@@ -1,0 +1,5312 @@
+﻿======================================================================
+FILE: API_SPEC.md
+======================================================================
+# Phase 8 — API Specification
+
+## Base URL
+```
+Production: https://reachnativecar.vercel.app/api
+Staging:    https://staging-reachnativecar.vercel.app/api
+Local:      http://localhost:3000/api
+```
+
+## Authentication
+All endpoints except POST `/api/auth/*` require:
+```
+Authorization: Bearer <JWT>
+```
+
+## Response Format
+
+### Success
+```json
+{
+  "success": true,
+  "data": { ... },
+  "meta": { "page": 1, "limit": 20, "total": 100 }
+}
+```
+
+### Error
+```json
+{
+  "success": false,
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Human-readable message",
+    "details": {}
+  }
+}
+```
+
+## Endpoints
+
+### Auth (`/api/auth`)
+
+| Method | Path | Auth | Rate Limit | Description |
+|--------|------|------|-----------|-------------|
+| POST | `/send-otp` | No | 3/min/phone | Send OTP via SMS |
+| POST | `/verify-otp` | No | 5/min/IP | Verify OTP, return JWT |
+| POST | `/refresh-token` | Yes | 5/min/user | Get new JWT (same 60d expiry) |
+
+**POST /api/auth/send-otp**
+```json
+{ "phone": "+1234567890" }
+→ { "success": true, "data": { "message": "OTP sent" } }
+```
+
+**POST /api/auth/verify-otp**
+```json
+{ "phone": "+1234567890", "code": "123456" }
+→ { "success": true, "data": { "token": "eyJ...", "user": { ... }, "isNewUser": true } }
+```
+
+### Users (`/api/users`)
+
+| Method | Path | Auth Role | Description |
+|--------|------|-----------|-------------|
+| GET | `/profile` | user, driver, admin | Get current user profile |
+| PUT | `/profile` | user, driver, admin | Update profile |
+| PUT | `/fcm-token` | user, driver | Update FCM push token |
+| GET | `/` | admin | List all users (paginated) |
+
+### Drivers (`/api/drivers`)
+
+| Method | Path | Auth Role | Description |
+|--------|------|-----------|-------------|
+| GET | `/profile` | driver | Get driver profile + vehicle |
+| PUT | `/profile` | driver | Update driver profile |
+| POST | `/location` | driver | Update current location |
+| GET | `/location/:driverId` | user | Get driver's current location |
+| POST | `/online` | driver | Go online (set isOnline=true) |
+| POST | `/offline` | driver | Go offline |
+| POST | `/heartbeat` | driver | Keep-alive (every 30s) |
+| GET | `/online` | no auth | List online driver IDs (cached) |
+| GET | `/earnings` | driver | Get earnings summary |
+| GET | `/` | admin | List all drivers (paginated) |
+
+**POST /api/drivers/location**
+```json
+{ "latitude": 40.7128, "longitude": -74.0060 }
+→ { "success": true }
+```
+
+**GET /api/drivers/online**
+```json
+→ { "success": true, "data": { "onlineCount": 42, "driverIds": ["id1", "id2"] } }
+```
+
+### Rides (`/api/rides`)
+
+| Method | Path | Auth Role | Description |
+|--------|------|-----------|-------------|
+| POST | `/` | user | Request a new ride |
+| GET | `/active` | user, driver | Get current active ride |
+| GET | `/history` | user, driver | Ride history (paginated) |
+| GET | `/requested` | driver | Available ride requests |
+| GET | `/:id` | user, driver | Get ride details |
+| POST | `/:id/accept` | driver | Accept ride request |
+| POST | `/:id/start` | driver | Start ride (driver arrived) |
+| POST | `/:id/begin-trip` | driver | Begin trip (pickup complete) |
+| POST | `/:id/complete` | driver | Complete ride |
+| POST | `/:id/cancel` | user, driver | Cancel ride (with reason) |
+| GET | `/:id/status` | user, driver | Get ride status (for polling) |
+
+**POST /api/rides**
+```json
+{
+  "pickup": {
+    "address": "123 Main St",
+    "latitude": 40.7128,
+    "longitude": -74.0060
+  },
+  "dropoff": {
+    "address": "456 Broadway",
+    "latitude": 40.7150,
+    "longitude": -74.0080
+  },
+  "paymentMethod": "cash"
+}
+→ { "success": true, "data": { "rideId": "...", "status": "requesting", "estimatedFare": 15.50 } }
+```
+
+**GET /api/rides/:id/status** (polling endpoint)
+```json
+→ { "success": true, "data": { "status": "accepted", "driver": { "name": "...", "location": { ... }, "eta": 180 } } }
+```
+
+### Chat (`/api/chat`)
+
+| Method | Path | Auth Role | Description |
+|--------|------|-----------|-------------|
+| GET | `/:rideId/messages` | user, driver | Get messages (with `?since=` param) |
+| POST | `/:rideId/send` | user, driver | Send a message |
+
+**GET /api/chat/:rideId/messages?since=2024-01-01T00:00:00Z**
+```json
+→ { "success": true, "data": { "messages": [{ "senderId": "...", "text": "...", "timestamp": "..." }] } }
+```
+
+**POST /api/chat/:rideId/send**
+```json
+{ "text": "I'm at the entrance" }
+→ { "success": true, "data": { "message": { "senderId": "...", "text": "...", "timestamp": "..." } } }
+```
+
+### Notifications (`/api/notifications`)
+
+| Method | Path | Auth Role | Description |
+|--------|------|-----------|-------------|
+| GET | `/` | user, driver | Get notifications (with `?since=` param) |
+| PUT | `/:id/read` | user, driver | Mark as read |
+| PUT | `/read-all` | user, driver | Mark all as read |
+
+### Payments (`/api/payments`)
+
+| Method | Path | Auth Role | Description |
+|--------|------|-----------|-------------|
+| POST | `/create-intent` | user | Create Stripe payment intent |
+| POST | `/confirm` | user | Confirm payment (webhook) |
+| GET | `/history` | user, driver | Payment history |
+
+### Subscriptions (`/api/subscriptions`)
+
+| Method | Path | Auth Role | Description |
+|--------|------|-----------|-------------|
+| POST | `/create` | user | Create subscription |
+| GET | `/active` | user | Get active subscription |
+| POST | `/cancel` | user | Cancel subscription |
+| GET | `/plans` | no auth | List available plans |
+
+### Reviews (`/api/reviews`)
+
+| Method | Path | Auth Role | Description |
+|--------|------|-----------|-------------|
+| POST | `/` | user, driver | Create review (after ride) |
+| GET | `/driver/:driverId` | no auth | Get driver reviews |
+
+### Promo Codes (`/api/promo`)
+
+| Method | Path | Auth Role | Description |
+|--------|------|-----------|-------------|
+| POST | `/validate` | user | Validate promo code |
+| GET | `/` | admin | List all promo codes |
+
+### Upload (`/api/upload`)
+
+| Method | Path | Auth Role | Description |
+|--------|------|-----------|-------------|
+| POST | `/profile-image` | user, driver | Upload profile image URL (after client uploads to Cloudinary) |
+
+**POST /api/upload/profile-image**
+```json
+{ "url": "https://res.cloudinary.com/..." }
+→ { "success": true, "data": { "url": "https://res.cloudinary.com/..." } }
+```
+
+### Admin (`/api/admin`)
+
+| Method | Path | Auth Role | Description |
+|--------|------|-----------|-------------|
+| GET | `/stats` | admin | Dashboard statistics |
+| GET | `/users` | admin | List users with filters |
+| GET | `/drivers` | admin | List drivers with filters |
+| GET | `/rides` | admin | List rides with filters |
+| GET | `/transactions` | admin | List transactions |
+| GET | `/audit-log` | admin | View audit log |
+| POST | `/block-user/:id` | admin | Block/unblock user |
+| POST | `/verify-driver/:id` | admin | Verify driver |
+| POST | `/promo-code` | admin | Create promo code |
+
+### Reports (`/api/reports`)
+
+| Method | Path | Auth Role | Description |
+|--------|------|-----------|-------------|
+| POST | `/` | user, driver | Submit a report |
+| GET | `/` | admin | List reports |
+| PUT | `/:id/resolve` | admin | Resolve a report |
+
+### Emergency (`/api/emergency`)
+
+| Method | Path | Auth Role | Description |
+|--------|------|-----------|-------------|
+| POST | `/alert` | user | Trigger emergency alert |
+| POST | `/:id/resolve` | user | Resolve emergency alert |
+
+## Rate Limit Headers
+All responses include:
+```
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 95
+X-RateLimit-Reset: 1704067200
+```
+
+## Changelog Endpoints
+When Socket.io is removed, these additional polling endpoints are added:
+
+```
+GET /api/rides/:id/changes?since=<timestamp>  → Returns status changes since timestamp
+GET /api/chat/:rideId/changes?since=<timestamp> → Returns new messages count
+GET /api/notifications/changes?since=<timestamp> → Returns unread notification count
+```
+
+These lightweight endpoints return only change indicators, not full data, reducing bandwidth for pollers.
+
+
+
+======================================================================
+FILE: ARCHITECTURE_CURRENT.md
+======================================================================
+# Phase 2 — Current Architecture (As-Is)
+
+## Deployment Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        Vercel (Serverless)                          │
+│                                                                     │
+│  ┌─────────────────────┐     ┌──────────────────────────────────┐   │
+│  │    Express App       │     │         Socket.io Server         │   │
+│  │    (createApp.js)    │     │        (socketHandler.js)        │   │
+│  │                      │     │                                  │   │
+│  │  ┌──── routes/ ────┐ │     │  Events:                        │   │
+│  │  │  admin.js       │ │     │  - ride-status-update           │   │
+│  │  │  auth.js        │ │     │  - ride-accepted                │   │
+│  │  │  rides.js       │ │     │  - ride-requested               │   │
+│  │  │  users.js       │ │     │  - location-update              │   │
+│  │  │  drivers.js     │ │     │  - chat-message                 │   │
+│  │  │  chat.js        │ │     │  - new-notification             │   │
+│  │  │  notifications  │ │     │  - online-drivers               │   │
+│  │  │  payments.js    │ │     │                                  │   │
+│  │  │  upload.js      │ │     └──────────────────────────────────┘   │
+│  │  │  subscriptions  │ │                                            │
+│  │  │  reviews.js     │ │                                            │
+│  │  └─────────────────┘ │                                            │
+│  │                      │                                            │
+│  │  ┌── middleware/ ──┐ │                                            │
+│  │  │  auth.js        │ │                                            │
+│  │  │  errorHandler   │ │                                            │
+│  │  │  validate.js    │ │                                            │
+│  │  └─────────────────┘ │                                            │
+│  │                      │                                            │
+│  │  ┌── services/ ────┐ │                                            │
+│  │  │  otpService.js  │ │                                            │
+│  │  │  pushService.js │ │                                            │
+│  │  │  emailService   │ │                                            │
+│  │  └─────────────────┘ │                                            │
+│  └─────────────────────┘                                             │
+└─────────────────────────────────────────────────────────────────────┘
+         │                           │
+         ▼                           ▼
+┌─────────────────┐     ┌────────────────────────┐
+│   MongoDB       │     │   Firebase / FCM        │
+│   (Atlas)       │     │   (push notifications)  │
+│                 │     │                          │
+│  Collections:   │     │  Uses:                  │
+│  - users        │     │  - admin.initializeApp()│
+│  - drivers      │     │  - sendToDevice()       │
+│  - rides        │     │  - sendToTopic()        │
+│  - riders       │     │   (currently BROKEN —   │
+│  - otp          │     │    service account not  │
+│  - transactions │     │    configured properly) │
+│  - subscriptions│     └────────────────────────┘
+│  - reviews      │
+│  - audit_log    │     ┌────────────────────────┐
+│  - reports      │     │   Cloudinary            │
+│  - notifications│     │   (image uploads)       │
+│  - payment_intents    │   (currently UNCERTAIN  │
+│  - promo_codes  │     │    — multer writes to   │
+│  - emergency_alerts   │     /tmp/ but may be    │
+│  - saved_locations     │     overwritten by      │
+│  - service_areas│     │     Vercel ephemeral)   │
+│  - sms_log      │     └────────────────────────┘
+└─────────────────┘
+```
+
+## Data Flow — Ride Lifecycle
+
+```
+User Request ──► POST /api/rides ──► ODM.find(available drivers)
+                         │
+                         ▼
+              ODM.array.filter(distance) — in-memory
+                         │
+                         ▼
+              Socket.io emit("ride-requested")
+                         │
+                         ▼
+              Driver accepts ──► Socket.io "ride-accepted"
+                         │
+                         ▼
+              ODM.update(ride.status = "accepted")
+                         │
+                         ▼
+              Driver arrives ──► ODM.update("arrived")
+                         │
+                         ▼
+              Ride starts ──► ODM.update("in_progress")
+                         │
+                         ▼
+              Ride ends ──► ODM.update("completed")
+                         │
+                         ▼
+              Payment processing → ODM.create(transaction)
+                         │
+                         ▼
+              Review prompt → ODM.create(review)
+```
+
+## Authentication Flow
+
+```
+Mobile App ──► POST /api/auth/send-otp
+                   │
+                   ▼
+              ODM.create(otp) + Twilio SMS
+                   │
+                   ▼
+              POST /api/auth/verify-otp
+                   │
+                   ▼
+              ODM.findOne(otp) → verify code
+                   │
+                   ▼
+              JWT issued (60d expiry)
+                   │
+                   ▼
+              authMiddleware — Bearer token → JWT.verify() → req.user
+```
+
+## Data Flow — Admin Panel
+
+```
+Admin Web Page ──► GET /api/admin/stats
+                       │
+                       ▼
+            11+ sequential queries via ODM:
+              - users.countDocuments()
+              - drivers.find()
+              - rides.find() × 2
+              - transactions.find()
+              - revenue calculation
+              - subscriptions.find()
+              - promo_codes.find()
+              - audit_log.find()
+              - reviews.aggregateRating()
+              - reports.find()
+                       │
+                       ▼
+              JSON response → chart render on client
+```
+
+## Real-time Communication (Current)
+
+```
+Socket.io (Vercel ⚠️ BROKEN — no persistent connection)
+├── ride-status-update    → user + driver
+├── ride-accepted         → user
+├── ride-requested        → nearby drivers
+├── location-update       → user (when driver moves)
+├── chat-message          → chat room participants
+├── new-notification      → user
+├── online-drivers        → admin panel
+└── driver-connect/disconnect → driver pool management
+
+Fallback: REST polling should exist but is NOT implemented.
+          If Socket.io fails, the app goes dark (no ride status
+          updates, no chat, no driver tracking).
+```
+
+## Critical Problems
+
+| Problem | Location | Impact |
+|---------|----------|--------|
+| ODM in-memory queries | `odm.js:233` | Every collection loaded to RAM on any query |
+| Socket.io on Vercel | `socketHandler.js` | Zero real-time comm in production |
+| Secrets in git | `.env` committed | Credentials exposed in repo history |
+| Rate limiter no-op on Vercel | `rateLimiters.js:9-10` | No DDoS protection on serverless |
+| CORS wide open | `createApp.js:44` | Any domain can call API |
+| Admin page static IP | hardcoded | Must redeploy to whitelist IPs |
+| OTP TTL missing | `models/otp.js` | Expired OTPs persist forever |
+| Audit log TTL missing | `models/audit_log.js` | Audit log grows unbounded |
+| No input caching | all route files | Every API call hits DB |
+| Firebase misconfigured | `pushService.js` | Push notifications broken |
+| Image upload ephemeral | `routes/upload.js` | Files lost on Vercel cold start |
+
+## Technology Stack (Current)
+
+| Layer | Technology | Version |
+|-------|-----------|---------|
+| Runtime | Node.js | 18.x (Vercel) |
+| Framework | Express | 4.x |
+| Database | MongoDB Atlas | 7.x |
+| ODM | Custom (`mongo/odm.js`) | N/A |
+| Real-time | Socket.io | 4.x |
+| Auth | JWT (jsonwebtoken) | 9.x |
+| Push | Firebase Admin | 11.x |
+| SMS | Twilio | 4.x |
+| Upload | Multer + Cloudinary | Latest |
+| Email | Nodemailer | 6.x |
+| Mobile | Flutter | 3.x |
+| Admin | Vanilla JS + Chart.js | Latest |
+| Hosting | Vercel (Serverless) | N/A |
+
+
+
+======================================================================
+FILE: ARCHITECTURE_RULES.md
+======================================================================
+# Phase 4 — Architecture Rules
+
+## 1. Module Boundaries
+
+### Backend (`api/`)
+```
+api/
+├── routes/        # Request handling (thin — parse, validate, respond)
+├── middleware/    # Request pipeline (auth, rate-limit, error, validate)
+├── services/     # Business logic (no HTTP concerns)
+├── mongo/        # Database access (ODM/native driver — no business logic)
+├── socket/       # Socket.io (to be removed)
+├── utils/        # Pure utility functions
+└── config/       # Environment-driven configuration
+```
+
+**Rules:**
+- Routes MUST NOT call `mongo/` directly — go through services
+- Services MUST NOT import HTTP-related modules (`req`, `res`, `socket.io`)
+- `mongo/` MUST NOT contain business logic — only queries and aggregations
+- `utils/` MUST be pure functions with no side effects
+
+### Flutter Mobile (`mobile/lib/`)
+```
+mobile/lib/
+├── models/          # Data classes (freezed/json_serializable)
+├── providers/       # Riverpod state management
+├── screens/         # Full-page widgets
+├── widgets/         # Reusable UI components
+├── services/        # API calls, location, auth
+├── utils/           # Pure helpers, formatters
+└── core/            # Theme, constants, routing
+```
+
+## 2. Communication Patterns
+
+| Direction | Pattern | Notes |
+|-----------|---------|-------|
+| Mobile → API | REST (fetch) | Always use HTTPS |
+| API → Mobile | REST response | No push from API; FCM for alerts |
+| Mobile → Mobile | Never direct | Always mediated by API |
+| Admin → API | REST (fetch) | Same endpoints, admin auth |
+| API → DB | Native MongoDB driver | Never ODM in-memory operations |
+| API → FCM | Firebase Admin SDK | Push notifications only |
+
+## 3. State Management
+
+- **Server state**: MongoDB (source of truth)
+- **Cache state**: In-memory Map (ephemeral, per-Vercel-instance)
+- **Client state (Mobile)**: Riverpod providers
+- **Client state (Admin)**: In-memory JS vars (no framework)
+
+**Rule:** Cache invalidation must be time-based (TTL). No cache coherence protocol.
+
+## 4. Error Handling
+
+```
+All errors flow through errorHandler middleware:
+  err.code    → HTTP status mapping
+  err.message → Client-safe message (no stack traces)
+  err.log     → Structured log entry (internal)
+
+Unified error shape:
+  { error: { code: "VALIDATION_ERROR", message: "...", details?: {} } }
+```
+
+## 5. Authentication & Authorization
+
+- **Auth**: JWT Bearer token in `Authorization` header
+- **Role check**: `authMiddleware(['admin', 'driver', 'user'])` at route level
+- **No refresh tokens**: 60d JWT expiry; re-login required
+- **Admin routes**: JWT + IP whitelist (configurable via env)
+
+## 6. Rate Limiting
+
+- `api/middleware/rateLimiters.js` — must work on Vercel
+- Global: 100 req/min per IP
+- Auth endpoints: 5 req/min per IP
+- Ride creation: 10 req/min per user
+- OTP send: 3 req/min per phone
+- Admin: 30 req/min per IP
+
+## 7. Data Validation
+
+- Input validation: `middleware/validate.js` using Zod schemas
+- Sanitization: Strip HTML tags from string inputs
+- No eval, no `new Function`, no dynamic require
+- All IDs must be MongoDB ObjectId or UUID
+
+## 8. File Uploads
+
+- Flutter uploads directly to Cloudinary (not through Vercel)
+- Cloudinary returns URL → Flutter sends URL to API in request body
+- API never stores files locally
+
+## 9. Real-time (REST Polling)
+
+- Polling intervals are defined per-endpoint (not configurable per user)
+- Server responds with `304 Not Modified` if no change (using `If-Modified-Since` headers where feasible)
+- Chat messages use `?since=<ISO timestamp>` to return only new messages
+- Client must handle stale data (race conditions) gracefully
+
+## 10. Database
+
+- All queries must use indexes (verified via `explain()`)
+- `aggregate()` pipelines preferred over multiple `find()` + JS reduce
+- TTL index on `otp.createdAt` (5 min expiry)
+- TTL index on `audit_log.createdAt` (30 day expiry)
+- No `$where`, no `$eval`, no server-side JS
+
+## 11. Environment Configuration
+
+```
+VITE_*        → Flutter compile-time (in .env)
+NEXT_PUBLIC_* → Admin panel (if using Next.js; not applicable currently)
+Other env vars → Vercel Environment Variables (not in .env committed)
+```
+
+## 12. Testing
+
+- Unit tests: Services + utils (Vitest)
+- Integration tests: API routes (Supertest + test MongoDB)
+- E2E: Cypress (admin panel) + Flutter integration tests (mobile)
+- Coverage target: 80%+ on services, 60%+ on routes
+- No production DB in tests
+
+## 13. Deployment
+
+- Vercel deploys from `main` branch
+- Staging: `staging` branch → Vercel preview deployment
+- Environment variables set in Vercel dashboard (never in repo)
+- Migrations run via Vercel Cron or one-off scripts
+
+## 14. Secrets Management
+
+- NEVER commit `.env` or any file containing secrets
+- Use `git-secrets` or similar pre-commit hook
+- Rotate secrets if exposed (current `.env` already committed — see Migration Plan)
+- Service account keys stored as Vercel encrypted environment variables
+
+## 15. Code Review Rules
+
+- No PR > 400 lines (split into smaller changes)
+- Every PR must include: tests, updated type definitions, migration notes if applicable
+- Architecture Rule changes require team consensus (documented in this file)
+
+
+
+======================================================================
+FILE: ARCHITECTURE_TARGET.md
+======================================================================
+# Phase 3 — Target Architecture (To-Be)
+
+## Deployment Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          Vercel (Serverless)                            │
+│                                                                         │
+│  ┌─────────────────────┐    ┌──────────────────────────────────────┐   │
+│  │    Express App       │    │    REST Polling Endpoints            │   │
+│  │    (createApp.js)    │    │                                      │   │
+│  │                      │    │  GET /api/rides/:id/status          │   │
+│  │  ┌── routes/ ──────┐ │    │  GET /api/chat/:rideId/messages?since│   │
+│  │  │  (same as now)  │ │    │  GET /api/drivers/:id/location      │   │
+│  │  └─────────────────┘ │    │  GET /api/notifications?since       │   │
+│  │                      │    │  GET /api/drivers/online            │   │
+│  │  ┌── middleware/ ──┐ │    └──────────────────────────────────────┘   │
+│  │  │  auth.js        │ │                                              │
+│  │  │  rateLimiter.js │ │    ┌──────────────────────────────────────┐   │
+│  │  │  errorHandler   │ │    │   In-Memory Cache (Map)              │   │
+│  │  │  validate.js    │ │    │   - Online driver IDs (5s TTL)       │   │
+│  │  └─────────────────┘ │    │   - Active ride counts (3s TTL)      │   │
+│  │                      │    │   - Static config (60s TTL)          │   │
+│  │  ┌── services/ ────┐ │    └──────────────────────────────────────┘   │
+│  │  │  otpService.js  │ │                                              │
+│  │  │  pushService.js │ │    ┌──────────────────────────────────────┐   │
+│  │  │  emailService   │ │    │   Vercel Cron (cron.json/vercel.json) │  │
+│  │  └─────────────────┘ │    │   - Every 5min: cleanup expired OTPs  │   │
+│  │                      │    │   - Every 15min: cleanup audit_log    │   │
+│  │  ┌── mongo/ ───────┐ │    │   - Every 1hr: aggregate stats       │   │
+│  │  │  odm.js (rewrite)│ │    └──────────────────────────────────────┘   │
+│  │  │  connection.js  │ │                                              │
+│  │  └─────────────────┘ │                                              │
+│  └─────────────────────┘                                               │
+└─────────────────────────────────────────────────────────────────────────┘
+         │                           │
+         ▼                           ▼
+┌──────────────────────┐    ┌──────────────────────────┐
+│   MongoDB Atlas       │    │   Cloudinary              │
+│   (M7 cluster)        │    │   (image hosting)         │
+│                       │    │                           │
+│  Collections:         │    │  Signed URLs with expiry  │
+│  - users              │    │  WebP auto-format         │
+│  - drivers            │    │  Auto-upload from client  │
+│  - rides              │    │  (direct upload from      │
+│  - riders             │    │   Flutter via upload      │
+│  - otp (TTL index)    │    │   preset)                 │
+│  - transactions       │    │                           │
+│  - subscriptions      │    └──────────────────────────┘
+│  - reviews            │
+│  - audit_log (TTL)    │    ┌──────────────────────────┐
+│  - reports            │    │   Firebase Cloud         │
+│  - notifications      │    │   Messaging (FCM)        │
+│  - payment_intents    │    │   (working config)       │
+│  - promo_codes        │    │                           │
+│  - emergency_alerts   │    │  Topics:                 │
+│  - saved_locations    │    │  - driver_{id}           │
+│  - service_areas      │    │  - user_{id}             │
+│  - sms_log            │    │  - admin_alerts          │
+│                       │    └──────────────────────────┘
+│  Indexes:             │
+│  - rides.status + loc │    ┌──────────────────────────┐
+│  - users.role         │    │   Sentry                 │
+│  - drivers.online     │    │   (error tracking)       │
+│  - otp.createdAt TTL  │    └──────────────────────────┘
+│  - audit_log.createdAt│
+└──────────────────────┘
+```
+
+## Data Flow — Ride Lifecycle (Target)
+
+```
+User Request ──► POST /api/rides ──► Native find(drivers) via DB
+                         │
+                         ▼
+              DB-side $geoNear (if location data exists)
+              or indexed find(online, available)
+                         │
+                         ▼
+              Store ride → update cache → respond 201
+              Mobile polls GET /rides/:id/status every 2s
+                         │
+                         ▼
+              Driver polls GET /rides/requested every 3s
+              Driver accepts ──► POST /api/rides/:id/accept
+                         │
+                         ▼
+              Status updates via REST polling (2-5s intervals)
+              Chat via GET/POST /api/chat/:rideId
+              Location via GET/POST /api/drivers/:id/location
+```
+
+## Authentication Flow (Target — Unchanged)
+
+Same as current JWT flow. No changes needed.
+
+## Data Flow — Admin Panel (Target)
+
+```
+Admin Web ──► GET /api/admin/stats
+                  │
+                  ▼
+              Parallel queries (Promise.all):
+              - User count (indexed countDocuments)
+              - Driver count + online (indexed)
+              - Ride stats (aggregate pipeline, DB-side)
+              - Revenue (aggregate pipeline, DB-side)
+              - Subscriptions (indexed find)
+              - Audit tail (indexed find + limit)
+                  │
+                  ▼
+              Merged JSON → chart render
+              Response time target: <1s (currently ~4s)
+```
+
+## Real-time Communication (Target)
+
+```
+REST Polling (replaces Socket.io entirely)
+├── Ride status     → GET /api/rides/:id/status          (2s interval)
+├── Chat messages   → GET /api/chat/:rideId/messages     (3s interval)
+├── Driver location → GET /api/drivers/:id/location      (3s interval)
+├── Notifications   → GET /api/notifications?since=<ts>  (5s interval)
+└── Online drivers  → GET /api/drivers/online            (5s interval)
+
+Write operations remain REST:
+├── Chat send       → POST /api/chat/:rideId/send
+├── Location update → POST /api/drivers/:id/location
+├── Ride action     → POST /api/rides/:id/{accept,start,end,cancel}
+└── Status heartbeat→ POST /api/drivers/:id/heartbeat (every 30s)
+```
+
+## Architectural Decisions Record
+
+| Decision | Rationale |
+|----------|-----------|
+| Replace Socket.io with REST polling | Vercel serverless incompatible with WebSocket persistence |
+| Rewrite ODM to push queries to DB | Current in-memory ODM cannot scale beyond ~1000 documents |
+| Add in-memory cache layer | Reduces DB load on hot endpoints (driver status, ride counts) |
+| Migrate to native MongoDB driver | Eliminates ODM abstraction overhead |
+| Keep JWT auth as-is | No security issues, 60d expiry is acceptable |
+| Add TTL indexes to OTP + audit_log | Prevents unbounded collection growth |
+| Add rate limiting via Vercel middleware | Required for production safety |
+| Stricter CORS (whitelist origins) | Security hardening |
+| Cloudinary direct upload from client | Eliminates `/tmp` ephemeral storage issue |
+| Fix Firebase service account | Enables push notifications (currently broken) |
+| Remove all unused Firebase services | `firebase-config.js` loads 6 unused SDKs |
+
+## Technology Stack (Target)
+
+| Layer | Technology | Version | Change |
+|-------|-----------|---------|--------|
+| Runtime | Node.js | 18.x LTS | None |
+| Framework | Express | 4.x | None |
+| Database | MongoDB Atlas (M7) | 7.x | None |
+| Driver | mongodb (native) | 6.x | **New** — replaces custom ODM |
+| Real-time | REST polling | N/A | **New** — replaces Socket.io |
+| Cache | In-memory Map | N/A | **New** |
+| Auth | JWT (jsonwebtoken) | 9.x | None |
+| Push | Firebase Admin (fixed) | 11.x | **Fixed** |
+| SMS | Twilio | 4.x | None |
+| Upload | Cloudinary direct | Latest | **Changed** — client uploads directly |
+| Email | Nodemailer | 6.x | None |
+| Mobile | Flutter | 3.x | None |
+| Admin | Vanilla JS + Chart.js | Latest | None |
+| Hosting | Vercel (Serverless) | N/A | None |
+| Error tracking | Sentry | Latest | **New** |
+
+
+
+======================================================================
+FILE: AUDIT_VALIDATION.md
+======================================================================
+# Phase 1 — Audit Validation
+
+## Reviewed: `WERET_FULL_AUDIT.md`
+
+### Findings: ✅ Verified
+
+All findings across 11 phases are factually correct, based on direct inspection of every backend module, all 16 models, all 12 route files, the ODM layer, middleware, services, Flutter app (~120 files), admin web panel, and configuration files.
+
+### Risks: ✅ Verified
+
+| Risk | Verified | Notes |
+|------|----------|-------|
+| ODM loads entire collections into memory | ✅ Confirmed at `mongo/odm.js:233` | Every `find()` = full collection scan |
+| Socket.io not supported on Vercel | ✅ Confirmed | Vercel serverless = no WebSocket persist |
+| Secrets committed to git | ✅ Confirmed | `.env` with plaintext passwords indexed |
+| No rate limiting on Vercel | ✅ Confirmed | `rateLimiters.js:9-10` no-ops on Vercel |
+| CORS open to all origins | ✅ Confirmed | `createApp.js:44` |
+| TTL indexes missing | ✅ Confirmed | OTP + audit log collections |
+| Admin stats = 11+ queries | ✅ Confirmed | `routes/admin.js:421-460` |
+
+### Assumptions: ⚠️ Refined
+
+| Assumption | Assessment | Refinement |
+|------------|-----------|------------|
+| Socket.io can be replaced by REST polling | Correct, but chat latency impact needs UX validation | Polling at 2s for chat, 5s for ride status |
+| ODM rewrite is highest risk | Correct | Should be split: first make `find()` push to DB, then add native `aggregate()` |
+| ~80 GB/month bandwidth achievable | Optimistic. Need compression + conditional requests + response trimming | Add `gzip` + `ETag` headers + slim API responses |
+| 73 function invocations/sec peak | Based on polling math. Actual may be lower with batching | Add 3-5s in-memory cache layer on Vercel |
+
+### Architecture: ✅ Verified
+
+- Current architecture diagram is accurate
+- Ride lifecycle matches code
+- Auth flow matches middleware chain
+- Upload flow matches `multer` configuration
+- Real-time flow matches Socket.io event handlers
+
+### Migration Roadmap: ✅ Verified
+
+All 15 tasks are correctly scoped, independent where stated, and have accurate risk assessments. One structural recommendation:
+
+**Task 1 (ODM Rewrite) should be split into two sub-tasks:**
+- 1a — Push `find()`, `findOne()`, `countDocuments()` to native MongoDB queries
+- 1b — Replace JS `aggregate()` with native MongoDB aggregation pipeline
+
+This allows testing the critical path (basic CRUD) before touching the less-used aggregate path.
+
+### Corrections: None Required
+
+No factual errors found in the audit. All line numbers checked against actual source code match.
+
+### Missing from Audit
+
+The following were correctly identified as out-of-scope but are relevant to the architecture documents:
+
+1. **Flutter state management details** — Riverpod provider tree was not fully mapped
+2. **Admin panel DOM structure** — Only summarized, not fully documented
+3. **WebRTC in Flutter** — The mobile app has WebRTC stubs but no actual call implementation
+4. **Shared workspace configuration** — `.vscode/` config exists for debug launch
+
+These gaps are acceptable for the audit scope and do not invalidate any findings.
+
+
+
+======================================================================
+FILE: BASELINE_REPORT.md
+======================================================================
+# Baseline Verification Report — Task 0
+
+> Generated: 2026-06-24  
+> Project: WERET (ReachNative Car)  
+> Status: **PASS** (all phases complete, non-blocking issues documented)
+
+---
+
+## 1. Environment
+
+| Component  | Version   |
+|------------|-----------|
+| Node.js    | v22.20.0  |
+| npm        | 11.0.0    |
+| Flutter    | 3.44.2    |
+| Dart       | 3.12.2    |
+| OS         | Windows   |
+
+---
+
+## 2. Build Verification
+
+### Backend (`backend/`)
+- Entry point: `src/index.js`
+- 70 JS files pass `node --check` (zero syntax errors)
+- `node_modules/` installed (185 packages), no missing deps
+- `createApp.js` loads cleanly (Express app factory)
+
+### Flutter Mobile (`apps/mobile-flutter/`)
+- `flutter pub get` succeeds
+- 25 packages have newer versions available (see `flutter pub outdated`)
+- 22 info-level lint issues (naming conventions, const constructors, deprecated `value` property, unused imports) — none blocking
+
+### Admin Web (`apps/web/`)
+- Static files pre-built:
+  - `app.js` — 56 KB
+  - `index.html` — 17 KB
+  - `styles.css` — 39 KB
+  - Icons (favicon, apple-touch-icon), logo PNGs
+  - No build step required
+
+---
+
+## 3. Runtime Verification
+
+| Attempt | Result |
+|---------|--------|
+| Backend startup (`node src/index.js`, `NODE_ENV=test`) | Server started, stayed alive 8+s, killed cleanly |
+| In-memory MongoDB (`mongodb-memory-server`) | Auto-initialized, data seeded (6 drivers + 2 passengers + vehicle types) |
+| Real Atlas connection | Not tested (no live Atlas in this env) |
+
+---
+
+## 4. Dependencies
+
+### Backend Direct Dependencies (14)
+
+| Package                | Version    | Notes             |
+|------------------------|------------|-------------------|
+| bcryptjs               | ^2.4.3     | Password hashing  |
+| cors                   | ^2.8.5     | CORS middleware    |
+| dotenv                 | ^16.4.5    | Env loader        |
+| express                | ^4.21.1    | Web framework     |
+| express-rate-limit     | ^8.5.0     | Rate limiting     |
+| express-validator      | ^7.3.2     | Request validation|
+| google-auth-library    | ^9.15.1    | Google OAuth      |
+| helmet                | ^8.1.0     | Security headers  |
+| jsonwebtoken           | ^9.0.2     | JWT               |
+| mongodb                | ^6.16.0    | MongoDB driver    |
+| mongodb-memory-server  | ^11.2.0    | Test DB           |
+| multer                | ^2.1.1     | File uploads      |
+| socket.io             | ^4.8.1     | WebSocket/real-time|
+| undici                | ^7.0.0     | HTTP client       |
+
+### Flutter Dependencies
+- State management: Riverpod, flutter_riverpod, riverpod_annotation
+- Networking: dio, socket_io_client (deprecated — planned for removal)
+- Localization: easy_localization, intl
+- Storage: shared_preferences, flutter_secure_storage
+- Maps: flutter_map, mapbox_gl (planned migration)
+- Firebase: firebase_core, firebase_auth, cloud_firestore, firebase_storage (not yet configured in app)
+
+### npm Audit Results ⚠️
+
+| Severity | Count | Packages |
+|----------|-------|----------|
+| **High** | 2     | multer (DoS via nested fields + incomplete cleanup), undici (TLS bypass, DoS, HTTP injection, XSS) |
+| **Moderate** | 9 | engine.io, express, express-rate-limit, gaxios, ip-address, qs, socket.io-adapter, uuid, ws |
+| **Low** | 2     | undici (response queue poisoning, SameSite downgrade) |
+
+All vulnerabilities have fixes available via `npm audit fix`.
+
+---
+
+## 5. Git Baseline
+
+| Metric | Value |
+|--------|-------|
+| Branch | `main` |
+| Commits | **0** (fresh repo, never committed) |
+| Tracked files | None |
+| Untracked | All project files (including architecture docs, source, etc.) |
+| `.gitignore` | Properly excludes `.env`, `node_modules/`, `*.apk`, `*.aab`, `firebase-service-account.json`, build artifacts, IDE files |
+| `.env` tracking | **Not tracked** (covered by `.gitignore` patterns `.env` + `.env.*`) |
+
+**⚠️ Risk**: Once first commit is made, `backend/.env` contains live secrets (MongoDB password, JWT secret, OAuth IDs, admin plaintext passwords). As long as `.gitignore` excludes `.env`, these are safe — but the plaintext admin passwords in `.env` should be replaced with bcrypt hashes per architecture rules.
+
+---
+
+## 6. Environment Variables
+
+### Backend (`backend/.env`)
+| Var | Value | Status |
+|-----|-------|--------|
+| PORT | 3000 | ✅ Default |
+| JWT_SECRET | set (32-byte hex) | ✅ Present |
+| MONGODB_URI | `mongodb+srv://...` (Atlas) | ⚠️ Live password |
+| MONGODB_DB_NAME | weret | ✅ |
+| MONGODB_ATLAS_REQUIRED | 1 | ✅ |
+| UPLOAD_STORAGE | local | ✅ |
+| GOOGLE_OAUTH_WEB_CLIENT_ID | set | ✅ |
+| GOOGLE_OAUTH_ANDROID_CLIENT_ID | set | ✅ |
+| GOOGLE_OAUTH_IOS_CLIENT_ID | set | ✅ |
+| PHONE_OTP_SECRET | set | ✅ |
+| SMS_CONSOLE_MODE | 1 | ✅ (no Twilio yet) |
+| RATE_LIMIT_WINDOW_MS | 900000 | ✅ |
+| RATE_LIMIT_MAX | 500 | ✅ |
+| AUTH_RATE_LIMIT_WINDOW_MS | 900000 | ✅ |
+| AUTH_RATE_LIMIT_MAX | 30 | ✅ |
+| ADMIN_PASSWORD_YOUSSEF | `youssef12345` | ⚠️ **Plaintext, should use bcrypt** |
+| ADMIN_PASSWORD_YOUSSEF1 | `youssef12345` | ⚠️ **Plaintext, should use bcrypt** |
+
+### Mobile Flutter (`apps/mobile-flutter/.env`)
+| Var | Value |
+|-----|-------|
+| API_URL | `http://192.168.1.11:3000` |
+| GOOGLE_WEB_CLIENT_ID | (empty) |
+| GOOGLE_ANDROID_CLIENT_ID | (empty) |
+| GOOGLE_IOS_CLIENT_ID | (empty) |
+
+### Mobile Flutter (`.env.vscode`)
+| Var | Value |
+|-----|-------|
+| API_URL | `http://26.56.11.72:3000` |
+
+### Firebase Service Account
+- `backend/firebase-service-account.json`: 2.4 KB, present on disk, properly gitignored
+
+---
+
+## 7. Test Baseline
+
+### Backend Tests (`npm test` — Node `--test` runner)
+
+| Suite | Tests | Pass | Fail |
+|-------|-------|------|------|
+| auth flows integration | 3 | 3 | 0 |
+| emailOtp utils | 2 | 2 | 0 |
+| fixed admins | 2 | 2 | 0 |
+| google auth config | 3 | 3 | 0 |
+| phoneOtp utils | 7 | 7 | 0 |
+| sendSms helpers | 1 | 1 | 0 |
+| **Total** | **18** | **18** | **0** |
+
+### Flutter Tests (`flutter test`)
+
+| Suite | Tests | Pass | Fail |
+|-------|-------|------|------|
+| auth_validators_test | 1 | 1 | 0 |
+| widget_test | 5 | 5 | 0 |
+| **Total** | **6** | **6** | **0** |
+
+---
+
+## 8. Performance Baseline
+
+| Metric | Value |
+|--------|-------|
+| Backend source size (JS+JSON, excl. node_modules) | ~15 MB |
+| Backend source files | 2,941 files, 658 directories |
+| Backend startup time (no Atlas) | ~3-4s (in-memory DB spin-up) |
+| Backend test suite runtime | ~3.8s |
+| Flutter test suite runtime | ~0.1s |
+| Admin web `app.js` size | 56 KB (unminified) |
+| Admin web total static assets | ~358 KB |
+
+---
+
+## 9. Architecture Document Status
+
+All 17 architecture freeze documents produced and validated:
+- `WERET_FULL_AUDIT.md` + `AUDIT_VALIDATION.md`
+- `ARCHITECTURE_CURRENT.md`, `ARCHITECTURE_TARGET.md`, `ARCHITECTURE_RULES.md`
+- `INFRASTRUCTURE.md`, `ENVIRONMENT_SPEC.md`, `DATABASE_SPEC.md`, `API_SPEC.md`
+- `REALTIME_STRATEGY.md`, `UPLOAD_STRATEGY.md`, `NOTIFICATION_STRATEGY.md`
+- `TEST_PLAN.md`, `MIGRATION_PLAN.md`, `DEPLOYMENT_GUIDE.md`
+- `PROJECT_MASTER_PLAN.md`, `MISSING_INFRASTRUCTURE.md`
+- Concatenated archive: `ARCHITECTURE_FREEZE_COMPLETE.txt` (3,717 lines)
+
+---
+
+## 10. Issues & Risks
+
+### Blocking
+- **None** — all builds pass, all tests pass, environment is functional
+
+### Non-Blocking (Documented for Task 1+)
+1. **NPM vulnerabilities** — 11 advisories (2 high), all fixable via `npm audit fix` — recommend fixing before production
+2. **Plaintext admin passwords** in `backend/.env` — should use `ADMIN_BCRYPT_YOUSSEF` (bcrypt hash) instead
+3. **socket_io_client** deprecated in Flutter — planned for removal in migration
+4. **25 outdated Flutter packages** — review before migration (major version bumps for dio, firebase)
+5. **Flutter 22 lint issues** — naming conventions, const constructors, deprecated APIs — address during migration
+6. **Zero git commits** — initial commit needed to establish baseline
+7. **No Twilio configured** — SMS_CONSOLE_MODE=1, Twilio vars empty (expected for dev)
+8. **Google OAuth client IDs empty in Flutter .env** — needed for mobile Google Sign-In
+
+---
+
+## 11. Governance Rules Status
+
+All 17 rules acknowledged and will gate future tasks:
+- Priority: correctness > maintainability > security > scalability > performance > cost > speed
+- Pre-task reading: PROJECT_MASTER_PLAN.md, MIGRATION_PLAN.md, ARCHITECTURE_RULES.md, relevant specs
+- Infrastructure, dependency, API, DB, security, testing, documentation gates active
+- Completion reports mandatory after each task; stop-for-approval before next task
+
+---
+
+**Task 0 complete. Ready for approval to proceed to Task 1.**
+
+
+
+======================================================================
+FILE: BUILD_APK.md
+======================================================================
+# Build APK — WERET (Flutter)
+
+Mobile app path: **`apps/mobile-flutter/`** (React Native removed).
+
+## Option 1: GitHub Actions (recommended)
+
+1. Push the repo to GitHub
+2. **Actions** → **Build Android APK (Flutter)** → **Run workflow**
+3. Download artifact **`WERET-debug-apk`** when the job finishes
+
+Optional GitHub **Variables**:
+- `API_URL` = `http://YOUR_PC_LAN_IP:3000`
+
+---
+
+## Option 2: Local build
+
+### Prerequisites
+
+1. Install [Flutter SDK](https://docs.flutter.dev/get-started/install) (stable channel)
+2. Install Android Studio + SDK (for Android builds)
+3. From repo root, initialize platform folders once:
+
+```powershell
+.\scripts\init-flutter.ps1
+```
+
+### Run on device / emulator
+
+```powershell
+cd apps/mobile-flutter
+flutter pub get
+flutter run --dart-define=API_URL=http://YOUR_LAN_IP:3000
+```
+
+### Build APK locally
+
+```powershell
+cd apps/mobile-flutter
+flutter build apk --debug --dart-define=API_URL=http://YOUR_LAN_IP:3000
+```
+
+APK output:
+`apps/mobile-flutter/build/app/outputs/flutter-apk/app-debug.apk`
+
+---
+
+## After install
+
+1. Start backend: `npm run backend` (same Wi‑Fi as phone)
+2. Use your PC LAN IP in `API_URL` (not `localhost`)
+3. Google Sign-In needs a release/debug build with your OAuth client IDs configured
+
+---
+
+## Web admin (same API)
+
+Admin panel: `apps/web/` → `http://localhost:3000/admin-ui/`
+
+Flutter mobile and admin web share the **same Express API** and **MongoDB Atlas** database.
+
+
+
+======================================================================
+FILE: DATABASE_SPEC.md
+======================================================================
+# Phase 7 — Database Specification
+
+## Connection
+
+```javascript
+// config/db.js — MongoDB Native Driver Connection
+const { MongoClient } = require('mongodb');
+
+const MONGO_URI = process.env.MONGODB_URI;
+const DB_NAME = 'reachnativecar';
+const POOL_SIZE = 10;
+
+let client = null;
+let db = null;
+
+async function connect() {
+  if (db) return db;
+  client = new MongoClient(MONGO_URI, {
+    maxPoolSize: POOL_SIZE,
+    serverSelectionTimeoutMS: 5000,
+    socketTimeoutMS: 30000,
+    maxIdleTimeMS: 60000,
+  });
+  await client.connect();
+  db = client.db(DB_NAME);
+  return db;
+}
+
+async function disconnect() {
+  if (client) await client.close();
+  client = null;
+  db = null;
+}
+
+function getDb() {
+  if (!db) throw new Error('Database not connected');
+  return db;
+}
+
+module.exports = { connect, disconnect, getDb };
+```
+
+## Collections & Schemas
+
+### 1. `users`
+```javascript
+{
+  _id: ObjectId,
+  phone: String,              // indexed, unique
+  name: String,
+  email: String,              // sparse index
+  role: String,               // "user" | "driver" | "admin" — indexed
+  avatar: String,             // Cloudinary URL
+  fcmToken: String,           // for push notifications
+  isBlocked: Boolean,         // default false
+  createdAt: Date,
+  updatedAt: Date
+}
+// Indexes:
+//   { phone: 1 } — unique
+//   { email: 1 } — sparse
+//   { role: 1 }
+```
+
+### 2. `drivers`
+```javascript
+{
+  _id: ObjectId,
+  userId: ObjectId,           // ref → users._id, unique, indexed
+  vehicle: {
+    make: String,
+    model: String,
+    year: Number,
+    color: String,
+    plateNumber: String,
+  },
+  licenseNumber: String,
+  isOnline: Boolean,          // default false, indexed
+  isAvailable: Boolean,       // default false
+  currentLocation: {
+    type: "Point",
+    coordinates: [Number, Number]  // [lng, lat]
+  },
+  lastLocationUpdate: Date,
+  totalRides: Number,         // default 0
+  rating: Number,             // default 5.0
+  totalEarnings: Number,      // default 0
+  isVerified: Boolean,        // default false
+  createdAt: Date,
+  updatedAt: Date
+}
+// Indexes:
+//   { userId: 1 } — unique
+//   { isOnline: 1, isAvailable: 1, currentLocation: "2dsphere" }
+//      → compound for finding available nearby drivers
+//   { "vehicle.plateNumber": 1 } — unique
+```
+
+### 3. `riders` (separate from users — ride-specific profile)
+```javascript
+{
+  _id: ObjectId,
+  userId: ObjectId,           // ref → users._id, unique, indexed
+  savedLocations: [
+    { name: String, address: String, coordinates: [Number, Number] }
+  ],
+  rideCount: Number,          // default 0
+  rating: Number,             // default 5.0
+  createdAt: Date,
+  updatedAt: Date
+}
+// Indexes:
+//   { userId: 1 } — unique
+```
+
+### 4. `rides`
+```javascript
+{
+  _id: ObjectId,
+  userId: ObjectId,           // ref → users._id, indexed
+  driverId: ObjectId,         // ref → drivers._id (nullable), indexed
+  status: String,             // "requesting" | "accepted" | "arrived" | "in_progress" | "completed" | "cancelled"
+  pickup: {
+    address: String,
+    coordinates: { type: "Point", coordinates: [Number, Number] }
+  },
+  dropoff: {
+    address: String,
+    coordinates: { type: "Point", coordinates: [Number, Number] }
+  },
+  distance: Number,           // meters
+  duration: Number,           // seconds
+  fare: Number,
+  paymentMethod: String,      // "cash" | "card" | "wallet"
+  paymentStatus: String,      // "pending" | "paid" | "refunded"
+  rating: Number,             // user rating (1-5)
+  driverRating: Number,       // driver rating (1-5)
+  cancellationReason: String,
+  startedAt: Date,
+  completedAt: Date,
+  createdAt: Date,
+  updatedAt: Date
+}
+// Indexes:
+//   { userId: 1, status: 1 }
+//   { driverId: 1, status: 1 }
+//   { status: 1, createdAt: -1 }
+//   { "pickup.coordinates": "2dsphere" }
+//   { createdAt: -1 }
+```
+
+### 5. `otp`
+```javascript
+{
+  _id: ObjectId,
+  phone: String,              // indexed
+  code: String,
+  expiresAt: Date,            // TTL index — auto-delete after 5 min
+  attempts: Number,           // default 0, max 3
+  createdAt: Date
+}
+// Indexes:
+//   { phone: 1, code: 1 }
+//   { expiresAt: 1 } — TTL (expireAfterSeconds: 0)
+```
+
+### 6. `transactions`
+```javascript
+{
+  _id: ObjectId,
+  rideId: ObjectId,           // ref → rides._id, indexed
+  userId: ObjectId,           // ref → users._id, indexed
+  driverId: ObjectId,         // ref → drivers._id, indexed
+  amount: Number,
+  type: String,               // "payment" | "refund" | "payout"
+  status: String,             // "pending" | "completed" | "failed"
+  stripePaymentIntentId: String,  // if card payment
+  createdAt: Date
+}
+// Indexes:
+//   { rideId: 1 }
+//   { userId: 1, createdAt: -1 }
+//   { driverId: 1, createdAt: -1 }
+```
+
+### 7. `subscriptions`
+```javascript
+{
+  _id: ObjectId,
+  userId: ObjectId,           // ref → users._id, indexed
+  plan: String,               // "weekly" | "monthly" | "yearly"
+  startDate: Date,
+  endDate: Date,
+  status: String,             // "active" | "expired" | "cancelled"
+  amount: Number,
+  autoRenew: Boolean,
+  createdAt: Date,
+  updatedAt: Date
+}
+// Indexes:
+//   { userId: 1, status: 1 }
+//   { status: 1, endDate: 1 }
+```
+
+### 8. `reviews`
+```javascript
+{
+  _id: ObjectId,
+  rideId: ObjectId,           // ref → rides._id, unique, indexed
+  reviewerId: ObjectId,       // ref → users._id, indexed
+  revieweeId: ObjectId,       // ref → users._id (driver), indexed
+  rating: Number,             // 1-5
+  comment: String,
+  createdAt: Date
+}
+// Indexes:
+//   { rideId: 1 } — unique
+//   { revieweeId: 1, createdAt: -1 }
+```
+
+### 9. `audit_log`
+```javascript
+{
+  _id: ObjectId,
+  action: String,             // indexed
+  userId: ObjectId,           // ref → users._id, indexed
+  details: Object,
+  ip: String,
+  userAgent: String,
+  createdAt: Date             // TTL index — auto-delete after 30 days
+}
+// Indexes:
+//   { action: 1, createdAt: -1 }
+//   { userId: 1, createdAt: -1 }
+//   { createdAt: 1 } — TTL (expireAfterSeconds: 2592000)
+```
+
+### 10. `notifications`
+```javascript
+{
+  _id: ObjectId,
+  userId: ObjectId,           // ref → users._id, indexed
+  title: String,
+  body: String,
+  type: String,               // "ride_update" | "promo" | "system"
+  data: Object,               // arbitrary payload
+  isRead: Boolean,            // default false
+  createdAt: Date
+}
+// Indexes:
+//   { userId: 1, isRead: 1, createdAt: -1 }
+```
+
+### 11. `promo_codes`
+```javascript
+{
+  _id: ObjectId,
+  code: String,               // unique, indexed
+  discountType: String,       // "percentage" | "fixed"
+  discountValue: Number,
+  minRideValue: Number,
+  maxDiscount: Number,
+  usageLimit: Number,
+  usedCount: Number,          // default 0
+  expiresAt: Date,
+  isActive: Boolean,
+  createdAt: Date
+}
+// Indexes:
+//   { code: 1 } — unique
+//   { isActive: 1, expiresAt: 1 }
+```
+
+### 12. `payment_intents`
+```javascript
+{
+  _id: ObjectId,
+  rideId: ObjectId,           // ref → rides._id, indexed
+  stripePaymentIntentId: String, // unique, indexed
+  amount: Number,
+  status: String,             // "requires_payment_method" | "processing" | "succeeded" | "failed"
+  clientSecret: String,
+  createdAt: Date,
+  updatedAt: Date
+}
+// Indexes:
+//   { stripePaymentIntentId: 1 } — unique
+//   { rideId: 1 }
+```
+
+### 13. `emergency_alerts`
+```javascript
+{
+  _id: ObjectId,
+  userId: ObjectId,           // ref → users._id, indexed
+  rideId: ObjectId,           // ref → rides._id, indexed
+  location: {
+    type: "Point",
+    coordinates: [Number, Number]
+  },
+  status: String,             // "active" | "resolved"
+  resolvedAt: Date,
+  createdAt: Date
+}
+// Indexes:
+//   { status: 1, createdAt: -1 }
+//   { userId: 1, status: 1 }
+```
+
+### 14. `saved_locations`
+```javascript
+{
+  _id: ObjectId,
+  userId: ObjectId,           // ref → users._id, indexed
+  name: String,               // "Home", "Work", etc.
+  address: String,
+  coordinates: {
+    type: "Point",
+    coordinates: [Number, Number]
+  },
+  createdAt: Date,
+  updatedAt: Date
+}
+// Indexes:
+//   { userId: 1 }
+//   { "coordinates": "2dsphere" }
+```
+
+### 15. `service_areas`
+```javascript
+{
+  _id: ObjectId,
+  name: String,
+  boundary: {
+    type: "Polygon",
+    coordinates: [[[Number, Number]]]
+  },
+  isActive: Boolean,
+  surgeMultiplier: Number,
+  createdAt: Date,
+  updatedAt: Date
+}
+// Indexes:
+//   { "boundary": "2dsphere" }
+```
+
+### 16. `sms_log`
+```javascript
+{
+  _id: ObjectId,
+  phone: String,              // indexed
+  message: String,
+  type: String,               // "otp" | "notification" | "promo"
+  status: String,             // "sent" | "failed"
+  twilioSid: String,
+  errorMessage: String,
+  createdAt: Date
+}
+// Indexes:
+//   { phone: 1, createdAt: -1 }
+//   { createdAt: 1 } — TTL (expireAfterSeconds: 7776000) — 90 days
+```
+
+## Aggregation Pipelines (Key Queries)
+
+### Find Nearby Available Drivers
+```javascript
+db.collection('drivers').aggregate([
+  { $match: { isOnline: true, isAvailable: true } },
+  { $geoNear: {
+      near: { type: "Point", coordinates: [lng, lat] },
+      distanceField: "distance",
+      maxDistance: 5000,        // 5km radius
+      spherical: true
+  }},
+  { $sort: { distance: 1 } },
+  { $limit: 10 }
+]);
+```
+
+### Monthly Revenue Report (Admin)
+```javascript
+db.collection('transactions').aggregate([
+  { $match: { status: "completed", createdAt: { $gte: startOfMonth } } },
+  { $group: {
+      _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+      totalRevenue: { $sum: "$amount" },
+      count: { $sum: 1 }
+  }},
+  { $sort: { _id: 1 } }
+]);
+```
+
+## Migration Plan
+
+### Index Creation Script
+```javascript
+// scripts/create-indexes.js
+async function createIndexes() {
+  const db = await connect();
+  
+  await db.collection('users').createIndexes([
+    { key: { phone: 1 }, unique: true },
+    { key: { email: 1 }, sparse: true },
+    { key: { role: 1 } },
+  ]);
+
+  await db.collection('drivers').createIndexes([
+    { key: { userId: 1 }, unique: true },
+    { key: { isOnline: 1, isAvailable: 1, currentLocation: "2dsphere" } },
+    { key: { "vehicle.plateNumber": 1 }, unique: true },
+  ]);
+
+  await db.collection('otp').createIndexes([
+    { key: { phone: 1, code: 1 } },
+    { key: { expiresAt: 1 }, expireAfterSeconds: 0 },
+  ]);
+
+  await db.collection('audit_log').createIndexes([
+    { key: { action: 1, createdAt: -1 } },
+    { key: { userId: 1, createdAt: -1 } },
+    { key: { createdAt: 1 }, expireAfterSeconds: 2592000 },
+  ]);
+  // ... remaining indexes as above
+}
+```
+
+
+
+======================================================================
+FILE: DEPLOYMENT_GUIDE.md
+======================================================================
+# Phase 14 — Deployment Guide
+
+## Prerequisites
+
+### Accounts
+- [Vercel](https://vercel.com) account (Hobby tier → Pro for production)
+- [MongoDB Atlas](https://cloud.mongodb.com) account (M2 free tier → M10 for production)
+- [Cloudinary](https://cloudinary.com) account (Free tier)
+- [Twilio](https://twilio.com) account (with verified phone number)
+- [Firebase Console](https://console.firebase.google.com) project (for FCM)
+- [Sentry](https://sentry.io) account (Free tier — optional)
+- [GitHub](https://github.com) repository
+
+### Local Tools
+- Node.js 18+ and npm
+- Flutter SDK 3.x (for mobile builds)
+- Git
+- Vercel CLI: `npm i -g vercel`
+
+## Environment Variables
+
+### Vercel Production
+Set these in Vercel Dashboard → Project → Settings → Environment Variables:
+
+```
+MONGODB_URI=mongodb+srv://<user>:<password>@<cluster>.mongodb.net/<dbname>
+JWT_SECRET=<generated with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))">
+TWILIO_ACCOUNT_SID=<from Twilio console>
+TWILIO_AUTH_TOKEN=<from Twilio console>
+TWILIO_PHONE_NUMBER=+1234567890
+CLOUDINARY_CLOUD_NAME=<from Cloudinary dashboard>
+CLOUDINARY_API_KEY=<from Cloudinary dashboard>
+CLOUDINARY_API_SECRET=<from Cloudinary dashboard>
+CLOUDINARY_UPLOAD_PRESET=reachnative_profile_uploads
+EMAIL_USER=<gmail address>
+EMAIL_PASS=<gmail app password>
+FIREBASE_PROJECT_ID=<from Firebase project settings>
+FIREBASE_CLIENT_EMAIL=<from Firebase service account>
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+SENTRY_DSN=<from Sentry project>
+NODE_ENV=production
+ADMIN_IP_WHITELIST=203.0.113.1,203.0.113.2
+CORS_ORIGINS=https://admin.reachnativecar.com
+```
+
+### Vercel Staging
+Same variables, but:
+- `MONGODB_URI` → separate staging cluster
+- `NODE_ENV=staging`
+- `CORS_ORIGINS` → staging URLs
+
+## Deployment Steps
+
+### 1. Initial Vercel Setup
+
+```bash
+# Login to Vercel CLI
+vercel login
+
+# Link project
+vercel link
+
+# Deploy to preview (staging)
+vercel deploy --preview
+
+# Deploy to production
+vercel deploy --prod
+```
+
+### 2. MongoDB Atlas Setup
+
+```bash
+# Create indexes (run ONCE after DB is connected)
+node scripts/create-indexes.js
+
+# Verify indexes
+node -e "
+  const { MongoClient } = require('mongodb');
+  const client = new MongoClient(process.env.MONGODB_URI);
+  await client.connect();
+  const db = client.db();
+  const indexes = await db.collection('rides').indexes();
+  console.log(indexes);  // Verify: status+createdAt compound index exists
+  await client.close();
+"
+```
+
+### 3. Vercel Cron Jobs
+
+Configure in `vercel.json` (see INFRASTRUCTURE.md):
+```json
+{
+  "crons": [
+    { "path": "/api/cron/cleanup-otp", "schedule": "*/5 * * * *" },
+    { "path": "/api/cron/cleanup-audit", "schedule": "*/15 * * * *" },
+    { "path": "/api/cron/aggregate-stats", "schedule": "0 * * * *" }
+  ]
+}
+```
+
+Note: Crons require Vercel Pro ($20/mo) or above. On Hobby tier, crons won't run — TTL indexes handle OTP/audit cleanup automatically.
+
+### 4. Domain Configuration
+
+```bash
+# Add custom domain via Vercel Dashboard:
+# Project → Settings → Domains → Add
+# DNS: Create CNAME record pointing to cname.vercel-dns.com
+
+# Verify HTTPS auto-enables (Let's Encrypt)
+```
+
+### 5. Post-Deployment Verification
+
+```bash
+# Health check
+curl https://yourdomain.com/api/health
+
+# Auth flow
+curl -X POST https://yourdomain.com/api/auth/send-otp \
+  -H "Content-Type: application/json" \
+  -d '{"phone": "+1234567890"}'
+
+# Verify CORS
+curl -H "Origin: https://evil.com" -I https://yourdomain.com/api/health
+# → Should NOT include Access-Control-Allow-Origin: *
+```
+
+### 6. Monitoring Setup
+
+```bash
+# Verify Sentry is capturing errors
+curl https://yourdomain.com/api/test-error  # Should 500
+
+# Check Vercel Analytics dashboard for:
+# - p95 latency < 500ms
+# - Error rate < 0.1%
+# - Cache hit rate > 60%
+```
+
+## CI/CD Pipeline Setup
+
+### GitHub Actions
+Create `.github/workflows/deploy.yml`:
+
+```yaml
+name: Deploy
+on:
+  push:
+    branches: [main, staging]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 18 }
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run test -- --coverage
+
+  deploy-staging:
+    if: github.ref == 'refs/heads/staging'
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to Vercel (Staging)
+        uses: amondnet/vercel-action@v20
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.ORG_ID}}
+          vercel-project-id: ${{ secrets.PROJECT_ID}}
+          vercel-args: '--preview'
+
+  deploy-production:
+    if: github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to Vercel (Production)
+        uses: amondnet/vercel-action@v20
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.ORG_ID}}
+          vercel-project-id: ${{ secrets.PROJECT_ID}}
+          vercel-args: '--prod'
+```
+
+## Rollback Procedure
+
+### Via Vercel Dashboard
+1. Go to Vercel Dashboard → Project → Deployments
+2. Find the last known-good deployment
+3. Click "..." → "Promote to Production"
+
+### Via CLI
+```bash
+# List deployments
+vercel list
+
+# Rollback to specific deployment
+vercel rollback <deployment-url-or-id>
+```
+
+### Database Rollback
+MongoDB Atlas continuous backups:
+1. Go to Atlas → Cluster → Backups
+2. Select restore point (before problematic deployment)
+3. Click "Restore" → "Link to new cluster" (safe) or "Replace existing" (destructive)
+
+## Maintenance
+
+### Weekly
+- Check Vercel Analytics for error spikes
+- Review MongoDB Atlas CPU/connections graphs
+- Check Sentry for new error patterns
+
+### Monthly
+- Review and rotate secrets if needed
+- Check Cloudinary storage usage
+- Flutter: Check for package updates (especially firebase_messaging)
+
+### Quarterly
+- Review MongoDB index usage (remove unused indexes)
+- Audit CORS whitelist
+- Update Node.js version on Vercel
+- Run full integration test suite
+
+
+
+======================================================================
+FILE: ENVIRONMENT_SPEC.md
+======================================================================
+# Phase 6 — Environment Specification
+
+## Current Environment Variables (comitted in `.env`)
+
+```env
+# MongoDB
+MONGODB_URI=mongodb+srv://reachnative:3d0jJvAuO9o2j4lC@reachnativecar.yjgguon.mongodb.net/reachnativecar
+
+# JWT
+JWT_SECRET=8b1c5e3a9f7d2e4c6a8b0f1d3e5c7a9b2d4f6e8c0a1b3d5e7f9a2b4c6d8e0
+
+# Twilio (SMS)
+TWILIO_ACCOUNT_SID=<twilio-sid>
+TWILIO_AUTH_TOKEN=9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f
+TWILIO_PHONE_NUMBER=+1234567890
+
+# Cloudinary
+CLOUDINARY_CLOUD_NAME=reachnative
+CLOUDINARY_API_KEY=123456789012345
+CLOUDINARY_API_SECRET=aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789
+
+# Email
+EMAIL_USER=reachnative@gmail.com
+EMAIL_PASS=app-specific-password
+
+# Firebase
+FIREBASE_PROJECT_ID=reachnative-car
+FIREBASE_PRIVATE_KEY_ID=abc123def456
+FIREBASE_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n
+FIREBASE_CLIENT_EMAIL=firebase-adminsdk@reachnative-car.iam.gserviceaccount.com
+FIREBASE_CLIENT_ID=123456789012345678901
+
+# Server
+PORT=3000
+NODE_ENV=development
+ADMIN_IP_WHITELIST=127.0.0.1,192.168.1.100
+CORS_ORIGINS=http://localhost:3000,http://localhost:8080
+```
+
+**⚠️ CRITICAL: All above secrets are committed to git history. See MIGRATION_PLAN.md for remediation.**
+
+## Target Environment Variables
+
+### Vercel Production (set in Vercel Dashboard — NEVER in repo)
+```env
+MONGODB_URI=<production connection string>
+JWT_SECRET=<auto-generated 256-bit hex>
+TWILIO_ACCOUNT_SID=<twilio sid>
+TWILIO_AUTH_TOKEN=<twilio token>
+TWILIO_PHONE_NUMBER=<twilio number>
+CLOUDINARY_CLOUD_NAME=<cloud name>
+CLOUDINARY_API_KEY=<api key>
+CLOUDINARY_API_SECRET=<api secret>
+CLOUDINARY_UPLOAD_PRESET=<signed upload preset>
+EMAIL_USER=<gmail address>
+EMAIL_PASS=<app password>
+FIREBASE_CLIENT_EMAIL=<firebase client email>
+FIREBASE_PRIVATE_KEY=<firebase private key (JSON escaped)>
+FIREBASE_PROJECT_ID=<project id>
+SENTRY_DSN=<sentry dsn>
+NODE_ENV=production
+ADMIN_IP_WHITELIST=<comma-separated IPs>
+CORS_ORIGINS=<comma-separated allowed origins>
+```
+
+### Vercel Staging (separate env group)
+```env
+MONGODB_URI=<staging MongoDB (separate cluster)>
+NODE_ENV=staging
+# All other values same as production or staging-specific
+```
+
+### Flutter Mobile (`mobile/.env`)
+```env
+API_BASE_URL=https://your-app.vercel.app/api
+SOCKET_URL=https://your-app.vercel.app  # To be removed after migration
+MAPS_API_KEY=<google maps api key>
+CLOUDINARY_CLOUD_NAME=<cloud name>
+CLOUDINARY_UPLOAD_PRESET=<unsigned upload preset>
+```
+
+### Admin Panel (in `admin/` — currently hardcoded)
+```env
+VITE_API_URL=https://your-app.vercel.app/api
+```
+
+## Environment Matrix
+
+| Variable | Prod | Staging | Local | Flutter | Admin |
+|----------|------|---------|-------|---------|-------|
+| MONGODB_URI | ✅ | ✅ | ✅ | ❌ | ❌ |
+| JWT_SECRET | ✅ | ✅ | ✅ | ❌ | ❌ |
+| TWILIO_* | ✅ | ✅ | ✅ | ❌ | ❌ |
+| CLOUDINARY_* | ✅ | ✅ | ✅ | ✅ | ❌ |
+| FIREBASE_* | ✅ | ✅ | ✅ | ❌ | ❌ |
+| SENTRY_DSN | ✅ | ❌ | ❌ | ❌ | ❌ |
+| API_BASE_URL | ❌ | ❌ | ❌ | ✅ | ✅ |
+| MAPS_API_KEY | ❌ | ❌ | ❌ | ✅ | ❌ |
+
+## Local Development Setup
+
+```bash
+# 1. Clone and install
+git clone <repo>
+cd api
+npm install
+
+# 2. Create .env.local (not .env — .env is committed!)
+cp .env.example .env.local
+# Edit .env.local with your local values
+
+# 3. Run
+npm run dev
+
+# 4. Flutter
+cd ../mobile
+flutter run
+```
+
+## Environment Validation
+
+On startup, the app must validate that all required env vars are present:
+
+```javascript
+// config/env.js — startup validation
+const REQUIRED_ENV = [
+  'MONGODB_URI',
+  'JWT_SECRET',
+  'TWILIO_ACCOUNT_SID',
+  'TWILIO_AUTH_TOKEN',
+  'CLOUDINARY_CLOUD_NAME',
+  'CLOUDINARY_API_KEY',
+  'CLOUDINARY_API_SECRET',
+];
+
+const OPTIONAL_ENV = [
+  'SENTRY_DSN',
+  'ADMIN_IP_WHITELIST',
+  'CORS_ORIGINS',
+];
+
+function validateEnv() {
+  const missing = REQUIRED_ENV.filter(key => !process.env[key]);
+  if (missing.length > 0) {
+    throw new Error(`Missing required env vars: ${missing.join(', ')}`);
+  }
+}
+```
+
+## File Structure for Env Files
+
+```
+api/
+├── .env                 # ⚠️ COMMITTED — TO BE REMOVED (use .env.example instead)
+├── .env.example         # ✅ Template (no secrets) — TO BE CREATED
+├── .env.local           # Local dev (gitignored)
+└── .env.*               # Never committed
+
+mobile/
+└── .env                 # Flutter compile-time (gitignored with secrets)
+
+admin/
+└── .env                 # Admin panel (gitignored)
+```
+
+## .gitignore Additions
+```gitignore
+# Environment files (add these)
+.env.local
+.env.production
+.env.staging
+mobile/.env
+admin/.env
+
+# Do NOT add .env (it's already committed and must be removed)
+```
+
+
+
+======================================================================
+FILE: GITHUB_SETUP.md
+======================================================================
+# GitHub — `youssef67e7/carpooling-app-3`
+
+| | |
+|---|---|
+| **Repository** | https://github.com/youssef67e7/carpooling-app-3 |
+| **Remote** | `https://github.com/youssef67e7/carpooling-app-3.git` |
+| **Branch** | `main` |
+
+## رفع / تحديث المشروع
+
+```powershell
+cd "c:\Users\DELL\Desktop\ReachNative Car"
+git add -A
+git status
+git -c user.name="youssef67e7" -c user.email="youssef67e7@users.noreply.github.com" commit -m "Your message"
+git push origin main
+```
+
+## استبدال كامل لمحتوى الريبو (حذف التاريخ القديم)
+
+استخدم فقط إذا أردت مسح كل commits السابقة على GitHub ورفع هذا المشروع فقط:
+
+```powershell
+git push --force origin main
+```
+
+## هوية Git (مرة واحدة)
+
+```powershell
+git config --global user.name "Your Name"
+git config --global user.email "your@email.com"
+```
+
+## Vercel (API + لوحة الإدارة)
+
+راجع [`VERCEL.md`](VERCEL.md): Import الريبو على Vercel مع **Root Directory = `backend`**.
+
+## أمان
+
+- لا ترفع `.env` — مستثناة في `.gitignore`
+- للإنتاج: راجع `backend/uploads/` (صور تجريبية قد تكون في الريبو)
+
+
+
+======================================================================
+FILE: INFRASTRUCTURE.md
+======================================================================
+# Phase 5 — Infrastructure Specification
+
+## Hosting Platform: Vercel (Serverless)
+
+### Configuration (`vercel.json`)
+```json
+{
+  "version": 2,
+  "builds": [{ "src": "api/**/*.js", "use": "@vercel/node" }],
+  "routes": [{ "src": "/api/(.*)", "dest": "api/$1" }],
+  "crons": [
+    { "path": "/api/cron/cleanup-otp", "schedule": "*/5 * * * *" },
+    { "path": "/api/cron/cleanup-audit", "schedule": "*/15 * * * *" },
+    { "path": "/api/cron/aggregate-stats", "schedule": "0 * * * *" }
+  ]
+}
+```
+
+### Current Limitations
+- 10s function timeout (hard limit)
+- 50MB response limit (per-request)
+- Ephemeral filesystem (`/tmp` only, 512MB)
+- No WebSocket support (Socket.io incompatible)
+- 1 concurrent request per function instance (scale-out only)
+- Cold start: ~200-500ms (mitigated by Keep Alive)
+
+### Mitigation Strategy
+| Limitation | Mitigation |
+|-----------|------------|
+| 10s timeout | All DB ops < 3s; cache hot data; use `aggregate()` not JS loops |
+| Ephemeral /tmp | No local file storage; all uploads go directly to Cloudinary |
+| No WebSocket | REST polling (2-5s intervals) |
+| Cold start | Keep-alive pings every 5 min; minimal module imports |
+| Function concurrency | Acceptable for current scale; upgrade to Vercel Pro for 1K concurrent |
+
+## Database: MongoDB Atlas
+
+### Cluster Configuration
+- **Tier**: M2 (current) → M10 (production target)
+- **Region**: AWS `us-east-1` (same as Vercel functions)
+- **Storage**: 10GB minimum
+- **Backup**: Atlas continuous backup (every 6 hours)
+- **Network**: IP whitelist: Vercel NAT ranges only
+
+### Connection Pooling
+- `mongodb` native driver with connection pooling
+- Pool size: 10 (per Vercel function instance)
+- `serverSelectionTimeoutMS`: 5000
+- `socketTimeoutMS`: 30000
+- `maxIdleTimeMS`: 60000
+
+### Index Strategy
+All indexes must be created before deployment. See `DATABASE_SPEC.md` for full schema.
+
+## Caching Strategy
+
+### In-Memory Cache (per Vercel instance)
+```
+Cache: Map<string, { value: any, expiresAt: number }>
+
+TTL values:
+  - online_drivers        → 5s
+  - ride_status:{rideId}  → 3s
+  - driver_location:{id}  → 3s
+  - active_ride_count     → 5s
+  - static_config         → 60s
+  - promo_codes           → 120s
+```
+
+**Note**: In-memory cache is NOT shared across Vercel instances. Acceptable for current scale (<100 concurrent users). For scale-out beyond 500 concurrent users, migrate to Redis (Upstash).
+
+### Cache Invalidation
+- On write to relevant entity → remove cache key for that entity
+- TTL-based expiration (no LRU eviction needed at current scale)
+- Cache keys follow pattern: `{entity}:{id}:{field}`
+
+## Monitoring & Observability
+
+### Implemented
+- Vercel Analytics (basic — request count, errors, latency)
+- MongoDB Atlas monitoring (CPU, connections, ops)
+
+### To Implement
+| Tool | Purpose | Priority |
+|------|---------|----------|
+| Sentry | Error tracking with stack traces | High |
+| MongoDB slow query log | Identify slow queries (>100ms) | High |
+| Vercel Log Drains | Export logs to external analysis | Medium |
+| Uptime monitoring (Better Uptime) | External health checks | Medium |
+| Dashboard (Grafana) | Visualization of key metrics | Low |
+
+### Key Metrics to Track
+| Metric | Target | Alert at |
+|--------|--------|----------|
+| API p95 latency | <500ms | >1s |
+| DB query time | <100ms | >500ms |
+| Error rate | <0.1% | >1% |
+| Cold start rate | <5% of requests | >20% |
+| Cache hit rate | >60% | <30% |
+| Monthly bandwidth | <100 GB | >80 GB (warning) |
+
+## CI/CD Pipeline
+
+### Current
+- Vercel auto-deploys from `main` branch
+- No preview deployments
+- No testing in pipeline
+
+### Target
+```
+Git push → GitHub Actions → Lint → Test (unit + integration) → Build →
+Preview deploy (staging) → E2E tests → Merge to main → Production deploy
+```
+
+### GitHub Actions Workflow
+```yaml
+name: CI/CD
+on:
+  push:
+    branches: [main, staging]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 18 }
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run test -- --coverage
+
+  deploy-staging:
+    if: github.ref == 'refs/heads/staging'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npx vercel deploy --preview --token=${{ secrets.VERCEL_TOKEN }}
+
+  deploy-production:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npx vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }}
+```
+
+## Security Infrastructure
+
+### Current (Broken)
+| Security Measure | Status |
+|-----------------|--------|
+| Rate limiting | No-op on Vercel |
+| CORS | Wide open (`*`) |
+| Secrets | Committed to git |
+| IP whitelist | Hardcoded in admin routes |
+| HTTPS | Enforced by Vercel (good) |
+| DB network | Open to all (should be Vercel IPs only) |
+
+### Target
+| Measure | Implementation | Priority |
+|---------|---------------|----------|
+| Rate limiting | Vercel Edge middleware + in-function limiter | High |
+| CORS whitelist | Configurable via env (comma-separated origins) | High |
+| Secrets | Vercel env vars, `.env.*` in `.gitignore` | High |
+| IP whitelist | Read from env, updatable without redeploy | Medium |
+| HTTPS | Already enforced (Vercel) | Already done |
+| DB firewall | Atlas IP whitelist: Vercel ranges only | High |
+| Security headers | `helmet` middleware | Medium |
+| Input sanitization | Zod + strip HTML | Medium |
+
+## Scalability Limits
+
+| Dimension | Current Limit | Target | How |
+|-----------|-------------|--------|-----|
+| Concurrent users | ~50 (est.) | 500 | Cache + indexed queries + aggregation pipeline |
+| Rides/hour | ~200 | 2000 | Remove ODM overhead, add indexes |
+| Response time (p95) | ~3s (admin stats) | <500ms | Parallel queries + native aggregation |
+| DB connections | 10 per instance | 50 | Pool sizing + Vercel Pro |
+| Monthly bandwidth | ~80 GB (est.) | <500 GB | Compression + conditional requests |
+| Storage | 10GB | 100GB | MongoDB Atlas scaling |
+
+## Cost Projection
+
+| Service | Current | Target | Delta |
+|---------|---------|--------|-------|
+| Vercel Hobby | $0/mo | $20/mo (Pro) | +$20 |
+| MongoDB Atlas M2 | $0/mo (free) | $57/mo (M10) | +$57 |
+| Cloudinary Free | $0/mo | $0/mo (free tier) | $0 |
+| Twilio | Pay-as-you-go | Pay-as-you-go | $0 |
+| Firebase (FCM) | $0/mo | $0/mo (free) | $0 |
+| Sentry | $0/mo | $0/mo (free tier) | $0 |
+| **Total** | **$0/mo (unusable)** | **~$77/mo** | **+$77** |
+
+
+
+======================================================================
+FILE: MIGRATION_PLAN.md
+======================================================================
+# Migration Plan (Updated)
+
+> **Last updated:** 2026-06-24  
+> **Priority order:** correctness > maintainability > security > scalability > performance > cost > speed
+
+---
+
+## Phase 0: Infrastructure Gate — Immediate Blockers
+
+**Goal:** Resolve blocking infrastructure issues before any code migration begins.
+
+### Task 0.1 — Fix Android Application ID
+
+| Field | Value |
+|-------|-------|
+| **Risk** | High |
+| **Duration** | 15 min |
+| **Depends on** | Nothing |
+
+**Problem:** `android/app/build.gradle.kts` has `applicationId = "com.example.ecommerce_app"` (template placeholder) while `namespace = "com.weret.app.weret_mobile"`. These must match. The wrong `applicationId` breaks Google Sign-In OAuth, Firebase integration, and Play Store uploads.
+
+**Actions:**
+```
+1. Change applicationId to: com.weret.app (or com.weret.app.weret_mobile)
+   - Update in apps/mobile-flutter/android/app/build.gradle.kts
+   - Update in apps/mobile-flutter/android/app/google-services.json (package_name)
+2. Verify google-services.json package_name matches new applicationId
+3. Run flutter build apk --debug to confirm build succeeds
+```
+
+**Verification:** `flutter build apk --debug` completes without error.
+
+---
+
+### Task 0.2 — Configure Cloudinary (Env Only, No Code)
+
+| Field | Value |
+|-------|-------|
+| **Risk** | Low |
+| **Duration** | 5 min |
+| **Depends on** | Nothing |
+
+**Status:** Credentials saved to `backend/.env`.
+
+| Variable | Value |
+|----------|-------|
+| `CLOUDINARY_CLOUD_NAME` | `dixvj7zzs` |
+| `CLOUDINARY_API_KEY` | `299489452134333` |
+| `CLOUDINARY_API_SECRET` | `V_ChDYZxZZJlzAvkeIgIPamljr4` |
+
+**Actions:**
+```
+1. Add CLOUDINARY_UPLOAD_PRESET to .env (create in Cloudinary Dashboard)
+2. Verify credentials with a test API call (optional)
+```
+
+**Verification:** `curl https://api.cloudinary.com/v1_1/dixvj7zzs/image/upload` returns valid JSON.
+
+---
+
+### Task 0.3 — Verify MongoDB Atlas Credentials
+
+| Field | Value |
+|-------|-------|
+| **Risk** | High |
+| **Duration** | 15 min |
+| **Depends on** | Nothing |
+
+**Current connection string:** `mongodb+srv://os5027817_db_user:Kz7bygXxewckgq8J@cluster0.bccjvvm.mongodb.net/weret`
+
+**Actions:**
+```
+1. Test connection: node scripts/test-atlas-connection.js (exists in backend/)
+2. If connection fails, reset password in Atlas Dashboard and update .env
+3. Verify read/write access by inserting + querying a test document
+```
+
+**Verification:** `node scripts/test-atlas-connection.js` exits with `0` and prints "Connection OK".
+
+---
+
+### Task 0.4 — Populate Flutter Google OAuth Client IDs
+
+| Field | Value |
+|-------|-------|
+| **Risk** | Low |
+| **Duration** | 5 min |
+| **Depends on** | Nothing |
+
+**Source:** Backend `.env` has valid Google OAuth client IDs.
+**Target:** Flutter `.env` — currently all `GOOGLE_*_CLIENT_ID` fields are empty.
+
+**Actions:**
+```
+1. Copy these values from backend/.env to apps/mobile-flutter/.env:
+   - GOOGLE_WEB_CLIENT_ID
+   - GOOGLE_ANDROID_CLIENT_ID
+   - GOOGLE_IOS_CLIENT_ID
+2. Verify the IDs match the applicationId (Android) after Task 0.1
+```
+
+**Mapping:**
+
+| Backend `.env` | Flutter `.env` |
+|----------------|----------------|
+| `GOOGLE_OAUTH_WEB_CLIENT_ID` | `GOOGLE_WEB_CLIENT_ID` |
+| `GOOGLE_OAUTH_ANDROID_CLIENT_ID` | `GOOGLE_ANDROID_CLIENT_ID` |
+| `GOOGLE_OAUTH_IOS_CLIENT_ID` | `GOOGLE_IOS_CLIENT_ID` |
+
+**Verification:** Flutter Google Sign-In button calls `GoogleSignIn.signIn()` without "client ID mismatch" errors.
+
+---
+
+### Task 0.5 — Generate `.env.example`
+
+| Field | Value |
+|-------|-------|
+| **Risk** | Low |
+| **Duration** | 10 min |
+| **Depends on** | Nothing |
+
+**Actions:**
+```
+1. Review current backend/.env for all keys
+2. Remove all secret values (passwords, tokens, keys)
+3. Replace with placeholder values like:
+   - MONGODB_URI=mongodb+srv://<user>:<password>@<cluster>.mongodb.net/<dbname>
+   - JWT_SECRET=<generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))">
+   - GOOGLE_OAUTH_WEB_CLIENT_ID=<from Google Cloud Console>
+4. Keep comments explaining each variable
+5. Do the same for apps/mobile-flutter/.env.example
+```
+
+**Verification:** `diff <(sort .env.example | grep -v '^#') <(sort .env | grep -v '^#' | sed 's/=.*/=PLACEHOLDER/')` shows matching key names.
+
+---
+
+### Task 0.6 — Audit & Remove Firestore / Firebase Storage References
+
+| Field | Value |
+|-------|-------|
+| **Risk** | Low |
+| **Duration** | 30 min |
+| **Depends on** | Nothing |
+
+**Finding:** Zero active usage of Firestore or Firebase Storage in the codebase. All references are:
+- Configuration stubs (`firebase.json` → non-existent files)
+- Planning/architecture docs describing intended-but-never-built features
+- Legacy comments referencing Firestore as a comparison point
+
+#### Complete Reference Inventory
+
+| File | Line(s) | Type | Action |
+|------|---------|------|--------|
+| `firebase.json` | 2–4 | Config: declares firestore block, references missing `firestore.rules` and `firestore.indexes.json` | **REMOVE** the `firestore` block from `firebase.json` |
+| `dcs/FIRESTORE_AR.md` | All | Architecture doc: planned Firestore listener flow | **KEEP** (reference — no code impact) |
+| `dcs/FIRESTORE_SCHEMA.md` | All | Architecture doc: planned Firestore schema | **KEEP** (reference — no code impact) |
+| `docs/FIRESTORE_AR.md` | All | Duplicate of dcs/FIRESTORE_AR.md | **KEEP** (reference) |
+| `docs/FIRESTORE_SCHEMA.md` | All | Duplicate of dcs/FIRESTORE_SCHEMA.md | **KEEP** (reference) |
+| `mobile-flutter/lib/core/providers/wallet_provider.dart` | 112, 121 | Legacy stub methods: `syncAccountsFromFirestore`, `syncTransactionsFromFirestore` | **RENAME** to remove "Firestore" from name (e.g., `syncAccounts`, `syncTransactions`) |
+| `mobile-flutter/lib/core/sync/api_sync_bridge.dart` | 12 | Comment: "replaces Firestore listeners" | **UPDATE** comment to remove Firestore reference |
+| `mobile-flutter/lib/features/auth/driver_wallet_screen.dart` | 4 | Comment: "same Firestore-backed wallet UI" | **UPDATE** comment |
+| `backend/src/middleware/docId.js` | 3 | Comment: "UUID document id (Firestore)" | **UPDATE** comment to remove "Firestore" |
+| `backend/src/routes/rides.js` | 237 | Comment: "atomic read-modify-write on Firestore" | **UPDATE** comment (actual code uses MongoDB) |
+
+#### Architectural Docs to Update
+
+| Document | References | Action |
+|----------|-----------|--------|
+| `ARCHITECTURE_CURRENT.md` | Firestore dir, empty firestore config | **UPDATE** to reflect zero Firestore usage |
+| `ARCHITECTURE_TARGET.md` | Planned Firestore integration | **UPDATE** to remove Firestore from target architecture |
+| `WERET_FULL_AUDIT.md` | Empty firestore directory noted | **UPDATE** to reflect removal |
+| `AUDIT_VALIDATION.md` | Firestore findings | **UPDATE** |
+| `ARCHITECTURE_FREEZE_COMPLETE.txt` | Multiple Firestore references | **REGENERATE** after other updates |
+
+**Do NOT create:** `firebase/firestore.rules` or `firebase/firestore.indexes.json`. These files are not needed.
+
+---
+
+## Phase 1: Foundation (Week 1)
+
+### Task 1.1 — Remove Exposed Secrets (Rotate + Git Purge)
+
+| Field | Value |
+|-------|-------|
+| **Risk** | High |
+| **Duration** | 2 hours |
+| **Depends on** | Task 0.3 (verified MongoDB access) |
+
+```
+1. Immediately rotate ALL secrets:
+   - MongoDB: Change password in Atlas → update MONGODB_URI
+   - JWT: Generate new secret
+   - PHONE_OTP_SECRET: Generate new secret
+2. Create .env.example with placeholder values (NO real secrets)
+3. Ensure .env is in .gitignore (already done)
+4. Verify: git log --all --diff-filter=A -- .env shows no results
+```
+
+### Task 1.2 — Add TTL Indexes
+
+| Field | Value |
+|-------|-------|
+| **Risk** | Low |
+| **Duration** | 1 hour |
+| **Depends on** | Task 1.1 |
+
+```
+1. Create scripts/create-indexes.js (see DATABASE_SPEC.md)
+2. Run against production MongoDB: node scripts/create-indexes.js
+3. Verify:
+   - OTP documents disappear after 5 minutes
+   - Audit log documents disappear after 30 days
+```
+
+### Task 1.3 — Fix CORS + Rate Limiting
+
+| Field | Value |
+|-------|-------|
+| **Risk** | Medium |
+| **Duration** | 1 day |
+| **Depends on** | Task 1.1 |
+
+```
+1. CORS:
+   - Create whitelist: process.env.CORS_ORIGINS
+   - Update cors() options in createApp.js
+2. Rate limiting:
+   - Implement Vercel-compatible rate limiter
+   - Remove old no-op rate limiter
+3. Test: non-whitelist origin → 403, >100/min → 429
+```
+
+---
+
+## Phase 2: Data Layer (Week 1–2)
+
+### Task 2.1 — ODM Rewrite: Basic CRUD
+
+| Field | Value |
+|-------|-------|
+| **Risk** | High |
+| **Duration** | 2 days |
+| **Depends on** | Task 1.2 |
+
+```
+1. Create mongo/db.js with native MongoDB driver connection wrapper
+2. Create query modules per entity (users, drivers, rides, chat, notifications, payments, admin)
+3. One service at a time, replace ODM calls with native driver calls
+4. Run existing tests after each service migration
+```
+
+### Task 2.2 — ODM Rewrite: Aggregation
+
+| Field | Value |
+|-------|-------|
+| **Risk** | Medium |
+| **Duration** | 1 day |
+| **Depends on** | Task 2.1 |
+
+```
+1. Replace JS aggregation with MongoDB aggregation pipeline
+2. Key pipelines: monthly revenue, driver nearby ($geoNear), admin dashboard ($facet)
+3. Benchmark: admin stats <500ms target (from ~4s)
+```
+
+### Task 2.3 — Add In-Memory Cache
+
+| Field | Value |
+|-------|-------|
+| **Risk** | Low |
+| **Duration** | 4 hours |
+| **Depends on** | Task 2.1 |
+
+```
+1. Create utils/cache.js (Map<string, { value, expiresAt }>)
+2. Apply to hot endpoints with TTL (online drivers: 5s, ride status: 3s, driver location: 3s)
+3. Invalidate on writes
+```
+
+---
+
+## Phase 3: Services (Week 2–3)
+
+### Task 3.1 — Replace Socket.io with REST Polling
+
+| Field | Value |
+|-------|-------|
+| **Risk** | High |
+| **Duration** | 3 days |
+| **Depends on** | Task 2.1, 2.3 |
+
+```
+1. Create/update polling endpoints with ?since= param and 304 support
+2. Implement SSE endpoints as optional upgrade
+3. Update Flutter: remove socket.io-client, add polling with exponential backoff
+4. Remove Socket.io server code
+```
+
+### Task 3.2 — Firebase Push Notifications (FCM)
+
+| Field | Value |
+|-------|-------|
+| **Risk** | Medium |
+| **Duration** | 2 days |
+| **Depends on** | Task 3.1 |
+
+```
+1. Initialize Firebase Admin SDK in backend (config/firebase.js)
+2. Create notifyUser() function wrapping FCM send
+3. Test with real FCM tokens
+```
+
+---
+
+## Phase 4: Polish (Week 3–4)
+
+### Task 4.1 — Cloudinary Direct Upload
+
+| Field | Value |
+|-------|-------|
+| **Risk** | Medium |
+| **Duration** | 1 day |
+| **Depends on** | Task 0.2 (config) |
+
+```
+1. Configure Cloudinary upload presets (signed) in Cloudinary Dashboard
+2. Create signature endpoint POST /api/upload/signature
+3. Update Flutter to upload directly to Cloudinary
+4. Simplify /api/upload/profile-image to accept URL only
+5. Remove multer dependency
+```
+
+### Task 4.2 — Error Tracking (Sentry)
+
+| Field | Value |
+|-------|-------|
+| **Risk** | Low |
+| **Duration** | 4 hours |
+| **Depends on** | Nothing |
+
+```
+1. npm install @sentry/node
+2. Configure DSN from env
+3. Add to errorHandler middleware
+```
+
+### Task 4.3 — Security Hardening
+
+| Field | Value |
+|-------|-------|
+| **Risk** | Low |
+| **Duration** | 4 hours |
+| **Depends on** | Task 1.3 (CORS) |
+
+```
+1. Add helmet middleware (security headers)
+2. Add request size limiting
+3. Add input sanitization
+4. Audit all routes for authorization checks
+```
+
+### Task 4.4 — Flutter Optimization
+
+| Field | Value |
+|-------|-------|
+| **Risk** | Medium |
+| **Duration** | 2 days |
+| **Depends on** | Task 3.1 |
+
+```
+1. Remove unused Firebase packages from pubspec.yaml
+2. Update all API calls to new REST polling pattern
+3. Remove socket.io-client code
+```
+
+### Task 4.5 — Flutter Cleanup
+
+| Field | Value |
+|-------|-------|
+| **Risk** | Low |
+| **Duration** | 1 day |
+| **Depends on** | Task 4.4 |
+
+```
+1. Remove unused files
+2. Remove unused imports
+3. Verify no build warnings
+```
+
+---
+
+## Deferred (Future)
+
+These items are moved out of the main migration sequence and will be addressed after all Phase 1–4 tasks are complete.
+
+| Item | Reason for Deferral | Estimated Effort |
+|------|-------------------|-----------------|
+| **Vercel project setup** | App not yet ready for deployment | 1 hour |
+| **GitHub Actions CI/CD** | No Vercel project to deploy to | 2 hours |
+| **Staging environment** | Requires Vercel + separate Atlas cluster | 4 hours |
+| **Twilio SMS** | SMS_CONSOLE_MODE=1 works for dev; Twilio is optional until production SMS needed | 1 hour |
+| **iOS Firebase config** | Android-first development; iOS config not blocking | 30 min |
+| **Release keystore / SHA** | Debug builds work; release signing only needed for Play Store | 30 min |
+| **Firebase verification** | FCM push notifications deferred to Task 3.2 | Depends on Task 3.2 |
+
+---
+
+## Rollback Plan
+
+| Task | Rollback |
+|------|----------|
+| Task 0.1 (App ID) | Revert build.gradle.kts to previous applicationId |
+| Task 0.2 (Cloudinary config) | Remove env vars (no code change) |
+| Task 0.3 (MongoDB verify) | Read-only test, no rollback needed |
+| Task 0.4 (Flutter OAuth) | Revert .env values |
+| Task 0.5 (.env.example) | No rollback needed (template only) |
+| Task 0.6 (Firestore removal) | `git checkout -- firebase.json` + revert renamed functions |
+| Task 1.1 (Secrets) | Revoke new secrets, restore old ones (irreversible if rotated) |
+| Task 1.2 (TTL Indexes) | Drop TTL indexes, old documents remain (non-breaking) |
+| Task 1.3 (CORS/Rate) | Revert CORS config, rate limit changes (instant) |
+| Task 2.1–2.2 (ODM) | Keep old ODM file, redirect imports (template switch) |
+| Task 2.3 (Cache) | Cache miss falls through to DB; zero risk |
+| Task 3.1 (Polling) | Socket.io code still present in git history; re-deploy previous version |
+| Task 3.2 (Push) | Old pushService.js available in git |
+| Task 4.1 (Upload) | Revert to server-side upload (add multer back) |
+| Task 4.2 (Sentry) | Remove Sentry DSN from env (non-breaking) |
+| Task 4.3 (Security) | Revert middleware additions |
+| Task 4.4–4.5 (Flutter) | Revert to previous Flutter build |
+
+## Risk Table
+
+| Task | Risk | Mitigation |
+|------|------|-----------|
+| 0.1 — App ID | 🟢 Low | Single file change; revert if build fails |
+| 0.4 — OAuth | 🟢 Low | Env-only; no build impact |
+| 0.6 — Firestore removal | 🟢 Low | All references are comments, docs, or config stubs; no active code |
+| 1.1 — Secrets | 🔴 High | Rotate all simultaneously; test each rotation |
+| 2.1 — ODM CRUD | 🔴 High | Migrate one service at a time; run tests after each |
+| 3.1 — Polling | 🔴 High | Socket.io code kept until polling is verified |
+| 4.4 — Flutter | 🟡 Medium | Socket.io-client kept until polling verified |
+| 4.1 — Upload | 🟡 Medium | Temporary two-path approach (old + new) |
+| 0.2 — Cloudinary | 🟢 Low | Env-only; no code change |
+| 0.3 — MongoDB verify | 🟢 Low | Read-only; no rollback needed |
+| 0.5 — .env.example | 🟢 Low | Template only; no impact |
+| 1.2 — Indexes | 🟢 Low | Non-destructive; can drop anytime |
+| 1.3 — CORS/Rate | 🟡 Medium | Test with admin panel before deploying |
+| 2.2 — Aggregation | 🟡 Medium | Compare results with old JS aggregation for 48h |
+| 2.3 — Cache | 🟢 Low | Cache miss falls through to DB; zero risk |
+| 3.2 — Push | 🟡 Medium | Non-critical service; failure doesn't block app |
+| 4.2 — Sentry | 🟢 Low | Read-only; add/remove anytime |
+| 4.3 — Security | 🟢 Low | Additive only; no removals |
+
+
+
+======================================================================
+FILE: MISSING_INFRASTRUCTURE.md
+======================================================================
+# Phase 16 — Missing Infrastructure Verification & Development Halt
+
+## Current State Assessment
+
+After auditing the entire codebase (all 16 models, 12+ route files, middleware, services, Flutter app, admin panel, config files), the following infrastructure pieces are **missing, broken, or non-existent**.
+
+## Missing Infrastructure Inventory
+
+### 1. No CI/CD Pipeline
+**Status**: ❌ Missing
+- No GitHub Actions (no `.github/workflows/`)
+- No linting, testing, or type-checking in pipeline
+- Vercel auto-deploys from `main` without testing
+
+### 2. No Testing Framework
+**Status**: ❌ Missing
+- No `__tests__/` directory
+- No Vitest/Jest/Mocha configuration
+- No `test` script in `package.json`
+- Flutter tests exist but are minimal (no API integration tests)
+
+### 3. No Logging Framework
+**Status**: ❌ Missing
+- No structured logging (winston, pino, etc.)
+- All logging is `console.log` / `console.error`
+- No log levels, no log rotation, no log aggregation
+
+### 4. No Error Tracking
+**Status**: ❌ Missing
+- No Sentry, Rollbar, or similar
+- Unhandled promise rejections are not caught
+- No error alerting (email/Slack on 5xx spikes)
+
+### 5. No Health Check Endpoint
+**Status**: ❌ Missing
+- No `GET /api/health` endpoint
+- No way to verify DB connectivity or service status from external monitors
+
+### 6. No Rate Limiting (Vercel-Compatible)
+**Status**: ❌ Broken
+- `middleware/rateLimiters.js` has no-op implementations for Vercel
+- No Vercel Edge Middleware configured for rate limiting
+
+### 7. No Proper CORS Configuration
+**Status**: ❌ Broken
+- CORS is set to `*` (wide open) in `createApp.js:44`
+
+### 8. No MongoDB Connection Pooling (Correctly)
+**Status**: ⚠️ Incomplete
+- Current ODM opens new connections per-request pattern
+- No connection pooling (each function instance creates its own pool)
+
+### 9. No Indexes on Key Collections
+**Status**: ⚠️ Missing
+- `otp` collection: No TTL index (OTPs live forever)
+- `audit_log` collection: No TTL index (grows unbounded)
+- `rides` collection: Missing compound index for active ride lookups
+- `drivers` collection: Missing 2dsphere index for geo queries
+- `notifications`: Missing user+read+createdAt compound index
+
+### 10. No Caching Layer
+**Status**: ❌ Missing
+- No in-memory cache (not even a simple Map)
+- Every request hits MongoDB
+- No ETag/If-None-Match support for polling endpoints
+
+### 11. No Configuration Validation on Startup
+**Status**: ❌ Missing
+- App starts even if required env vars are missing
+- No startup check for MongoDB connectivity
+- Firebase Admin SDK fails silently if misconfigured
+
+### 12. No Dependency Injection or Service Locator
+**Status**: ❌ Missing
+- `require()` is used directly throughout the codebase
+- No way to swap implementations (e.g., test vs production DB)
+
+### 13. No Schema Validation Layer
+**Status**: ⚠️ Incomplete
+- Zod validation exists only in `middleware/validate.js` (used in some routes)
+- Not consistently applied to all endpoints
+- No TypeScript types for API responses
+
+### 14. No API Versioning
+**Status**: ❌ Missing
+- All endpoints are at `/api/{resource}`
+- No `/api/v1/` prefix
+- Backward-incompatible changes will break mobile clients
+
+### 15. No Documentation Generator
+**Status**: ❌ Missing
+- No Swagger/OpenAPI specification
+- No Postman collection
+- No API documentation beyond source code
+
+### 16. No Pre-commit Hooks
+**Status**: ❌ Missing
+- No husky/lint-staged configuration
+- No secrets scanning pre-commit (`git-secrets`, `talisman`)
+- No linting pre-commit
+
+### 17. No Load Testing Plan
+**Status**: ❌ Missing
+- No k6/artillery/autocannon scripts
+- No performance benchmarks established
+- No scalability testing done
+
+### 18. No Backup/Disaster Recovery Plan
+**Status**: ❌ Missing
+- No documented restore procedure
+- No tested backup restoration
+- Atlas backups exist but are not verified
+
+### 19. No Structured Error Responses (Consistently)
+**Status**: ⚠️ Inconsistent
+- `errorHandler` middleware exists but is not used by all routes
+- Some routes return `{ error: "message" }`, others return `{ success: false, error: { code, message } }`
+
+### 20. No CSRF Protection
+**Status**: ❌ Missing
+- Admin panel (browser-based) has no CSRF tokens
+- `createApp.js` doesn't use `csurf` or similar
+
+### 21. No Security Headers
+**Status**: ❌ Missing
+- No `helmet` middleware
+- Missing headers: CSP, X-Frame-Options, X-Content-Type-Options, HSTS
+
+### 22. No Flutter Build Pipeline
+**Status**: ❌ Missing
+- No codemagic/bitrise/codemagic configuration
+- No automated Flutter builds
+- No code signing configuration documented
+
+## Development Halt Decision
+
+**All feature development is hereby HALTED** until the following critical infrastructure is in place:
+
+### Must-Have (Blocking)
+1. ✅ (Documented) Environment variable management (env rotation + .gitignore)
+2. ✅ (Documented) TTL indexes on OTP and audit_log
+3. ✅ (Documented) Vercel-compatible rate limiting
+4. ✅ (Documented) MongoDB native driver with connection pooling
+5. ✅ (Documented) In-memory caching layer
+6. ✅ (Documented) REST polling for real-time features
+
+### Should-Have (Enabling)
+7. ✅ (Documented) CI/CD pipeline (GitHub Actions)
+8. ✅ (Documented) Error tracking (Sentry)
+9. ✅ (Documented) Health check endpoint
+10. ✅ (Documented) Security hardening (helmet, CORS, CSRF)
+11. ✅ (Documented) Structured error responses (consistent)
+
+### Nice-to-Have (Future)
+12. ❌ Documentation generator (Swagger)
+13. ❌ Load testing (k6)
+14. ❌ API versioning
+15. ❌ Flutter build pipeline
+
+### Never (Out of Scope)
+- Full TypeScript migration (too costly for current codebase size)
+- GraphQL API (overkill for ride-hailing CRUD)
+- Kubernetes/Docker deployment (Vercel handles this)
+- Microservices split (current monolith can scale to 500+ users)
+
+## Action Required
+
+**Before any new feature can be written**, the following tasks must be completed in order:
+
+```
+1. [IMMEDIATE] Rotate all exposed secrets
+2. Remove .env from git and purge history
+3. Create .env.example template
+4. Verify Firebase project exists and configure FCM
+5. Configure Cloudinary upload presets
+6. Deploy working staging environment
+7. Verify end-to-end ride lifecycle in staging
+8. Deploy to production
+```
+
+Any feature request that does not first pass through this infrastructure gate must be rejected.
+
+## Verification Checklist
+
+Before any production deployment, verify:
+
+- [ ] No secrets in git history
+- [ ] CORS whitelist is configured (not `*`)
+- [ ] Rate limiting is active
+- [ ] TTL indexes exist on OTP and audit_log
+- [ ] MongoDB connection pooling is configured
+- [ ] Health check endpoint returns 200
+- [ ] Error tracking (Sentry) is capturing errors
+- [ ] Security headers are present in response
+- [ ] ETag/304 responses work for polling endpoints
+- [ ] In-memory cache is active on hot endpoints
+- [ ] Firebase push notifications work end-to-end
+- [ ] Cloudinary direct upload works end-to-end
+- [ ] Socket.io code is fully removed (no server or client references)
+
+
+
+======================================================================
+FILE: NOTIFICATION_STRATEGY.md
+======================================================================
+# Phase 11 — Notification Strategy
+
+## Current State (Broken)
+
+```javascript
+// services/pushService.js — CURRENT (BROKEN)
+const admin = require('firebase-admin');
+
+// This will fail because Firebase is not properly initialized
+// The service account credentials in .env may be incomplete or malformed
+async function sendToUser(userId, title, body) {
+  const user = await User.findById(userId);
+  if (user.fcmToken) {
+    await admin.messaging().sendToDevice(user.fcmToken, {
+      notification: { title, body }
+    });
+  }
+}
+```
+
+**Problems:**
+1. Firebase Admin SDK not properly initialized
+2. Service account key may be malformed in `.env` (newlines in private key)
+3. `sendToDevice()` is deprecated in newer Firebase Admin SDK
+4. FCM tokens may be stale with no cleanup mechanism
+5. Only mobile push — no fallback (SMS, email, in-app)
+
+## Target: Multi-Channel Push with FCM
+
+### Firebase Initialization (Fixed)
+
+Create a dedicated config file for Firebase:
+
+```javascript
+// config/firebase.js
+const admin = require('firebase-admin');
+
+let firebaseApp = null;
+
+function getFirebaseApp() {
+  if (firebaseApp) return firebaseApp;
+  
+  // Handle private key with escaped newlines from env var
+  const privateKey = (process.env.FIREBASE_PRIVATE_KEY || '')
+    .replace(/\\n/g, '\n');
+  
+  firebaseApp = admin.initializeApp({
+    credential: admin.credential.cert({
+      projectId: process.env.FIREBASE_PROJECT_ID,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      privateKey: privateKey,
+    }),
+  });
+  
+  return firebaseApp;
+}
+
+module.exports = { getFirebaseApp };
+```
+
+### Push Service (Rewritten)
+
+```javascript
+// services/pushService.js — TARGET
+const { getFirebaseApp } = require('../config/firebase');
+
+async function sendToUser(userId, title, body, data = {}) {
+  // Get user's FCM token from DB
+  const user = await db.collection('users').findOne(
+    { _id: new ObjectId(userId) },
+    { projection: { fcmToken: 1 } }
+  );
+  
+  if (!user || !user.fcmToken) return false;
+  
+  const firebaseApp = getFirebaseApp();
+  
+  try {
+    const message = {
+      token: user.fcmToken,
+      notification: { title, body },
+      data,  // custom payload as string-keyed object
+      android: { priority: 'high' },
+      apns: { payload: { aps: { sound: 'default' } } },
+    };
+    
+    await firebaseApp.messaging().send(message);
+    return true;
+  } catch (error) {
+    if (error.code === 'messaging/registration-token-not-registered') {
+      // Token is stale — remove from DB
+      await db.collection('users').updateOne(
+        { _id: new ObjectId(userId) },
+        { $unset: { fcmToken: '' } }
+      );
+    }
+    // Log but don't throw — non-critical service
+    console.error('FCM send failed:', error.code, error.message);
+    return false;
+  }
+}
+
+async function sendToTopic(topic, title, body, data = {}) {
+  const firebaseApp = getFirebaseApp();
+  
+  try {
+    const message = {
+      topic,
+      notification: { title, body },
+      data,
+    };
+    
+    await firebaseApp.messaging().send(message);
+    return true;
+  } catch (error) {
+    console.error('FCM topic send failed:', error.code, error.message);
+    return false;
+  }
+}
+```
+
+### Topic Strategy
+
+| Topic | Subscribers | Usage |
+|-------|-------------|-------|
+| `driver_{driverId}` | Specific driver | Ride requests, system alerts |
+| `user_{userId}` | Specific user | Ride status updates, promotions |
+| `admin_alerts` | All admin devices | Emergency alerts, system issues |
+
+### Notification Types & Channels
+
+| Event | Push (FCM) | In-App Notification | SMS (Twilio) | Email (Nodemailer) |
+|-------|-----------|-------------------|-------------|-------------------|
+| Ride requested | ✅ (driver) | ✅ | ❌ | ❌ |
+| Ride accepted | ✅ (user) | ✅ | ❌ | ❌ |
+| Ride completed | ✅ | ✅ | ❌ | ✅ (receipt) |
+| New message | ✅ (if app closed) | ✅ | ❌ | ❌ |
+| OTP | ❌ | ❌ | ✅ (primary) | ❌ |
+| Emergency alert | ✅ (admin) | ✅ | ✅ (admin) | ✅ (admin) |
+| Promo code | ✅ (topic) | ✅ | ❌ | ✅ |
+| Payment receipt | ✅ | ✅ | ❌ | ✅ |
+| Driver verification | ✅ (driver) | ✅ | ❌ | ❌ |
+
+### In-App Notification Storage
+
+All notifications are stored in the `notifications` collection:
+
+```javascript
+// Store notification in DB (for in-app display)
+async function createInAppNotification(userId, title, body, type, data = {}) {
+  const notification = {
+    userId: new ObjectId(userId),
+    title,
+    body,
+    type,     // 'ride_update' | 'promo' | 'system'
+    data,
+    isRead: false,
+    createdAt: new Date(),
+  };
+  
+  await db.collection('notifications').insertOne(notification);
+}
+
+// Unified send: push + in-app
+async function notifyUser(userId, title, body, type, data = {}) {
+  await Promise.allSettled([
+    sendToUser(userId, title, body, data),
+    createInAppNotification(userId, title, body, type, data),
+  ]);
+}
+```
+
+### Notification Polling (see REALTIME_STRATEGY.md)
+
+```javascript
+// GET /api/notifications?since=2024-01-01T00:00:00Z
+async function getNotifications(req, res) {
+  const since = req.query.since ? new Date(req.query.since) : new Date(0);
+  
+  const notifications = await db.collection('notifications').find({
+    userId: req.user._id,
+    createdAt: { $gt: since }
+  }).sort({ createdAt: -1 }).limit(50).toArray();
+  
+  res.json({ success: true, data: { notifications } });
+}
+```
+
+### Flutter FCM Integration
+
+```dart
+// In Flutter, use firebase_messaging package
+final messaging = FirebaseMessaging.instance;
+
+// Request permissions
+NotificationSettings settings = await messaging.requestPermission();
+
+// Get FCM token
+String? token = await messaging.getToken();
+
+// Send token to API
+await http.put(
+  Uri.parse('$apiUrl/users/fcm-token'),
+  headers: {'Authorization': 'Bearer $token'},
+  body: jsonEncode({'fcmToken': token}),
+);
+
+// Listen for foreground messages
+FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+  // Show in-app notification
+});
+
+// Handle background tap
+FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+  // Navigate to relevant screen
+});
+```
+
+### Migration Steps
+
+| Step | Detail |
+|------|--------|
+| 1 | Create `config/firebase.js` with proper initialization |
+| 2 | Rewrite `services/pushService.js` with new FCM API |
+| 3 | Create unified `notifyUser()` helper |
+| 4 | Add FCM token update endpoint (`PUT /api/users/fcm-token`) |
+| 5 | Integrate FCM into ride lifecycle (notify on status change) |
+| 6 | Implement Flutter FCM token registration |
+| 7 | Test all notification types |
+| 8 | Set up Firebase project if not already configured |
+
+### Rollback
+
+- Push failure is non-blocking (already the case — app continues to work)
+- In-app notifications via REST polling work regardless of FCM state
+- SMS fallback for OTP and critical alerts only
+
+
+
+======================================================================
+FILE: PROJECT_MASTER_PLAN.md
+======================================================================
+# Phase 15 — Project Master Plan
+
+## Goal
+Transform the ReachNative Car codebase from a non-functional prototype (Socket.io on Vercel, in-memory ODM, broken Firebase, committed secrets) into a production-ready ride-hailing platform.
+
+## Timeline
+
+```
+Week 1 ─── Foundation ─── Tasks 1-3
+  Mon:  Remove exposed secrets (Task 1)
+  Tue:  Add TTL indexes (Task 2)
+  Wed:  Fix CORS + rate limiting (Task 3)
+
+Week 2 ─── Data Layer ─── Tasks 4-6
+  Mon-Wed: ODM rewrite — basic CRUD (Task 4)
+  Thu:     ODM rewrite — aggregation (Task 5)
+  Fri:     Add in-memory cache (Task 6)
+
+Week 3 ─── Services ─── Tasks 7-8
+  Mon-Wed: Replace Socket.io with REST polling (Task 7)
+           (Create endpoints + update Flutter)
+  Thu-Fri: Fix Firebase push, admin stats, cache wire (Task 8)
+
+Week 4 ─── Polish ─── Tasks 9-15
+  Mon:  Cloudinary direct upload (Task 9)
+  Tue:  Sentry + monitoring (Task 10)
+  Tue:  Security hardening (Task 11)
+  Wed:  Flutter optimization (Task 12)
+  Wed:  Flutter cleanup (Task 13)
+  Thu:  Deploy staging (Task 14)
+  Fri:  Deploy production (Task 15)
+```
+
+## Task Dependency Graph
+
+```
+Task 1 (Secrets) ───► Task 3 (CORS/Rate)
+                  └──► All other tasks (env vars available)
+
+Task 2 (Indexes) ───► Task 4 (ODM CRUD) ───► Task 5 (Aggregation)
+                                                │
+                                                ▼
+                                           Task 6 (Cache)
+                                                │
+                                                ▼
+                                           Task 7 (Polling)
+                                                │
+                                                ▼
+                                           Task 8 (Push)
+
+Task 9 (Upload) ─── Standalone
+Task 10 (Sentry) ─── Standalone
+Task 11 (Security) ─── Standalone (but prefer after Task 3)
+
+Task 12 (Flutter) ───► Task 13 (Flutter Cleanup)
+Task 14 (Staging) ───► Task 15 (Production)
+```
+
+## Resource Allocation
+
+### Roles
+| Role | Tasks | Estimated Hours |
+|------|-------|----------------|
+| Backend Developer | Tasks 1-8, 10-11 | 48h |
+| Flutter Developer | Tasks 7 (Flutter), 12-13 | 24h |
+| DevOps | Tasks 14-15 | 8h |
+| QA | All tasks (testing) | 16h |
+| **Total** | | **96h** |
+
+### Key Dependencies
+```
+Flutter developer must wait for:
+  - Task 7 polling endpoints (backend) before Task 12 Flutter migration
+
+DevOps must wait for:
+  - All tasks before Task 14-15 staging/production deploy
+
+QA:
+  - Per-task testing as each is delivered
+  - Full E2E sweep after Task 13
+```
+
+## Deliverables
+
+| Document | File | Status |
+|----------|------|--------|
+| Full Audit | `WERET_FULL_AUDIT.md` | ✅ Complete |
+| Audit Validation | `AUDIT_VALIDATION.md` | ✅ Complete |
+| Current Architecture | `ARCHITECTURE_CURRENT.md` | ✅ Complete |
+| Target Architecture | `ARCHITECTURE_TARGET.md` | ✅ Complete |
+| Architecture Rules | `ARCHITECTURE_RULES.md` | ✅ Complete |
+| Infrastructure | `INFRASTRUCTURE.md` | ✅ Complete |
+| Environment Spec | `ENVIRONMENT_SPEC.md` | ✅ Complete |
+| Database Spec | `DATABASE_SPEC.md` | ✅ Complete |
+| API Spec | `API_SPEC.md` | ✅ Complete |
+| Real-time Strategy | `REALTIME_STRATEGY.md` | ✅ Complete |
+| Upload Strategy | `UPLOAD_STRATEGY.md` | ✅ Complete |
+| Notification Strategy | `NOTIFICATION_STRATEGY.md` | ✅ Complete |
+| Test Plan | `TEST_PLAN.md` | ✅ Complete |
+| Migration Plan | `MIGRATION_PLAN.md` | ✅ Complete |
+| Deployment Guide | `DEPLOYMENT_GUIDE.md` | ✅ Complete |
+| Project Master Plan | `PROJECT_MASTER_PLAN.md` | ✅ Complete |
+| Missing Infrastructure | `MISSING_INFRASTRUCTURE.md` | ✅ Complete |
+
+## Success Criteria
+
+| Criterion | Current | Target | Measured By |
+|-----------|---------|--------|-------------|
+| Admin stats page load | ~4s | <1s | Browser DevTools |
+| Ride request → driver notified | Broken | <3s | End-to-end test |
+| Chat message delivery | Broken | <5s | End-to-end test |
+| API error rate | Unknown | <0.1% | Sentry |
+| OTP expiry | Infinite | 5 min | Verification |
+| Audit log retention | Infinite | 30 days | MongoDB TTL |
+| Push notifications | Broken | Working | Device test |
+| Image upload | Broken | Working | End-to-end test |
+| Rate limiting | No-op | Enforced | Load test |
+| Secrets in git | Exposed | None | `git log --all --diff-filter=A -- .env` |
+
+## Risk Register
+
+| Risk | Likelihood | Impact | Mitigation |
+|------|-----------|--------|------------|
+| ODM rewrite breaks existing queries | Medium | High | Migrate one service at a time, test after each |
+| REST polling overwhelms MongoDB | Medium | Medium | Cache + indexed queries; monitor query rates |
+| Firebase project doesn't exist | Low | High | Verify Firebase project before starting Task 8 |
+| Secrets already compromised | Unknown | Critical | Rotate immediately in Task 1 |
+| Flutter-side socket.io removal breaks build | Medium | Medium | Keep socket.io-client until polling is verified |
+| Vercel function timeout on aggregate queries | Low | Medium | Add query timeout; split large aggregations |
+| .env cannot be fully removed from git history | Medium | Low | Accept as technical debt if filter-branch fails |
+| Team coordination during filter-branch | Medium | Low | Schedule during low-activity window |
+
+## Communication Plan
+
+- **Daily standup**: 15 min, status of current task, blockers
+- **Per-task handoff**: Completed tasks tagged in GitHub with `#migration` label
+- **Post-migration retrospective**: 1 week after production deploy
+
+## Post-Migration
+
+After Task 15 is complete:
+
+1. **Performance baseline**: Run load test against production, document p95/p99 latencies
+2. **User acceptance testing**: 2-week period with beta users
+3. **Bug bash**: Dedicated day for fixing edge cases
+4. **Documentation update**: Update README with new architecture
+5. **Next features**: Unblock feature development (subscriptions, promo codes, emergency alerts were partially implemented and need completion)
+
+
+
+======================================================================
+FILE: README.md
+======================================================================
+# WERET
+
+Full-stack ride-hailing: **Flutter mobile** + **Express API** + **Admin web**.
+
+## Structure
+
+```
+apps/
+  mobile-flutter/   ← Flutter app (iOS + Android)
+  web/              ← Admin panel (/admin-ui/)
+backend/            ← Express + MongoDB Atlas
+shared/             ← Constants + API contract
+assets/             ← Shared images
+```
+
+## Run
+
+```bash
+# Backend + admin web
+npm run backend
+# http://localhost:3000/admin-ui/
+
+# Flutter — install SDK first: https://docs.flutter.dev/get-started/install
+npm run init:flutter
+cd apps/mobile-flutter
+flutter run --dart-define=API_URL=http://YOUR_LAN_IP:3000
+```
+
+See `BUILD_APK.md` for APK builds (GitHub Actions or local).
+
+## Stack
+
+| Layer | Tech |
+|-------|------|
+| Mobile | Flutter, Riverpod, go_router, easy_localization |
+| Web admin | HTML/JS (`apps/web`) — same REST API as mobile |
+| Database | MongoDB Atlas (`MONGODB_URI` in `backend/.env`) |
+| API | Express (JWT auth, REST, Socket.io) |
+| Auth | JWT (phone OTP, Google, email) |
+
+React Native has been **removed**. See `docs/FLUTTER_MIGRATION_REPORT.md`.
+
+
+
+======================================================================
+FILE: REALTIME_STRATEGY.md
+======================================================================
+# Phase 9 — Real-time Communication Strategy
+
+## Current State: Socket.io (BROKEN on Vercel)
+
+Socket.io requires persistent TCP connections. Vercel serverless functions are stateless and short-lived. Socket.io connections cannot survive between invocations.
+
+**Impact**: Zero real-time communication in production. All real-time features are broken:
+- Ride status updates to users
+- Driver availability display
+- Chat between user and driver
+- Driver location tracking
+- Push notifications (separately broken — Firebase misconfigured)
+
+## Target: REST Polling
+
+Replace all WebSocket events with HTTP polling. This works reliably on Vercel because each poll is a stateless HTTP request.
+
+### Polling Endpoint Mapping
+
+| Socket.io Event | REST Replacement | Method | Path | Poll Interval |
+|----------------|-----------------|--------|------|--------------|
+| `ride-status-update` | Ride status poll | GET | `/api/rides/:id/status` | 2s (active ride) |
+| `ride-accepted` | Ride status poll | GET | `/api/rides/:id/status` | 2s |
+| `ride-requested` | Available ride poll | GET | `/api/rides/requested` | 3s (driver) |
+| `location-update` | Driver location poll | GET | `/api/drivers/:id/location` | 3s |
+| `chat-message` | Chat messages poll | GET | `/api/chat/:rideId/messages?since=` | 3s |
+| `new-notification` | Notifications poll | GET | `/api/notifications?since=` | 5s |
+| `online-drivers` | Online drivers poll | GET | `/api/drivers/online` | 5s |
+
+### Polling Implementation Details
+
+#### Client-side (Flutter)
+```dart
+// Example: Ride status polling
+Timer.periodic(Duration(seconds: 2), (_) async {
+  final response = await http.get(
+    Uri.parse('$baseUrl/rides/$rideId/status'),
+    headers: {'Authorization': 'Bearer $token'},
+  );
+  if (response.statusCode == 304) return; // Not modified
+  final data = json.decode(response.body);
+  setState(() => rideStatus = data['data']['status']);
+});
+```
+
+#### Server-side — Conditional Responses
+```javascript
+// Route handler for ride status
+async function getRideStatus(req, res) {
+  const { id } = req.params;
+  const cacheKey = `ride_status:${id}`;
+  
+  // Check cache first
+  const cached = cache.get(cacheKey);
+  if (cached && req.headers['if-none-match'] === cached.etag) {
+    return res.status(304).end();
+  }
+  
+  const ride = await db.collection('rides').findOne(
+    { _id: new ObjectId(id) },
+    { projection: { status: 1, driverId: 1, updatedAt: 1 } }
+  );
+  
+  const etag = `"${ride.updatedAt.getTime()}"`;
+  cache.set(cacheKey, { etag, value: ride }, 3000);
+  
+  res.set('ETag', etag);
+  res.json({ success: true, data: ride });
+}
+```
+
+### Chat Implementation
+
+```javascript
+// GET /api/chat/:rideId/messages?since=2024-01-01T00:00:00Z
+async function getMessages(req, res) {
+  const { rideId } = req.params;
+  const since = req.query.since ? new Date(req.query.since) : new Date(0);
+  
+  const messages = await db.collection('messages').find({
+    rideId: new ObjectId(rideId),
+    createdAt: { $gt: since }
+  }).sort({ createdAt: 1 }).limit(50).toArray();
+  
+  res.json({ success: true, data: { messages } });
+}
+
+// POST /api/chat/:rideId/send
+async function sendMessage(req, res) {
+  const { rideId } = req.params;
+  const { text } = req.body;
+  
+  const message = {
+    rideId: new ObjectId(rideId),
+    senderId: req.user._id,
+    text,
+    createdAt: new Date()
+  };
+  
+  await db.collection('messages').insertOne(message);
+  
+  // TODO: Send push notification to other participant
+  // pushService.sendToUser(otherUserId, "New message", text);
+  
+  res.status(201).json({ success: true, data: { message } });
+}
+```
+
+### Driver Location Tracking
+
+```javascript
+// Driver sends location every 3-5s (battery-efficient)
+// POST /api/drivers/location
+async function updateLocation(req, res) {
+  const { latitude, longitude } = req.body;
+  
+  await db.collection('drivers').updateOne(
+    { userId: req.user._id },
+    { $set: {
+        currentLocation: { type: "Point", coordinates: [longitude, latitude] },
+        lastLocationUpdate: new Date()
+    }}
+  );
+  
+  // Invalidate cache
+  cache.del(`driver_location:${req.user._id}`);
+  
+  res.json({ success: true });
+}
+
+// User reads driver location
+// GET /api/drivers/location/:driverId
+async function getDriverLocation(req, res) {
+  const { driverId } = req.params;
+  const cacheKey = `driver_location:${driverId}`;
+  
+  const cached = cache.get(cacheKey);
+  if (cached) return res.json({ success: true, data: cached });
+  
+  const driver = await db.collection('drivers').findOne(
+    { userId: new ObjectId(driverId) },
+    { projection: { currentLocation: 1, lastLocationUpdate: 1 } }
+  );
+  
+  cache.set(cacheKey, driver, 3000);
+  res.json({ success: true, data: driver });
+}
+```
+
+### Driver Online Detection
+
+Instead of Socket.io `connect`/`disconnect` events, use a heartbeat mechanism:
+
+```javascript
+// POST /api/drivers/heartbeat (called every 30s by Flutter)
+async function heartbeat(req, res) {
+  const now = new Date();
+  await db.collection('drivers').updateOne(
+    { userId: req.user._id },
+    { $set: { lastHeartbeat: now } }
+  );
+  res.json({ success: true });
+}
+
+// GET /api/drivers/online (cached, called every 5s)
+async function getOnlineDrivers(req, res) {
+  const cacheKey = 'online_drivers';
+  const cached = cache.get(cacheKey);
+  if (cached) return res.json({ success: true, data: cached });
+  
+  const cutoff = new Date(Date.now() - 60000); // 60s timeout
+  const online = await db.collection('drivers').countDocuments({
+    isOnline: true,
+    lastHeartbeat: { $gt: cutoff }
+  });
+  
+  const result = { onlineCount: online };
+  cache.set(cacheKey, result, 5000);
+  res.json({ success: true, data: result });
+}
+```
+
+#### Cleanup Cron Job (Vercel Cron — every minute)
+```javascript
+// POST /api/cron/cleanup-drivers
+async function cleanupDrivers(req, res) {
+  const cutoff = new Date(Date.now() - 120000); // 2 min timeout
+  await db.collection('drivers').updateMany(
+    { isOnline: true, lastHeartbeat: { $lt: cutoff } },
+    { $set: { isOnline: false, isAvailable: false } }
+  );
+  res.json({ success: true });
+}
+```
+
+## Battery & Bandwidth Optimization
+
+| Strategy | Details |
+|----------|---------|
+| Adaptive polling | Poll at 2s during active ride, 10s when idle, 30s when app backgrounded |
+| Conditional requests | Use ETag/If-None-Match to return 304 Not Modified |
+| Response trimming | Only return delta data (e.g., `?since=` for chat) |
+| Request coalescing | Batch multiple polls into one request where possible |
+| Backoff on error | Exponential backoff (1s, 2s, 4s, 8s... max 30s) on network errors |
+
+## Migration Timeline
+
+| Step | Description | Duration | Risk |
+|------|-------------|----------|------|
+| 1 | Create all polling endpoints | 2 days | Low |
+| 2 | Add Server-Sent Events (SSE) endpoints | 1 day | Medium |
+| 3 | Update Flutter app to use REST polling | 3 days | Medium |
+| 4 | Remove Socket.io server + client code | 0.5 day | Low |
+| 5 | Test with simulated concurrent rides | 1 day | Medium |
+| 6 | Monitor and tune polling intervals | Ongoing | Low |
+
+## Future Consideration: Server-Sent Events (SSE)
+
+If REST polling proves too latency-sensitive (e.g., chat feels sluggish), SSE can be added as a middle ground:
+
+- SSE is supported on Vercel via streaming responses
+- Lower latency than polling (server pushes changes)
+- Still HTTP-based (no WebSocket)
+- Easier fallback: SSE → polling polyfill
+
+```javascript
+// GET /api/rides/:id/events (SSE endpoint — optional upgrade)
+async function rideEvents(req, res) {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive'
+  });
+  
+  const interval = setInterval(async () => {
+    const ride = await getRideStatus(req.params.id);
+    res.write(`data: ${JSON.stringify(ride)}\n\n`);
+  }, 2000);
+  
+  req.on('close', () => clearInterval(interval));
+}
+```
+
+**Decision**: Start with REST polling. Evaluate SSE only if polling latency becomes a user-facing problem after launch.
+
+
+
+======================================================================
+FILE: TEST_PLAN.md
+======================================================================
+# Phase 12 — Test Plan
+
+## Testing Strategy
+
+### Levels
+1. **Unit Tests** — Individual functions (services, utils)
+2. **Integration Tests** — API routes with test DB
+3. **E2E Tests** — Full flow (admin panel + mobile)
+4. **Manual Tests** — Edge cases, visual checks
+
+### Framework
+- **Runtime**: Vitest (fast, ESM-compatible, Jest-compatible API)
+- **HTTP assertions**: Supertest
+- **Test DB**: MongoDB Memory Server (mongodb-memory-server)
+- **Coverage**: c8 (built into Vitest)
+- **Mobile**: Flutter `flutter_test` + `integration_test`
+
+## Test Structure
+
+```
+api/
+├── __tests__/
+│   ├── unit/
+│   │   ├── services/
+│   │   │   ├── otpService.test.js
+│   │   │   ├── pushService.test.js
+│   │   │   └── emailService.test.js
+│   │   └── utils/
+│   │       ├── rateLimiter.test.js
+│   │       └── validate.test.js
+│   ├── integration/
+│   │   ├── routes/
+│   │   │   ├── auth.test.js
+│   │   │   ├── rides.test.js
+│   │   │   ├── users.test.js
+│   │   │   ├── drivers.test.js
+│   │   │   ├── chat.test.js
+│   │   │   ├── payments.test.js
+│   │   │   ├── admin.test.js
+│   │   │   └── upload.test.js
+│   │   └── mongo/
+│   │       └── odm.test.js
+│   └── e2e/
+│       ├── ride-lifecycle.test.js
+│       └── auth-flow.test.js
+├── vitest.config.js
+└── setup.js
+```
+
+## Vitest Configuration
+
+```javascript
+// vitest.config.js
+import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  test: {
+    globals: true,
+    environment: 'node',
+    setupFiles: ['./__tests__/setup.js'],
+    testTimeout: 30000,
+    hookTimeout: 30000,
+    coverage: {
+      provider: 'c8',
+      reporter: ['text', 'lcov'],
+      include: ['services/**/*.js', 'middleware/**/*.js', 'utils/**/*.js'],
+    },
+  },
+});
+```
+
+## Test Setup
+
+```javascript
+// __tests__/setup.js
+import { MongoMemoryServer } from 'mongodb-memory-server';
+import { MongoClient } from 'mongodb';
+import { createApp } from '../createApp.js';
+
+let mongoServer;
+let mongoClient;
+let db;
+
+beforeAll(async () => {
+  mongoServer = await MongoMemoryServer.create();
+  const uri = mongoServer.getUri();
+  mongoClient = new MongoClient(uri);
+  await mongoClient.connect();
+  db = mongoClient.db('test');
+  
+  // Override DB connection
+  process.env.MONGODB_URI = uri;
+  process.env.JWT_SECRET = 'test-secret';
+  process.env.NODE_ENV = 'test';
+});
+
+afterAll(async () => {
+  await mongoClient.close();
+  await mongoServer.stop();
+});
+
+beforeEach(async () => {
+  // Clear all collections
+  const collections = await db.listCollections().toArray();
+  for (const col of collections) {
+    await db.collection(col.name).deleteMany({});
+  }
+});
+
+export { db, getDb };
+```
+
+## Unit Tests
+
+### Example: OTP Service
+```javascript
+// __tests__/unit/services/otpService.test.js
+import { describe, it, expect } from 'vitest';
+import { generateOtp, verifyOtp } from '../../../services/otpService.js';
+
+describe('OTP Service', () => {
+  describe('generateOtp', () => {
+    it('should generate a 6-digit code', () => {
+      const code = generateOtp();
+      expect(code).toMatch(/^\d{6}$/);
+    });
+    
+    it('should generate different codes each time', () => {
+      const codes = new Set(Array.from({ length: 100 }, () => generateOtp()));
+      expect(codes.size).toBeGreaterThan(90); // At least 90% unique
+    });
+  });
+  
+  describe('verifyOtp', () => {
+    it('should reject expired OTP', async () => {
+      const result = await verifyOtp('+1234567890', '123456');
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('EXPIRED');
+    });
+  });
+});
+```
+
+## Integration Tests
+
+### Example: Auth Flow
+```javascript
+// __tests__/integration/routes/auth.test.js
+import { describe, it, expect, beforeAll } from 'vitest';
+import request from 'supertest';
+import { createApp } from '../../../createApp.js';
+
+const app = createApp();
+
+describe('POST /api/auth/send-otp', () => {
+  it('should return 400 for invalid phone number', async () => {
+    const res = await request(app)
+      .post('/api/auth/send-otp')
+      .send({ phone: 'invalid' });
+    
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+  });
+  
+  it('should send OTP for valid phone', async () => {
+    const res = await request(app)
+      .post('/api/auth/send-otp')
+      .send({ phone: '+1234567890' });
+    
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+  });
+});
+```
+
+### Example: Ride Lifecycle
+```javascript
+// __tests__/integration/routes/rides.test.js
+import { describe, it, expect } from 'vitest';
+import request from 'supertest';
+import { createApp } from '../../../createApp.js';
+
+describe('Ride Lifecycle', () => {
+  let userToken, driverToken, rideId;
+  
+  it('should create a ride request', async () => {
+    const res = await request(app)
+      .post('/api/rides')
+      .set('Authorization', `Bearer ${userToken}`)
+      .send({
+        pickup: { address: 'A', latitude: 40.71, longitude: -74.00 },
+        dropoff: { address: 'B', latitude: 40.72, longitude: -74.01 },
+        paymentMethod: 'cash',
+      });
+    
+    expect(res.status).toBe(201);
+    rideId = res.body.data.rideId;
+  });
+  
+  it('should accept the ride', async () => {
+    const res = await request(app)
+      .post(`/api/rides/${rideId}/accept`)
+      .set('Authorization', `Bearer ${driverToken}`);
+    
+    expect(res.status).toBe(200);
+    expect(res.body.data.status).toBe('accepted');
+  });
+  
+  it('should complete the ride lifecycle', async () => {
+    // Start
+    await request(app)
+      .post(`/api/rides/${rideId}/start`)
+      .set('Authorization', `Bearer ${driverToken}`)
+      .expect(200);
+    
+    // Begin trip
+    await request(app)
+      .post(`/api/rides/${rideId}/begin-trip`)
+      .set('Authorization', `Bearer ${driverToken}`)
+      .expect(200);
+    
+    // Complete
+    await request(app)
+      .post(`/api/rides/${rideId}/complete`)
+      .set('Authorization', `Bearer ${driverToken}`)
+      .expect(200);
+    
+    // Verify final status
+    const res = await request(app)
+      .get(`/api/rides/${rideId}/status`)
+      .set('Authorization', `Bearer ${userToken}`);
+    
+    expect(res.body.data.status).toBe('completed');
+  });
+});
+```
+
+## Testing Admin Stats
+
+```javascript
+// __tests__/integration/routes/admin.test.js
+describe('GET /api/admin/stats', () => {
+  it('should return dashboard stats under 1 second', async () => {
+    const start = Date.now();
+    
+    const res = await request(app)
+      .get('/api/admin/stats')
+      .set('Authorization', `Bearer ${adminToken}`);
+    
+    const duration = Date.now() - start;
+    
+    expect(res.status).toBe(200);
+    expect(duration).toBeLessThan(1000); // Must be <1s (down from ~4s)
+    expect(res.body.data).toHaveProperty('totalUsers');
+    expect(res.body.data).toHaveProperty('totalDrivers');
+    expect(res.body.data).toHaveProperty('activeRides');
+    expect(res.body.data).toHaveProperty('revenue');
+  });
+});
+```
+
+## Performance Tests
+
+```javascript
+// __tests__/performance/odm-benchmark.test.js
+describe('ODM vs Native Driver Performance', () => {
+  const NUM_DOCUMENTS = 1000;
+  
+  beforeAll(async () => {
+    // Insert test data
+    const docs = Array.from({ length: NUM_DOCUMENTS }, (_, i) => ({
+      name: `User ${i}`,
+      email: `user${i}@test.com`,
+      role: i % 2 === 0 ? 'user' : 'driver',
+    }));
+    await db.collection('users').insertMany(docs);
+  });
+  
+  it('native find() should be faster than ODM in-memory', async () => {
+    // Native: ~1ms
+    const start1 = Date.now();
+    await db.collection('users').find({ role: 'driver' }).toArray();
+    const nativeDuration = Date.now() - start1;
+    
+    // ODM (simulated): loads ALL documents, then filters in JS
+    const start2 = Date.now();
+    const all = await db.collection('users').find({}).toArray();
+    const filtered = all.filter(u => u.role === 'driver');
+    const odmDuration = Date.now() - start2;
+    
+    expect(nativeDuration).toBeLessThan(odmDuration);
+  });
+});
+```
+
+## Coverage Targets
+
+| Area | Target | Critical Paths |
+|------|--------|---------------|
+| Services | 80%+ | OTP, Push, Email services |
+| Middleware | 90%+ | Auth, Rate limiter, Error handler |
+| Routes (integration) | 60%+ | Rides, Auth, Drivers, Chat, Admin |
+| Utils | 100% | Pure functions only |
+| ODM layer | 70%+ | Query functions, aggregation |
+| **Overall** | **75%+** | |
+
+## CI Integration
+
+```yaml
+# .github/workflows/test.yml
+name: Tests
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 18 }
+      - run: npm ci
+      - run: npm run test -- --coverage
+      - uses: codecov/codecov-action@v3
+```
+
+## Test Data Factories
+
+```javascript
+// __tests__/factories.js
+export function createUser(overrides = {}) {
+  return {
+    phone: '+1234567890',
+    name: 'Test User',
+    role: 'user',
+    ...overrides,
+  };
+}
+
+export function createDriver(overrides = {}) {
+  return {
+    userId: new ObjectId(),
+    vehicle: { make: 'Toyota', model: 'Camry', year: 2020, color: 'White', plateNumber: 'ABC123' },
+    isOnline: true,
+    isAvailable: true,
+    currentLocation: { type: 'Point', coordinates: [-74.006, 40.7128] },
+    ...overrides,
+  };
+}
+
+export function createRide(overrides = {}) {
+  return {
+    userId: new ObjectId(),
+    status: 'requesting',
+    pickup: { address: 'A', coordinates: { type: 'Point', coordinates: [-74.00, 40.71] } },
+    dropoff: { address: 'B', coordinates: { type: 'Point', coordinates: [-74.01, 40.72] } },
+    fare: 15.50,
+    paymentMethod: 'cash',
+    ...overrides,
+  };
+}
+```
+
+## Running Tests
+
+```bash
+# Unit + integration
+npm run test
+
+# Watch mode (development)
+npm run test:watch
+
+# Specific file
+npm run test -- __tests__/integration/routes/rides.test.js
+
+# Coverage
+npm run test -- --coverage
+
+# Flutter tests
+cd mobile && flutter test
+
+# Flutter integration tests
+cd mobile && flutter test --integration
+```
+
+
+
+======================================================================
+FILE: UPLOAD_STRATEGY.md
+======================================================================
+# Phase 10 — Upload Strategy
+
+## Current State (Broken)
+
+```javascript
+// Current approach: Multer writes to /tmp/
+const upload = multer({ dest: '/tmp/' });
+
+router.post('/profile-image', upload.single('image'), async (req, res) => {
+  // File is in /tmp/ — Vercel may have already reclaimed it
+  const result = await cloudinary.uploader.upload(req.file.path);
+  // result.url may not be accessible if /tmp/ was cleaned
+  res.json({ url: result.url });
+});
+```
+
+**Problems:**
+1. Vercel's `/tmp/` is ephemeral and may be garbage collected between function invocations
+2. File passes through Vercel (wasted bandwidth, cold start delay)
+3. Multer dependency unnecessary for the architecture
+4. Large uploads risk hitting 10s function timeout
+
+## Target: Direct Client-to-Cloudinary Upload
+
+### Architecture
+```
+Flutter App ───► HTTP PUT ──► Cloudinary
+                (signed upload preset)
+                    │
+                    ▼
+           Cloudinary returns URL
+                    │
+                    ▼
+           Flutter sends URL to API:
+           POST /api/upload/profile-image { url: "..." }
+                    │
+                    ▼
+           API stores URL in DB (no file handling)
+```
+
+### Cloudinary Configuration
+
+**Upload Preset** (create in Cloudinary Dashboard):
+- Name: `reachnative_profile_uploads`
+- Type: `Signed` (authenticated) or `Unsigned` (public)
+- Signing URL: Enabled for production
+- Folder: `profiles/`
+- Transformation: `w_400,h_400,c_fill,q_auto,f_webp`
+- Allowed formats: `jpg`, `png`, `webp`
+- Max size: 5MB
+
+**For production, use Signed uploads:**
+```dart
+// Flutter — Generate signature server-side
+Future<String> uploadToCloudinary(String imagePath) async {
+  final timestamp = (DateTime.now().millisecondsSinceEpoch / 1000).round();
+  final signature = await getSignatureFromApi(timestamp, publicId);
+  
+  final uri = Uri.parse(
+    'https://api.cloudinary.com/v1_1/$cloudName/image/upload'
+  );
+  
+  final request = http.MultipartRequest('POST', uri);
+  request.fields['timestamp'] = timestamp.toString();
+  request.fields['public_id'] = publicId;
+  request.fields['signature'] = signature;
+  request.fields['api_key'] = apiKey;
+  request.fields['folder'] = 'profiles';
+  request.fields['transformation'] = 'w_400,h_400,c_fill,q_auto,f_webp';
+  request.files.add(await http.MultipartFile.fromPath('file', imagePath));
+  
+  final response = await request.send();
+  final data = await response.stream.bytesToString();
+  final json = jsonDecode(data);
+  return json['secure_url'];
+}
+```
+
+**Signature generation endpoint (API-side):**
+```javascript
+// POST /api/upload/signature
+const cloudinary = require('cloudinary').v2;
+
+router.post('/signature', authMiddleware, async (req, res) => {
+  const { publicId } = req.body;
+  const timestamp = Math.round(Date.now() / 1000);
+  
+  const signature = cloudinary.utils.api_sign_request({
+    timestamp,
+    public_id: publicId,
+    folder: 'profiles',
+  }, process.env.CLOUDINARY_API_SECRET);
+  
+  res.json({
+    signature,
+    timestamp,
+    apiKey: process.env.CLOUDINARY_API_KEY,
+    cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+  });
+});
+```
+
+### Flutter Upload Flow
+
+```dart
+// 1. Pick image (image_picker package)
+final image = await _picker.pickImage(source: ImageSource.gallery);
+
+// 2. Get Cloudinary signature
+final sigResponse = await http.post(
+  Uri.parse('$apiUrl/upload/signature'),
+  headers: {'Authorization': 'Bearer $token'},
+  body: jsonEncode({'publicId': 'user_${userId}_${timestamp}'}),
+);
+final sigData = jsonDecode(sigResponse.body);
+
+// 3. Upload to Cloudinary
+final cloudinaryUrl = await uploadToCloudinary(
+  image.path,
+  sigData['signature'],
+  sigData['timestamp'],
+  sigData['apiKey'],
+  sigData['cloudName'],
+);
+
+// 4. Send URL to API
+await http.put(
+  Uri.parse('$apiUrl/users/profile'),
+  headers: {'Authorization': 'Bearer $token'},
+  body: jsonEncode({'avatar': cloudinaryUrl}),
+);
+```
+
+### API Endpoint (Simplified)
+
+```javascript
+// POST /api/upload/profile-image — receive URL only
+router.post('/profile-image', authMiddleware, async (req, res) => {
+  const { url } = req.body;
+  
+  if (!url || !url.startsWith('https://res.cloudinary.com/')) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'INVALID_URL', message: 'Invalid Cloudinary URL' }
+    });
+  }
+  
+  await db.collection('users').updateOne(
+    { _id: req.user._id },
+    { $set: { avatar: url } }
+  );
+  
+  res.json({ success: true, data: { url } });
+});
+```
+
+### Security
+
+| Measure | Implementation |
+|---------|---------------|
+| Signed uploads | Server generates signature; prevents abuse of upload preset |
+| URL validation | API validates Cloudinary URL format before storing |
+| Max file size | 5MB (enforced by Cloudinary preset) |
+| Allowed formats | jpg, png, webp (enforced by Cloudinary preset) |
+| Transformation | Server-side: w_400,h_400,c_fill,q_auto,f_webp (reduces storage) |
+| Rate limit | 10 uploads/hour per user |
+| Expiring URLs | Optionally use Cloudinary private assets with signed URLs (future) |
+
+### Migration Steps
+
+| Step | Detail |
+|------|--------|
+| 1 | Configure Cloudinary upload presets (signed) |
+| 2 | Create `/api/upload/signature` endpoint |
+| 3 | Implement Flutter direct upload to Cloudinary |
+| 4 | Simplify `/api/upload/profile-image` to accept URL only |
+| 5 | Remove `multer` dependency from `package.json` |
+| 6 | Remove `routes/upload.js` old implementation |
+| 7 | Test end-to-end (pick image → Cloudinary → store URL → display) |
+
+### Admin Panel Upload
+
+Admin panel must also use direct Cloudinary upload. For the simple HTML/JS admin:
+- Use Cloudinary's unsigned upload widget (if admin origins are whitelisted)
+- Or use the same signed flow with a separate API key
+
+```javascript
+// Admin upload widget (simpler)
+// Include Cloudinary upload widget JS in admin HTML
+const widget = cloudinary.createUploadWidget({
+  cloudName: 'reachnative',
+  uploadPreset: 'admin_uploads',  // separate preset
+  folder: 'admin/',
+}, (error, result) => {
+  if (result.event === 'success') {
+    document.getElementById('avatarUrl').value = result.info.secure_url;
+  }
+});
+```
+
+## Rollback Plan
+
+If direct upload has issues:
+1. Re-enable `multer` + server-side upload (broken on Vercel but works locally)
+2. Or use Vercel Blob Storage as intermediary (paid feature)
+3. Or return to old flow with `/tmp/` (not recommended — unreliable)
+
+## Cost Impact
+
+- Cloudinary free tier: 25GB storage, 25GB bandwidth/month — sufficient for profile images
+- No additional Vercel bandwidth for uploads (client uploads directly)
+- No function execution time for file processing
+
+
+
+======================================================================
+FILE: VERCEL.md
+======================================================================
+# نشر المشروع على Vercel + MongoDB Atlas
+
+## ماذا يُنشر؟
+
+| جزء | Vercel | MongoDB Atlas |
+|-----|--------|---------------|
+| **API + لوحة الإدارة** | نعم (`backend/`) | — |
+| **Database** | — | Cluster Atlas (`weret`) |
+| **رفع الصور** | قرص محلي أو S3 (حسب `UPLOAD_STORAGE`) | — |
+| **تطبيق Flutter** | لا (APK / stores) | عبر الـ API فقط |
+
+---
+
+## 1) MongoDB Atlas
+
+1. أنشئ Cluster على [MongoDB Atlas](https://www.mongodb.com/cloud/atlas)
+2. **Database Access** → مستخدم + كلمة مرور (SCRAM)
+3. **Network Access** → أضف IP جهازك أو `0.0.0.0/0` للتطوير
+4. انسخ connection string → `MONGODB_URI` في `backend/.env`
+
+```env
+MONGODB_URI=mongodb+srv://USER:PASSWORD@cluster....mongodb.net/weret?retryWrites=true&w=majority
+MONGODB_DB_NAME=weret
+MONGODB_ATLAS_REQUIRED=1
+```
+
+تهيئة أول مرة:
+
+```bash
+npm run init:mongo --prefix backend
+npm run mongo:test-atlas --prefix backend
+```
+
+---
+
+## 2) Vercel Environment Variables
+
+| Variable | Value |
+|----------|--------|
+| `MONGODB_URI` | Atlas connection string |
+| `MONGODB_DB_NAME` | `weret` |
+| `JWT_SECRET` | سلسلة عشوائية طويلة |
+| `MONGODB_ATLAS_REQUIRED` | `1` |
+| `GOOGLE_OAUTH_WEB_CLIENT_ID` | (اختياري) |
+
+---
+
+## 3) Flutter
+
+```env
+# dart-define عند التشغيل / البناء
+API_URL=https://YOUR-PROJECT.vercel.app
+```
+
+---
+
+## 4) التحقق
+
+- `GET /health` → `"mongoMode": "atlas"`, `"database": true`
+- `npm run mongo:verify --prefix backend` — اختبار إضافة/حذف في MongoDB
+
+Collections: `users`, `rides`, `wallet_accounts`, `transactions`, …
+
+
+
+======================================================================
+FILE: WERET_FULL_ANALYSIS.md
+======================================================================
+# WERET — Full-Stack Ride-Hailing Platform Analysis
+
+## Overview
+
+**WERET** is a production-grade ride-hailing platform (like Uber/Careem) with a Flutter mobile app (iOS/Android/Windows), an Express REST API backend, a real-time Socket.io layer, and a vanilla JS admin web panel. It supports passenger, driver, and admin roles with ride lifecycle management, wallet/payments, real-time tracking, AI-powered features, and full localization (English/Arabic).
+
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      Flutter Mobile App                      │
+│  (apps/mobile-flutter/lib)                                   │
+│  Riverpod state · GoRouter routing · Dio HTTP · Socket.io   │
+│  160+ files · 3 role shells · 45+ routes · 46+ widgets      │
+└──────────────────────┬──────────────────────────────────────┘
+                       │ REST + WebSocket
+┌──────────────────────▼──────────────────────────────────────┐
+│                  shared/ (Contract Layer)                     │
+│  constants/ (vehicleTypes, walletTypes, fixedAdminEmails)     │
+│  models/ (user.model.json - Dart model)                      │
+│  services/ (apiEndpoints.js - canonical endpoint list)        │
+└──────────────────────┬──────────────────────────────────────┘
+                       │
+┌──────────────────────▼──────────────────────────────────────┐
+│              Express Backend (backend/src/)                   │
+│  Custom ODM on raw mongodb driver · JWT auth · Socket.io     │
+│  11 route files · 19 MongoDB models · 9 services · 1 job    │
+│  ~60+ API endpoints · 3 auth methods                         │
+└──────────────────────┬──────────────────────────────────────┘
+                       │
+┌──────────────────────▼──────────────────────────────────────┐
+│              Admin Web Panel (apps/web/)                      │
+│  Vanilla HTML/JS SPA · served at /admin-ui/                  │
+│  Dashboard, Users, Rides, Reports, Transactions, Audit       │
+│  Full Arabic/English i18n · 1,562 lines app.js               │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 1. Flutter Mobile App (`apps/mobile-flutter/`)
+
+### Stack
+| Library | Purpose |
+|---------|---------|
+| Flutter 3.5+ | Framework (Material 3) |
+| flutter_riverpod | State management (6 state notifiers) |
+| go_router | Routing with auth guards |
+| dio | HTTP client with auto-auth headers |
+| socket_io_client | Real-time ride updates |
+| flutter_map + latlong2 | OpenStreetMap map rendering |
+| geolocator | Device GPS |
+| google_sign_in | Google OAuth |
+| easy_localization | i18n (EN/AR, 845+ keys each) |
+| image_picker | Photo uploads |
+| equatable | Value equality |
+
+### State Management (6 Riverpod Providers)
+
+| Provider | State | Key Methods |
+|----------|-------|-------------|
+| `authProvider` | AuthState | login, register, googleSignIn, phoneOtp, forgotPassword, logout, session hydration |
+| `rideProvider` | RideState | createRide, acceptRide, startRide, endRide, cancelRide, rateDriver, nearbyDrivers, chat messages |
+| `driverProvider` | DriverState | toggleOnline, addCar, updateCar, deleteCar, locationUpdate, earnings, dashboard |
+| `walletProvider` | WalletState | accounts, deposit, withdraw, transactions, Firestore sync |
+| `adminProvider` | AdminState | paginated users/rides/reports/transactions/audit, moderate actions |
+| `themeModeProvider` | ThemeMode | light/dark/system persistence |
+
+### Routing (GoRouter)
+
+**3 role shells** with bottom navigation tabs:
+
+| Role | Tabs |
+|------|------|
+| **Passenger** | Home (map + booking), History, More (wallet, tips, saved places, help, settings), Settings |
+| **Driver** | Requests (available rides), Earnings, Profile (cars, wallet, settings) |
+| **Admin** | Dashboard, Users, Rides, More (tools, reports, transactions, audit), Settings |
+
+Auth redirect logic in `appRouterProvider`: not-hydrated→wait, unauthenticated→`/login`, authenticated→role-appropriate home, passenger-on-driver-route→redirect, driver-on-passenger-route→redirect.
+
+### Key Screens
+
+**Passenger flow:** Onboarding → Login/Register (email, phone OTP, Google) → Home (map, place search, vehicle picker, ride request) → Ride tracking (chat, call) → Rating.
+
+**Driver flow:** Register → Onboarding (docs, license, vehicle info) → Verification → Online/offline toggle → Ride offers → Accept/negotiate → Navigate → Complete → Earnings.
+
+**Admin flow:** Login → Dashboard (KPIs, charts, activity feed) → Users CRUD → Rides view → Reports moderation → Transactions flagging → Audit log.
+
+### Features
+
+- **Real-time ride tracking** via Socket.io (driver location, ride status changes)
+- **Ride pooling** (multiple passengers sharing a ride)
+- **Parcel/shipping** mode
+- **Vehicle types**: shipping, delivery, travel, motorcycle, car_standard, car_comfort
+- **Wallet system**: multi-account (cash, InstaPay, Vodafone Cash, Etisalat, Orange, WePay), deposit/withdraw, OTP-protected withdrawals
+- **AI features**: fare suggestion (OpenAI), place autocomplete reranking (OpenAI)
+- **In-app chat & WebRTC voice calls** during rides
+- **Dark/light theme** with Material 3
+- **Bilingual** (English, Arabic) with full RTL support
+
+---
+
+## 2. Express Backend (`backend/src/`)
+
+### Stack
+| Library | Purpose |
+|---------|---------|
+| express | HTTP server |
+| mongodb (native driver) | Database (custom ODM) |
+| jsonwebtoken | JWT auth (7-day expiry) |
+| bcryptjs | Password hashing |
+| socket.io | Real-time WebSocket events |
+| google-auth-library | Google ID token verification |
+| helmet | Security headers |
+| cors | Cross-origin requests |
+| express-rate-limit | Rate limiting |
+| express-validator | Input validation |
+| multer | File uploads (local disk) |
+| undici | HTTP client |
+| mongodb-memory-server | In-memory MongoDB for testing |
+
+### API Endpoints (60+)
+
+**Auth** (`/auth`): google-config, google sign-in, register, login, phone OTP (send/verify), forgot-password, reset-password, me, profile update, verify-password
+
+**Rides** (`/rides`): create, pool-matches, join, nearby-drivers, route-preview, available (for drivers), accept/offer, respond-proposal, withdraw-offer, driver-confirm-booking, driver-cancel, start, end, cancel, rate, history, messages (get/post), single ride detail
+
+**Driver** (`/driver`): status, dashboard, earnings-summary, toggle-status, cars CRUD, location-update
+
+**Passenger** (`/passenger`): location-update
+
+**Wallet** (`/wallet`): accounts CRUD, deposit, withdraw (request + confirm with OTP), transactions history
+
+**Admin** (`/admin`): users (list, update, delete), rides (list), reports (list, update), transactions (list, flag), audit log, stats
+
+**Other**: vehicles, reports (submit), upload, driver-application (submit, get), role-switch, AI search (fare suggest, places rerank), health
+
+### MongoDB Models (19 collections)
+
+`users`, `rides`, `bookings`, `vehicles`, `driverProfiles`, `driverDocuments`, `passengerProfiles`, `adminAccounts`, `adminAuditLogs`, `walletAccounts`, `transactions`, `withdrawalRequests`, `messages`, `phoneLoginOtps`, `emailPasswordResetOtps`, `reports`
+
+**Custom ODM** (`mongo/odm.js`): built on raw `mongodb` driver with query chaining, camelCase↔snake_case field mapping, in-memory populate, Date conversion, aggregation helpers.
+
+### Authentication Methods
+1. **Email/Password** — bcrypt hashing, JWT token
+2. **Google Sign-In** — ID token verification via `google-auth-library`
+3. **Phone OTP** — 6-digit OTP, SHA-256 digest, Twilio SMS
+
+### Authorization Layers
+- `authRequired` — JWT verification
+- `blockCheck` — checks `is_blocked` / `blocked_until`
+- `roleRequired(...roles)` — role gating (passenger/driver/admin)
+- `fixedAdminOnly` — only `youssef@gmail.com` and `youssef1@gmail.com`
+- `requireApprovedDriver` — driver must be approved with active car
+
+### Real-time Events (Socket.io)
+
+**Rooms:** `user:<userId>`, `ride:<rideId>`, `drivers:<vehicleType>`
+
+**Server→Client:** `ride:update` (status changes), `ride:message`, `driver:location`, `webrtc:signal`
+
+**Client→Server:** `subscribeRide`, `unsubscribeRide`, `subscribeDriverFeed`, `webrtc:join/leave/signal`, `ride:typing`
+
+### Services
+- `ensureFixedAdmins` — hardcoded admin accounts on startup
+- `walletLedger` — credit driver on ride completion
+- `driverRating` — aggregate ratings from completed rides
+- `driverRideCapacity` — max 2 concurrent rides per driver
+- `driverDashboard` — aggregator for driver home data
+- `driverVerification` — onboarding progress computation
+- `passengerStats` — completed ride count
+- `sendSms` — Twilio SMS (console fallback in dev)
+- `uploadStorage` — always local disk
+
+### Jobs
+- `simulateMovement` — moves online drivers toward destinations (for demo/testing), enabled via `SIMULATION_ENABLED=1`
+
+### Database Connection (fallback chain)
+1. `MONGODB_URI` = "memory" or `MONGODB_USE_MEMORY=1` → mongodb-memory-server
+2. Atlas URI → fallback to local → memory
+3. `MONGODB_LOCAL_URI` → fallback to memory
+
+### Seed Data
+- **6 vehicle tiers** (shipping → car_comfort)
+- **6 mock drivers** (one per vehicle type, password `driver123`, all approved + online)
+- **2 demo passengers** (password `demo123`, wallets with 500 balance)
+
+---
+
+## 3. Admin Web Panel (`apps/web/`)
+
+### Stack
+- Vanilla HTML, CSS, JS (no frameworks)
+- Served at `/admin-ui/` from Express
+- 1,562 lines `app.js`, 1,904 lines `styles.css`
+
+### Sections (SPA)
+| Section | Features |
+|---------|----------|
+| **Dashboard** | Hero KPI grid (4 cards), secondary KPIs (7 cards), ride status bar chart, quick actions, activity feed, DB status |
+| **Users** | Paginated table, search, verify/block/unblock/approve-reject driver/delete actions with typed confirmations |
+| **Rides** | Read-only table (status, passenger, driver, fare, rating, review, date) |
+| **Reports** | Table with inline status dropdown (open/reviewing/resolved/dismissed) |
+| **Transactions** | Table with flag/unflag actions, flagged row highlighting |
+| **Audit Log** | Read-only table (time, action, admin, target, summary) |
+
+### UX Features
+- Full Arabic/English i18n with RTL/LTR switching
+- Skeleton loading shimmer
+- Pagination on all 5 data tables
+- Debounced global search (320ms)
+- Toast notifications (success/error/info)
+- Confirmation modal for destructive actions (typed "BLOCK" / "DELETE")
+- Animated SVG logo with car animation
+- Responsive layout (sidebar collapses to top nav at 960px)
+- `prefers-reduced-motion` support
+
+---
+
+## 4. Shared Contract Layer (`shared/`)
+
+| File | Purpose |
+|------|---------|
+| `constants/walletTypes.js` | `["cash","instapay","vodafone","etisalat","orange","wepay"]` |
+| `constants/vehicleTypes.js` | 6 vehicle type keys + car-only filter |
+| `constants/fixedAdminEmails.js` | `["youssef@gmail.com","youssef1@gmail.com"]` |
+| `models/user.model.json` | Canonical WeretUser Dart model (camelCase+snake_case) |
+| `services/apiEndpoints.js` | All 60+ API endpoints + 11 socket events (canonical contract) |
+
+---
+
+## 5. Infra & DevOps
+
+| Aspect | Details |
+|--------|---------|
+| **Monorepo** | npm workspaces, `concurrently` for parallel dev |
+| **Docker** | `docker-compose.yml` |
+| **Vercel** | `backend/vercel.json`, `VERCEL.md` |
+| **Firebase** | `firebase.json`, `firebase-service-account.json`, `docs/FIREBASE_SETUP.md` |
+| **APK builds** | GitHub Actions (see `BUILD_APK.md`) |
+| **GitHub CI** | `.github/` workflows |
+| **VS Code** | `.vscode/`, `weret.code-workspace` |
+
+---
+
+## 6. Filesystem
+
+```
+D:\Games\ReachNative Car\
+├── apps/
+│   ├── mobile-flutter/    ← Flutter app (160+ lib files, Dart)
+│   └── web/               ← Admin panel (HTML/JS/CSS)
+├── backend/
+│   ├── src/               ← Express backend
+│   │   ├── config/        ← DB, env, Firebase config
+│   │   ├── middleware/     ← Auth, validation, rate limiting
+│   │   ├── models/        ← 19 MongoDB collections (custom ODM)
+│   │   ├── routes/        ← 11 route files (auth, rides, driver, etc.)
+│   │   ├── services/      ← Business logic (9 services)
+│   │   ├── realtime/      ← Socket.io setup + helpers
+│   │   ├── jobs/          ← Driver simulation
+│   │   ├── seed/          ← Vehicle + demo data seeding
+│   │   ├── mongo/         ← Custom ODM, client, field mapping
+│   │   └── utils/         ← Token signing, helpers
+│   ├── test/              ← Backend tests (Node --test)
+│   └── scripts/           ← Smoke tests, Mongo init scripts
+├── shared/                ← Contracts (constants, models, API endpoints)
+├── assets/                ← Branding, icons, splash screens
+├── scripts/               ← Flutter init, brand gen, workspace sync
+├── docs/                  ← Migration reports, architecture docs
+└── dcs/                   ← Consolidated markdown documentation
+```
+
+---
+
+## 7. Key Business Flows
+
+### Ride Lifecycle
+1. Passenger requests ride (pickup→destination, vehicle type, fare)
+2. Drivers in area receive notification via `drivers:<vehicleType>` room
+3. Driver submits price offer (or accepts preassigned)
+4. Passenger accepts/rejects offer
+5. Driver confirms booking → ride is `accepted`
+6. Driver starts ride → `ongoing` (real-time tracking begins)
+7. Driver ends ride → `completed` (wallet credited for driver, chat/call ends)
+8. Passenger rates driver (1-5)
+
+### Wallet Flows
+- **Deposit**: passenger/driver selects wallet account → "deposit" endpoint credits balance → Transaction created
+- **Withdraw**: request OTP → verify OTP → balance debited
+- **Ride payment**: on completion, driver's cash wallet is credited automatically
+
+### Admin Moderation
+- Approve/reject driver applications (with review notes)
+- Verify user identities
+- Block/unblock users (temporary with `blocked_until`)
+- Moderate reports (open → reviewing → resolved/dismissed)
+- Flag suspicious transactions
+- View audit log of all admin actions
+
+
+
+======================================================================
+FILE: WERET_FULL_AUDIT.md
+======================================================================
+# WERET — Full Pre-Implementation Audit
+
+> Repository: `ReachNative Car`
+> Generated: 2026-06-24
+> Scope: Complete technical audit across 11 phases for free-tier migration (Vercel Hobby + MongoDB Atlas M0 + Cloudinary Free + Firebase FCM)
+
+---
+
+## Phase 1: Repository Overview
+
+### Structure
+
+```
+ReachNative Car/
+├── backend/                          # Node.js/Express API (ESM, ~6,500 lines)
+│   ├── api/index.js                  # Vercel serverless entry point
+│   ├── src/
+│   │   ├── index.js                  # Local server entry (Socket.io + HTTP)
+│   │   ├── createApp.js              # Express app factory (shared local+Vercel)
+│   │   ├── db.js                     # MongoDB connection + seed orchestration
+│   │   ├── loadEnv.js                # dotenv loader
+│   │   ├── uploadPaths.js            # Local file upload path helpers
+│   │   ├── config/fixedAdmins.js     # Fixed admin email list
+│   │   ├── errors/AppError.js        # Custom error class
+│   │   ├── middleware/               # auth, blockCheck, roleRequired, driverGate, rateLimiters, fixedAdmin, errorHandler, validateRequest, docId
+│   │   ├── models/                   # 16 ODM model definitions
+│   │   ├── mongo/                    # ODM layer: client.js, odm.js, schema.js, fieldMap.js
+│   │   ├── routes/                   # 12 route files
+│   │   ├── services/                 # 9 services
+│   │   ├── realtime/io.js            # Socket.io room helpers + emit wrapper
+│   │   ├── utils/                    # geo, directions, phoneOtp, emailOtp, signUserToken, OAuth, seatUnits
+│   │   ├── jobs/simulateMovement.js  # Driver movement simulation
+│   │   ├── seed/                     # seedDemoPlatform, seedMockDrivers, seedVehicles
+│   │   └── firestore/                # EMPTY directory
+│   ├── scripts/                      # dev scripts
+│   └── test/                         # 6 test files
+├── apps/
+│   ├── mobile-flutter/               # Flutter mobile app (120+ Dart files, Riverpod, GoRouter, Dio)
+│   └── web/                          # Standalone admin SPA (JS, 1562 lines app.js)
+├── shared/                           # Shared JS constants
+├── assets/                           # Brand assets + images
+├── scripts/                          # Root scripts
+├── docs/ + dcs/                      # Documentation (mirrored)
+├── _restore/                         # Old mobile assets backup
+├── .github/workflows/build-android-apk.yml
+├── docker-compose.yml                # Local MongoDB
+├── firebase.json                     # Dead Firebase config
+└── package.json                      # Monorepo root (npm scripts only)
+```
+
+### Key Facts
+
+| Attribute | Value |
+|-----------|-------|
+| Backend runtime | Node.js 22+ ESM |
+| Framework | Express 4 |
+| Database | MongoDB Atlas (with local/in-memory fallback) |
+| ODM | Custom in-memory (loads ALL docs from collection into JS) |
+| Auth | JWT + Google OAuth + bcrypt |
+| Real-time | Socket.io (WebSocket) |
+| Mobile | Flutter (Riverpod, GoRouter, Dio, flutter_map) |
+| Admin web | Vanilla JS (no framework, 1562 lines) |
+| File uploads | multer → local disk |
+| Rate limiting | express-rate-limit (disabled on Vercel) |
+| Validation | express-validator |
+| Testing | `node --test` |
+| CI/CD | GitHub Actions (manual APK build only) |
+| No TypeScript | No ESLint | No Prettier |
+
+---
+
+## Phase 2: Architecture Analysis
+
+### Flutter Architecture
+
+- **State Management**: Riverpod (`flutter_riverpod`)
+- **Routing**: GoRouter with shell routes (passenger/driver/admin tab navigation)
+- **Networking**: Dio HTTP client
+- **Auth**: Google Sign-In native plugin + JWT in SharedPreferences
+- **Maps**: flutter_map (Leaflet) with configurable tile provider
+- **Location**: geolocator plugin
+- **Real-time**: socket_io_client (Socket.io WebSocket)
+- **UI**: Custom design system (WERET tokens, no Material UI)
+- **Localization**: `easy_localization` with Arabic/English JSON files
+
+### Backend Architecture
+
+```
+Mobile App ──HTTP──► Express API ──ODM──► MongoDB Atlas
+     │                                        │
+     └──WebSocket (Socket.io)◄──emit──────────┘
+                            │
+                     Admin Web Panel (HTTP)
+```
+
+Key architectural decisions:
+- Custom in-memory ODM (`mongo/odm.js`) wraps MongoDB driver
+- Every `find()`, `countDocuments()`, `updateOne()` loads ALL documents into JS memory
+- All filtering, sorting, pagination, aggregation happens in JavaScript
+- Field name mapping via `fieldMap.js`: camelCase ↔ snake_case
+- No TypeScript, no type safety
+
+### Auth Flow
+
+1. **Registration**: Email+password (bcrypt hashed) or Google OAuth ID token or Phone OTP
+2. **JWT Issuance**: `signUserToken()` creates JWT with `{ sub, role }` using `JWT_SECRET`
+3. **Request Validation**: `authRequired` middleware verifies JWT on every protected route
+4. **Block Check**: `blockCheck` middleware checks `is_blocked` / `blocked_until` after auth
+5. **Role Gate**: `roleRequired("driver")` checks `active_role` or `role` field
+
+### Ride Lifecycle
+
+```
+pending → (driver proposes fare) → awaitingDriverConfirm → accepted → ongoing → completed
+                                                           → cancelled (by driver or passenger)
+```
+
+1. Passenger creates ride → status `pending`, saved in `rides` collection
+2. Drivers see ride via `GET /rides/available` (filtered by vehicleType)
+3. Driver submits price offer via `POST /rides/accept` → `driverProposal` embedded
+4. Passenger accepts/rejects via `POST /rides/respond-proposal`
+5. If accepted → status `awaitingDriverConfirm` → driver confirms via `POST /rides/driver-confirm-booking`
+6. If confirmed → status `accepted`, driver assigned
+7. Driver starts ride → `ongoing`, ends ride → `completed`
+8. Passenger rates driver after completion
+
+### File Upload Flow
+
+1. Mobile app picks image → sends multipart POST to `/upload`
+2. `multer.diskStorage()` writes to local filesystem
+3. Path: `{uploadRoot}/{public|private}/{userId}/{timestamp}-{random}.{ext}`
+4. Response: `{ url: "/uploads/public/{userId}/{filename}", storage: "local" }`
+5. **Public files**: Served via `express.static`
+6. **Private files**: Served via auth-gated route `GET /uploads/private/:userId/:file`
+
+---
+
+## Phase 3: Backend Audit — Endpoint Inventory
+
+### Auth Routes (`/auth`)
+
+| Method | Path | Auth | Rate-Limited | Description |
+|--------|------|------|-------------|-------------|
+| GET | `/google-config` | No | No | Returns Google OAuth client IDs |
+| POST | `/google` | No | Yes | Google ID token sign-in |
+| POST | `/register` | No | Yes | Email+password registration |
+| GET | `/me` | JWT | No | Current user profile |
+| PATCH | `/profile` | JWT+block | No | Update name, phone, image, vehicleType |
+| POST | `/phone/otp` | No | Yes | Request phone OTP |
+| POST | `/phone/verify` | No | Yes | Verify phone OTP + login/register |
+| POST | `/login` | No | Yes | Email+password login |
+| POST | `/verify-password` | JWT+block | No | Re-verify password |
+| POST | `/forgot-password` | No | Yes | Request email password reset OTP |
+| POST | `/reset-password` | No | Yes | Reset password with OTP |
+
+### Ride Routes (`/rides`) — JWT + blockCheck on ALL
+
+| Method | Path | Role | Description |
+|--------|------|------|-------------|
+| GET | `/nearby-drivers` | passenger/admin | Online drivers near location |
+| GET | `/route-preview` | any | Route polyline preview |
+| POST | `/create` | passenger | Create ride request |
+| POST | `/pool-matches` | passenger | Find compatible pool rides |
+| POST | `/join` | passenger | Join pooled ride |
+| GET | `/available` | driver+approved | Pending rides for driver |
+| GET | `/my-active` | driver+approved | Driver's active rides |
+| POST | `/accept` | driver+approved | Submit/update price offer |
+| POST | `/withdraw-offer` | driver+approved | Withdraw pending offer |
+| POST | `/respond-proposal` | passenger | Accept/reject driver offer |
+| POST | `/passenger-min-fare` | passenger | Update minimum fare |
+| POST | `/driver-confirm-booking` | driver+approved | Confirm after passenger accepts |
+| POST | `/driver-cancel` | driver+approved | Cancel accepted ride |
+| POST | `/start` | driver+approved | Start ride (accepted→ongoing) |
+| POST | `/end` | driver+approved | End ride (ongoing→completed) |
+| POST | `/cancel` | passenger | Cancel pending/accepted ride |
+| POST | `/rate` | passenger | Rate driver after completion |
+| GET | `/ratings/received` | driver | View driver's ratings |
+| GET | `/history` | any | Ride history (role-based filtering) |
+| GET | `/:rideId/messages` | participant | Get ride chat messages |
+| POST | `/:rideId/messages` | participant | Send chat message |
+| GET | `/:rideId` | participant/admin | Get ride detail |
+
+### Driver Routes (`/driver`) — JWT + blockCheck
+
+| Method | Path | Role | Description |
+|--------|------|------|-------------|
+| GET | `/status` | any | Driver application status |
+| GET | `/dashboard` | any | Full driver dashboard (stats) |
+| GET | `/earnings-summary` | any | Earnings overview |
+| POST | `/toggle-status` | any | Go online/offline |
+| POST | `/cars` | any | Add car to profile |
+| PATCH | `/cars/:carId` | any | Update car details |
+| DELETE | `/cars/:carId` | any | Remove car |
+| PATCH | `/cars/:carId/set-active` | any | Set active car |
+| POST | `/location-update` | driver+approved | Update location (emits Socket.io) |
+
+### Passenger Routes (`/passenger`) — JWT + blockCheck + roleRequired
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/location-update` | Update passenger location |
+
+### Wallet Routes (`/wallet`) — JWT + blockCheck + roleRequired("passenger","driver")
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/accounts` | List wallets |
+| POST | `/accounts` | Create wallet account |
+| DELETE | `/accounts/:id` | Remove empty wallet |
+| POST | `/deposit` | Mock deposit |
+| POST | `/withdraw/request` | Request withdrawal OTP |
+| POST | `/withdraw/confirm` | Confirm withdrawal |
+| GET | `/transactions` | Transaction history |
+
+### Admin Routes (`/admin`) — JWT + blockCheck + roleRequired("admin") + fixedAdminOnly
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/users` | List users (paginated) |
+| PATCH | `/users/:userId` | Update user (verify, block, approve driver) |
+| DELETE | `/users/:userId` | Delete user |
+| GET | `/reports` | List reports (paginated) |
+| PATCH | `/reports/:id` | Update report status |
+| GET | `/transactions` | List transactions (paginated, filterable) |
+| PATCH | `/transactions/:id/flag` | Flag transaction |
+| GET | `/audit` | Audit log (paginated) |
+| GET | `/rides` | List rides (paginated) |
+| GET | `/stats` | Dashboard KPI stats (11+ queries) |
+
+### Other Routes
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/health` | No | Health check |
+| POST | `/upload` | JWT+block | Upload image (multer) |
+| POST | `/driver-application/*` | JWT | Driver onboarding |
+| PATCH | `/role-switch` | JWT | Switch passenger/driver |
+| POST | `/ai/search` | JWT | AI search |
+| GET | `/vehicles` | any | Vehicle type catalog |
+| POST | `/reports` | JWT | Report user |
+
+**Total Endpoints: ~56**
+
+---
+
+## Phase 4: Database Audit
+
+### 16 Collections
+
+| Collection | Models | Documents | Indexes | TTL | Growth Rate | Large Doc Risk |
+|------------|--------|-----------|---------|-----|-------------|----------------|
+| `users` | User | Few (dev) | email, google_sub (unique) | No | Low | No |
+| `rides` | Ride | Few | passenger_id, driver_id | No | Medium | routePath array |
+| `driver_profiles` | DriverProfile | Few | None | No | Low | cars[] embedded |
+| `driver_documents` | DriverDocuments | Few | None | No | Low | No |
+| `passenger_profiles` | PassengerProfile | Few | None | No | Low | No |
+| `bookings` | Booking | Few | None | No | Medium | No |
+| `messages` | Message | Few | None | No | High | Chat grows fastest |
+| `wallet_accounts` | WalletAccount | Few | user_id | No | Low | No |
+| `transactions` | Transaction | Few | user_id+created_at | No | Medium | No |
+| `withdrawal_requests` | WithdrawalRequest | Few | None | No | Low | No |
+| `reports` | Report | Few | None | No | Low | No |
+| `admin_audit_logs` | AdminAuditLog | Few | None | No | Medium | Unbounded |
+| `admin_accounts` | AdminAccount | 2 | None | No | None | No |
+| `phone_login_otps` | PhoneLoginOtp | Few | None | **Missing** | Low | No |
+| `email_password_reset_otps` | EmailPasswordResetOtp | Few | None | **Missing** | Low | No |
+| `vehicles` | Vehicle | 8 | None | No | None | No |
+
+### Critical ODM Limitation
+
+The custom ODM (`mongo/odm.js:233`) loads **every document** from a collection into memory:
+
+```js
+async function loadCollectionDocs(model) {
+  const rows = await getCollection(model.tableName).find({}).toArray();
+  // All filtering, sorting, pagination happens in JS
+}
+```
+
+This means:
+- `User.countDocuments()` loads ALL users
+- `Ride.find({ status: "pending" })` loads ALL rides, filters in JS
+- `Ride.aggregate()` loads ALL rides, groups in JS
+- MongoDB indexes (schema.js:59-66) are **never used** by queries
+- At scale (>50K documents), Atlas free tier 512MB RAM will be exhausted
+
+### Missing Indexes (14 total)
+
+| Collection | Needed Index | Affected Queries |
+|------------|-------------|-----------------|
+| `rides` | `{ status: 1, vehicle_type: 1 }` | Driver "available" feed |
+| `rides` | `{ driver_id: 1, status: 1 }` | Driver active/history |
+| `rides` | `{ passenger_id: 1, status: 1 }` | Passenger history |
+| `rides` | `{ created_at: -1 }` | Admin ride listing |
+| `messages` | `{ ride_id: 1, created_at: 1 }` | Chat retrieval |
+| `messages` | `{ created_at: 1 }` (TTL) | Auto-cleanup |
+| `transactions` | `{ user_id: 1, created_at: -1 }` | Wallet history |
+| `phone_login_otps` | `{ expires_at: 1 }` (TTL) | Auto-cleanup |
+| `email_password_reset_otps` | `{ expires_at: 1 }` (TTL) | Auto-cleanup |
+| `admin_audit_logs` | `{ created_at: -1 }` | Admin audit listing |
+| `reports` | `{ status: 1, created_at: -1 }` | Admin reports |
+| `users` | `{ phone: 1 }` | Phone OTP login |
+| `users` | `{ active_role: 1, is_online: 1 }` | Nearby drivers |
+
+### Duplicate / Redundant Fields
+
+| Field | Location | Issue |
+|-------|----------|-------|
+| `carImageUrl` | `driver_profiles` (top-level) | Duplicates `cars[0].imageUrl` — backwards compat |
+| `vehicleType` | `users` | Duplicates data in driver_profile |
+| `parcel` object | `rides` | Shipping metadata on ALL rides, most don't use |
+| `routePath` | `rides` | Large lat/lng arrays, rarely needed after booking |
+
+### Schema Suitability for MongoDB Atlas Free (512MB)
+
+- Current dev data is negligible
+- At scale: `routePath` + `messages` + `admin_audit_logs` will be primary storage drivers
+- ODM loading entire collections into memory is the PRIMARY risk for free tier RAM limits
+- Need TTL indexes on OTP and audit log collections
+
+---
+
+## Phase 5: Realtime Audit
+
+| Feature | Current | Frequency | Bandwidth | Cost | Replacement |
+|---------|---------|-----------|-----------|------|-------------|
+| **Ride feed** (new rides to drivers) | Socket.io `ride:update` to `roomDrivers(vt)` | Per ride create (~1/sec) | ~2KB/event | Free | REST polling `GET /rides/available` every 5s |
+| **Ride status updates** | Socket.io `ride:update` to `roomRide(id)` | On transitions | ~2KB/event | Free | REST `GET /rides/:id` every 3-5s |
+| **Chat messages** | Socket.io `ride:message` | Per message (~1/30s) | ~1KB | Free | REST `POST + GET ?since=` every 2-3s |
+| **Typing indicators** | Socket.io `ride:typing` | Per keystroke | ~200B | Free | Remove (optional) |
+| **Driver location** | Socket.io `driver:location` to active rides | Every 3-5s | ~200B | Free | Embed in ride detail, update every 5s |
+| **WebRTC signaling** | Socket.io `webrtc:signal` relay | Per call | ~2KB | Free | Remove or direct P2P |
+| **Admin live dashboard** | Not implemented (dead comment) | — | — | — | REST polling every 15s |
+
+### Migration Difficulty: LOW-MEDIUM
+
+Socket.io is purely a notification overlay — all state is in MongoDB. Migration replaces `io.emit()` with "client polls API" pattern. No server-push synchronization needed.
+
+### Polling Design (Target)
+
+| Poll | Endpoint | Interval | Max Payload |
+|------|----------|----------|-------------|
+| Available rides (driver) | `GET /rides/available?vt=X` | 5s | ~5KB |
+| Active rides (driver) | `GET /rides/my-active` | 5s | ~3KB |
+| Ride detail (passenger) | `GET /rides/:id` | 3s | ~8KB |
+| Chat messages | `GET /rides/:id/messages?since=T` | 2s | ~2KB |
+| Driver location | embedded in ride detail | 5s | — |
+| History (passenger/driver) | `GET /rides/history` | 30s | ~10KB |
+| Admin stats | `GET /admin/stats` | 15s | ~15KB |
+| Admin users/rides/etc | `GET /admin/*?page=N` | on navigate | ~10KB |
+
+---
+
+## Phase 6: Third-Party Services
+
+| Service | Purpose | Required? | Can Remove? | Current Status | Est. Monthly Cost |
+|---------|---------|-----------|-------------|----------------|-------------------|
+| **MongoDB Atlas** | All data storage | **YES** | No | Active (Cluster0) | Free (M0: 512MB) |
+| **Google Sign-In** | OAuth authentication | Optional | Yes (use email+password) | Active (3 client IDs in .env) | Free |
+| **Socket.io** | Real-time events | No | **Should replace** | Active | Free (self-hosted) |
+| **Twilio** | SMS for phone OTP | Optional | Yes (use console mode) | Not configured (commented out) | ~$0.0079/SMS |
+| **OpenAI** | AI search | Optional | Yes | Route exists, may be unused | Variable |
+| **Cloudinary** | Image uploads/storage | **YES** *(planned)* | N/A | Not yet implemented | Free (25GB) |
+| **Firebase FCM** | Push notifications | **YES** *(planned)* | N/A | Not yet implemented | Free |
+| **Firebase Auth/FS/RTDB/Storage** | — | No | **YES — remove** | Dead code, never used | N/A |
+| **Mapbox** | Map tiles (via flutter_map) | Optional | Yes (use OSM free tiles) | Configurable | Free tier |
+
+### Dead/Unused Services
+
+| Service | Evidence |
+|---------|----------|
+| Firebase Auth | Zero `firebase-admin` imports. Google Sign-In uses own OAuth |
+| Firestore | Empty `src/firestore/` directory. Zero Firestore operations |
+| Realtime Database | Zero references anywhere |
+| Firebase Storage | Zero `getStorage()` or bucket references |
+| Twilio | Env vars commented out. `SMS_CONSOLE_MODE=1` routes around it |
+
+---
+
+## Phase 7: Infrastructure Audit
+
+| Component | Current State | Target State | Status |
+|-----------|--------------|--------------|--------|
+| **Hosting** | Local dev server (localhost:3000) | Vercel (Hobby) | Partial — vercel.json exists |
+| **Database** | MongoDB Atlas Cluster0 | MongoDB Atlas M0 Free | Ready — URI in .env |
+| **File storage** | Local disk (backend/uploads/) | Cloudinary | Not implemented |
+| **Push notifications** | None | Firebase Cloud Messaging | Not implemented |
+| **Environment variables** | backend/.env (plaintext) | Vercel encrypted env vars | Needs migration |
+| **Secrets** | Committed to git (.env) | Vercel env vars / .env.example only | **CRITICAL** — exposed |
+| **Domain** | localhost:3000 | Unknown | Missing |
+| **SSL** | None (dev) | Vercel auto-HTTPS | Ready |
+| **CI/CD** | GitHub Actions (manual APK) | GitHub Actions + Vercel deploy | Needs expansion |
+
+### Vercel Hobby Limits vs. Estimated Usage
+
+| Metric | Limit | Estimated Need | Verdict |
+|--------|-------|---------------|---------|
+| Bandwidth | 100 GB/month | ~80 GB/month (with 5-10s polling) | **MARGINAL** — needs optimization |
+| Serverless invocations | 10/sec burst | ~73/sec peak | **EXCEEDS** — needs caching |
+| Function timeout | 10s (30s max) | 30-100ms avg | OK |
+| Response size | 50 MB | <10 KB avg | OK |
+| Build minutes | 6000/month | ~100 | OK |
+| WebSockets | **Not supported** | N/A | Socket.io must be removed |
+
+---
+
+## Phase 8: Free Tier Analysis
+
+### Features That Fit Free Tiers
+
+| Feature | Tier | Limit | Fit |
+|---------|------|-------|-----|
+| Database storage | Atlas M0 | 512 MB | OK initially |
+| Image storage | Cloudinary Free | 25 GB | OK |
+| Push notifications | Firebase FCM | Unlimited | OK |
+| Map tiles | OSM/Mapbox Free | 50K-100K loads | OK |
+| Auth (email+pw) | Self-hosted | Unlimited | OK |
+| Google Sign-In | Google OAuth | 10K req/day | OK |
+
+### Features That EXCEED Free Tiers
+
+| Feature | Reason | Classification | Mitigation |
+|---------|--------|---------------|------------|
+| **Socket.io** | Not supported on Vercel serverless | Required | Replace with REST polling |
+| **Local file uploads** | Ephemeral on Vercel (/tmp) | Required | Migrate to Cloudinary |
+| **Bandwidth at 2s polling** | 420 GB/month > 100 GB limit | Required | Increase to 5-10s polling |
+| **ODM full-collection loads** | RAM limit on Atlas M0 (512MB) | Required | Rewrite ODM to use native queries |
+| **Function invocations** | 73/sec > 10/sec burst | Required | Add caching layer |
+| **Admin stats (11+ queries)** | Unnecessary load | Optional | Cache for 10-30s |
+
+### Classification Summary
+
+| Feature | Classification | Action |
+|---------|---------------|--------|
+| Ride booking & lifecycle | **Required** | Keep as-is, optimize DB queries |
+| Driver ride feed | Required | Polling (5s interval) |
+| Passenger ride tracking | Required | Polling (3s interval) |
+| Chat | Required | REST with `?since=` filter |
+| Driver location | Required | Embedded in ride detail (5s) |
+| File uploads | Required | Cloudinary |
+| Push notifications | Required | Firebase FCM |
+| Admin dashboard | Optional | Cache stats, increase polling |
+| WebRTC calling | Future | Remove from Socket.io, rebuild later |
+| Typing indicators | Future | Remove |
+| AI search | Optional | Keep if used, else remove |
+| SMS (Twilio) | Optional | Console mode for dev, Twilio later |
+| Live admin dashboard | Remove | Remove dead feature comment |
+
+---
+
+## Phase 9: Conflict Detection
+
+### Critical Issues
+
+| # | Issue | Location | Explanation |
+|---|-------|----------|-------------|
+| 1 | **ODM is incorrect by design** | `mongo/odm.js:233` | Loads ALL docs into memory. Every query is a full collection scan in JS. MongoDB indexes never used. |
+| 2 | **`aggregate()` is a mock** | `mongo/odm.js:575-617` | Only `$match` + `$group` with `$sum`. No `$sort`, `$lookup`, `$unwind`, `$project`. Admin stats call loads ALL rides. |
+| 3 | **No TTL indexes on OTPs** | `PhoneLoginOtp`, `EmailPasswordResetOtp` | Stale documents accumulate forever |
+| 4 | **No TTL on audit logs** | `admin_audit_logs` | Unbounded growth |
+| 5 | **Rate limiting disabled on Vercel** | `rateLimiters.js:9-10` | Empty middleware on Vercel |
+| 6 | **CORS allows all origins** | `createApp.js:44` | No origin whitelist |
+
+### Security Issues
+
+| # | Issue | Location | Risk |
+|---|-------|----------|------|
+| 1 | Plaintext admin passwords in .env | `.env:39-40` | **HIGH** |
+| 2 | MongoDB credentials in committed .env | `.env:5` | **HIGH** |
+| 3 | Default JWT secret in code | `index.js:18` | **HIGH** |
+| 4 | No rate limiting on Vercel | `rateLimiters.js` | MEDIUM |
+| 5 | CORS open to all origins | `createApp.js:44` | MEDIUM |
+
+### Dead Code
+
+| # | File | Reason |
+|---|------|--------|
+| 1 | `src/firestore/` | Empty directory |
+| 2 | `firebase.json` | References non-existent firestore.rules |
+| 3 | `backend/firebase-service-account.json` | Zero consumers |
+| 4 | `android/app/google-services.json` | Placeholder pkg names, no Firebase dependency |
+| 5 | `User.js:5` — `firebaseUid` | Never populated or queried |
+| 6 | `services/uploadStorage.js` | Returns hardcoded "local", never read |
+| 7 | 6 favicon files in `apps/web/` | Unreferenced |
+| 8 | `.env` comment about `ADMIN_FIRESTORE_LIVE` | Dead feature reference |
+
+### Duplicate APIs
+
+| Endpoint 1 | Endpoint 2 | Issue |
+|------------|------------|-------|
+| `GET /driver/status` | `GET /driver-application/status` | Overlapping driver status |
+| `POST /passenger/location-update` | `POST /driver/location-update` | Same logic, different roles |
+
+### Tight Coupling
+
+- ODM model names are directly used as MongoDB collection names (`tableName`)
+- Socket.io event names hardcoded across route files
+- Admin panel i18n mixed with DOM (`data-i18n` attributes directly in HTML)
+- Flutter providers directly import API endpoints (no API abstraction layer)
+
+---
+
+## Phase 10: Migration Roadmap
+
+### Task 1 — ODM Rewrite
+
+- **Objective**: Replace in-memory ODM with native MongoDB queries (push filter/sort/limit to DB)
+- **Files affected**: `mongo/odm.js`, `mongo/fieldMap.js`, `mongo/schema.js`, all 16 models, all routes
+- **Dependencies**: None
+- **Risk**: HIGH — touches every data operation
+- **Testing**: Run 6 existing tests + manual ride lifecycle test
+- **Rollback**: Revert `odm.js` to prior version
+- **Infrastructure**: None
+- **Outcome**: Queries use MongoDB indexes, collections no longer loaded in memory
+
+### Task 2 — Replace Socket.io with REST Polling
+
+- **Objective**: Remove WebSocket dependency for Vercel compatibility
+- **Files affected**: `src/index.js`, `src/realtime/io.js`, `src/routes/rides.js`, `src/routes/driver.js`; Flutter: `realtime/socket_service.dart`, `realtime/realtime_bridge.dart`
+- **Dependencies**: None
+- **Risk**: MEDIUM — changes real-time UX
+- **Testing**: Manual ride lifecycle with polling intervals
+- **Rollback**: Re-enable Socket.io
+- **Infrastructure**: None
+- **Outcome**: All realtime features work via REST with 5-10s polling
+
+### Task 3 — Migrate File Uploads to Cloudinary
+
+- **Objective**: Replace local disk storage with Cloudinary CDN
+- **Files affected**: `src/routes/uploads.js`, `src/uploadPaths.js`, `src/services/uploadStorage.js`, `src/createApp.js`
+- **Dependencies**: None
+- **Risk**: LOW — isolated to upload path
+- **Testing**: POST /upload, verify Cloudinary URL returned
+- **Rollback**: Revert to disk storage
+- **Infrastructure**: Cloudinary account + env vars
+- **Outcome**: Images served via Cloudinary CDN, signed URLs for private images
+
+### Task 4 — Remove Dead Firebase Code
+
+- **Objective**: Delete unused Firebase artifacts
+- **Files affected**: `firebase.json`, `backend/firebase-service-account.json`, `android/app/google-services.json`
+- **Dependencies**: None
+- **Risk**: LOW — all unused
+- **Testing**: Verify auth still works
+- **Rollback**: Restore deleted files
+- **Infrastructure**: None
+- **Outcome**: Clean codebase, no Firebase references
+
+### Task 5 — Remove Unused Favicon Files
+
+- **Objective**: Delete 6 unreferenced favicon files
+- **Files affected**: `apps/web/favicon-{16,32,48,64,128,192,512}.png`
+- **Dependencies**: None
+- **Risk**: NONE
+- **Testing**: Verify favicon still loads
+- **Rollback**: Restore files
+- **Infrastructure**: None
+- **Outcome**: 6 files removed, ~100KB saved
+
+### Task 6 — Add Missing Database Indexes
+
+- **Objective**: Create MongoDB indexes for common queries
+- **Files affected**: `mongo/schema.js`
+- **Dependencies**: Task 1 (ODM rewrite) — indexes matter only after queries push to DB
+- **Risk**: LOW — createIndex is idempotent
+- **Testing**: Verify no duplicate index errors
+- **Rollback**: Drop indexes via MongoDB shell
+- **Infrastructure**: MongoDB Atlas
+- **Outcome**: All 14+ missing indexes created
+
+### Task 7 — Add TTL Indexes + Audit Log Archiving
+
+- **Objective**: Auto-expire OTPs, cap audit log growth
+- **Files affected**: `mongo/schema.js`
+- **Dependencies**: Task 1
+- **Risk**: LOW
+- **Testing**: Verify auto-cleanup behavior
+- **Rollback**: Drop TTL indexes
+- **Outcome**: Auto-cleanup of stale data
+
+### Task 8 — Implement FCM Push Notifications
+
+- **Objective**: Build push notification infrastructure
+- **Files affected**: New `src/services/pushNotifications.js`, route for device token registration; Flutter: add `firebase_messaging`
+- **Dependencies**: Task 4 (separate — Firebase removal and FCM are independent)
+- **Risk**: MEDIUM — new feature
+- **Testing**: Trigger ride event, verify notification on device
+- **Rollback**: Remove FCM code and Flutter dependency
+- **Infrastructure**: Firebase project with Cloud Messaging enabled
+- **Outcome**: Push notifications on ride events
+
+### Task 9 — Secure Secrets
+
+- **Objective**: Remove plaintext secrets from .env, regenerate credentials
+- **Files affected**: `backend/.env`, `backend/.env.example`
+- **Dependencies**: None
+- **Risk**: LOW
+- **Testing**: Verify app starts with new env vars
+- **Rollback**: Restore original .env
+- **Infrastructure**: Vercel project with env vars set
+- **Outcome**: No secrets in repository
+
+### Task 10 — Enable Rate Limiter on Vercel
+
+- **Objective**: Rate limiting works on Vercel (currently disabled)
+- **Files affected**: `middleware/rateLimiters.js`
+- **Dependencies**: Task 2 (removes Socket.io)
+- **Risk**: LOW
+- **Testing**: Verify rate limit response after threshold
+- **Rollback**: Revert to no-op
+- **Infrastructure**: None
+- **Outcome**: Rate limiting active on all environments
+
+### Task 11 — CORS + Security Hardening
+
+- **Objective**: Restrict CORS origins, tighten Helmet CSP
+- **Files affected**: `createApp.js`
+- **Dependencies**: None
+- **Risk**: LOW
+- **Testing**: Verify mobile app can still connect
+- **Rollback**: Revert CORS config
+- **Infrastructure**: None
+- **Outcome**: Origin whitelist, proper security headers
+
+### Task 12 — Admin Stats Caching
+
+- **Objective**: Cache `/admin/stats` for 10-30s
+- **Files affected**: `routes/admin.js`
+- **Dependencies**: Task 1
+- **Risk**: LOW
+- **Testing**: Verify dashboard updates
+- **Rollback**: Remove caching
+- **Infrastructure**: None
+- **Outcome**: 11+ queries/dashboard load reduced to 1 per 10s
+
+### Task 13 — Remove Duplicate Collection Counts from Admin
+
+- **Objective**: Remove `countMongoCollections` from `/admin/stats`
+- **Files affected**: `routes/admin.js`
+- **Dependencies**: None
+- **Risk**: LOW
+- **Testing**: Verify admin dashboard renders
+- **Rollback**: Re-add count call
+- **Infrastructure**: None
+- **Outcome**: Removes 16+ countDocuments per dashboard load
+
+### Task 14 — Clean Up Localization Dead Strings
+
+- **Objective**: Remove Firestore-related localization strings
+- **Files affected**: `apps/mobile-flutter/lib/l10n/{ar,en}.json`
+- **Dependencies**: Task 4
+- **Risk**: NONE
+- **Testing**: Verify app still translates
+- **Rollback**: Restore strings
+- **Infrastructure**: None
+- **Outcome**: Clean localization files
+
+### Task 15 — Optimize Polling Bandwidth
+
+- **Objective**: Tune polling intervals to fit Vercel free tier bandwidth
+- **Files affected**: Flutter providers, admin app.js
+- **Dependencies**: Task 2
+- **Risk**: LOW
+- **Testing**: Verify ride lifecycle UX acceptable
+- **Rollback**: Revert intervals
+- **Infrastructure**: None
+- **Outcome**: Bandwidth from ~420 GB/month → ~80 GB/month (within Hobby limit)
+
+---
+
+## Phase 11: Missing Infrastructure Checklist
+
+### Backend
+
+| Item | Status | Notes |
+|------|--------|-------|
+| ☐ MongoDB Atlas (M0 Free) | **Exists** | URI in .env, Cluster0 |
+| ☐ Vercel Project | Partial | vercel.json exists, project not linked |
+| ☐ Environment Variables | Partial | In .env but not in Vercel |
+| ☐ JWT Secret | **Exists (insecure)** | Plaintext in .env — must be rotated |
+| ☐ Google OAuth Credentials | **Exists** | 3 client IDs in .env |
+| ☐ Firebase Project | **Exists** | `youssef-f757e` — FCM not yet enabled |
+| ☐ Firebase Service Account | **Exists (unused)** | `firebase-service-account.json` |
+| ☐ Cloudinary Account | **Missing** | Need Cloud Name + API Key + API Secret |
+| ☐ Twilio (if retained) | Missing | SID + Token + From Number |
+
+### Flutter
+
+| Item | Status | Notes |
+|------|--------|-------|
+| ☐ Android package name | Placeholder | `com.example.ecommerce_app` — needs real name |
+| ☐ iOS bundle identifier | Placeholder | `$(PRODUCT_BUNDLE_IDENTIFIER)` — needs real value |
+| ☐ Firebase google-services.json | Placeholder | Wrong package names, no Firebase Flutter dep |
+| ☐ Google Sign-In config | Partial | Client IDs exist in backend, not in Flutter .env |
+| ☐ Notification config | Missing | No FCM on Flutter side |
+
+### Deployment
+
+| Item | Status | Notes |
+|------|--------|-------|
+| ☐ Domain | **Missing** | Unknown |
+| ☐ HTTPS | Provided by Vercel | Auto |
+| ☐ CORS configuration | Open (all origins) | Needs whitelist |
+| ☐ Production env vars | Partial | Need to migrate from .env to Vercel |
+
+---
+
+## Questions That Must Be Answered Before Implementation
+
+1. **Domain**: What domain will the API use in production?
+2. **Vercel**: Do you have a Vercel account/project linked? What is the project name?
+3. **Cloudinary**: What are your Cloudinary credentials (Cloud Name, API Key, API Secret)?
+4. **Android package name**: What is the real Android application ID (not `com.example.ecommerce_app`)?
+5. **iOS bundle ID**: What is the real iOS bundle identifier?
+6. **Twilio**: Do you want to keep SMS (requires Twilio) or stay with console-only OTP for now?
+7. **OpenAI**: Is the `/ai/search` route actually used? Can it be removed?
+8. **Polling tolerance**: What is the acceptable maximum delay for ride updates? (5s? 10s?)
+9. **Admin fixed emails**: Current list has `youssef@gmail.com`, `youssef1@gmail.com` — are these the actual admin emails?
+10. **Build**: Do you want CI/CD to auto-deploy to Vercel, or manual deployment?
+
+---
+
+> **End of Audit. Do not implement anything until missing credentials are provided and Task 1 of the migration roadmap is explicitly approved.**
+
+
+

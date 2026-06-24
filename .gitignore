@@ -1,0 +1,79 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.local
+
+# Firebase (never commit)
+**/google-services.json
+**/firebase-service-account.json
+backend/firebase-service-account.json
+mobile/google-services.json
+
+# Expo / React Native
+.expo/
+.expo-shared/
+.expo-export-test/
+dist/
+web-build/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+
+# Native builds
+mobile/android/app/build/
+mobile/android/.gradle/
+mobile/android/local.properties
+mobile/ios/Pods/
+mobile/ios/build/
+*.ipa
+dist/
+*.apk
+*.aab
+!dist/.gitkeep
+
+# Logs & debug
+*.log
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# OS & IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/settings.local.json
+.vscode/*.local.json
+weret.code-workspace
+apps/mobile-flutter/.env.vscode
+*.swp
+*.swo
+
+# Python / doc build artifacts (graduation docs)
+**/__pycache__/
+**/_build_documentation.html
+docs/graduation-projects/**/diagrams/*.html
+
+# Mongo / Docker local data
+**/data/db/
+
+# User uploads (keep folder only)
+backend/uploads/**
+!backend/uploads/.gitkeep
+!backend/uploads/public/
+backend/uploads/public/**
+!backend/uploads/public/.gitkeep
+
+# Misc
+coverage/
+.cache/
+*.pem

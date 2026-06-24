@@ -1,0 +1,18 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "backend/api/**/*",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "apps/web/**/*",
+      "use": "@vercel/static"
+    }
+  ],
+  "routes": [
+    { "src": "/api/(.*)", "dest": "backend/api/index.js" },
+    { "src": "/admin-ui/(.*)", "dest": "apps/web/$1" },
+    { "src": "/", "dest": "apps/web/index.html" }
+  ]
+}

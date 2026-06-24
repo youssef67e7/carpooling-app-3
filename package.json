@@ -1,0 +1,23 @@
+{
+  "name": "weret",
+  "private": true,
+  "type": "module",
+  "description": "WERET monorepo: Flutter mobile + Express backend + admin web.",
+  "scripts": {
+    "install:all": "npm install --prefix backend",
+    "backend": "npm run dev --prefix backend",
+    "mobile": "cd apps/mobile-flutter && flutter run",
+    "mobile:get": "cd apps/mobile-flutter && flutter pub get",
+    "init:flutter": "powershell -ExecutionPolicy Bypass -File scripts/init-flutter.ps1",
+    "apk": "cd apps/mobile-flutter && flutter build apk --debug",
+    "web": "npm run backend",
+    "dev": "concurrently -n backend,flutter -c blue,green \"npm run backend\" \"npm run mobile\"",
+    "test": "npm test --prefix backend && npm run test:smoke --prefix backend",
+    "test:smoke": "npm run test:smoke --prefix backend",
+    "vscode:sync": "node scripts/sync-vscode-workspace.js",
+    "brand:generate": "python scripts/generate-weret-brand-assets.py && cd apps/mobile-flutter && dart run flutter_launcher_icons && dart run flutter_native_splash:create"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

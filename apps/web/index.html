@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>لوحة الإدارة — WERET</title>
+  <link rel="icon" type="image/png" href="favicon.png" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Inter:wght@500;600;700;800;900&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+
+<body>
+  <div id="toast" class="toast hidden" role="status"></div>
+
+  <div id="modal-confirm" class="modal hidden" aria-modal="true" role="dialog">
+    <div class="modal-backdrop"></div>
+    <div class="modal-panel card">
+      <h3 id="modal-confirm-title" data-i18n="modal_default_title">تأكيد</h3>
+      <p id="modal-confirm-msg" class="sub"></p>
+      <div class="modal-actions">
+        <button type="button" class="secondary" id="modal-confirm-cancel" data-i18n="modal_cancel">إلغاء</button>
+        <button type="button" class="btn-danger" id="modal-confirm-ok" data-i18n="modal_ok">تأكيد</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="app-login" class="layout-login">
+    <div class="login-panel card fade-up">
+      <div class="login-top">
+        <div class="lang-switch" role="group" aria-label="Language">
+          <button type="button" class="lang-btn" data-set-lang="ar" data-i18n="lang_ar">العربية</button>
+          <button type="button" class="lang-btn" data-set-lang="en" data-i18n="lang_en">English</button>
+        </div>
+      </div>
+      <div class="brand-row brand-row--stacked">
+        <div class="weret-logo-img weret-logo-img--login" data-weret-logo="login"></div>
+        <h1 class="brand-title" data-i18n="login_brand_title">لوحة إدارة WERET</h1>
+        <p class="sub brand-sub" data-i18n="login_brand_sub">نفس API التطبيق — صلاحيات موحدة</p>
+      </div>
+
+      <section id="login-card">
+        <h2 data-i18n="login_heading">تسجيل الدخول</h2>
+        <p class="sub secure-note" data-i18n="login_secure_note">مسؤولون ثابتون فقط (مصادقة الخادم).</p>
+        <form id="form-login">
+          <label for="api-base" data-i18n="label_api">عنوان الخادم (API)</label>
+          <input id="api-base" name="api-base" type="url" inputmode="url" autocomplete="off"
+            data-i18n-placeholder="ph_api" placeholder="فارغ = نفس المنشأ (/admin-ui/)" />
+          <label for="email" data-i18n="label_email">البريد</label>
+          <input id="email" name="email" type="email" autocomplete="username" required />
+          <label for="password" data-i18n="label_password">كلمة المرور</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" required />
+          <button type="submit" class="btn-primary" data-i18n="btn_login">دخول</button>
+        </form>
+        <div id="google-signin-wrap" class="google-signin-wrap hidden">
+          <div id="google-signin-btn" class="google-signin-btn-host"></div>
+        </div>
+        <p id="login-error" class="err hidden"></p>
+      </section>
+    </div>
+  </div>
+
+  <div id="app-dash" class="hidden app-shell">
+    <aside class="sidebar fade-up">
+      <div class="sidebar-brand">
+        <div class="sidebar-brand-mark">
+          <div class="weret-logo-img weret-logo-img--sidebar" data-weret-logo="sidebar"></div>
+          <span class="sidebar-panel-tag" data-i18n="nav_panel_tag">لوحة الإدارة</span>
+        </div>
+      </div>
+      <nav class="nav-side">
+        <div class="nav-group">
+          <span class="nav-group-label" data-i18n="nav_group_main">الرئيسية</span>
+          <button type="button" class="nav-item active" data-section="overview">
+            <span class="nav-icon" aria-hidden="true">▦</span>
+            <span data-i18n="nav_overview">لوحة التحكم</span>
+          </button>
+        </div>
+        <div class="nav-group">
+          <span class="nav-group-label" data-i18n="nav_group_ops">العمليات</span>
+          <button type="button" class="nav-item" data-section="users">
+            <span class="nav-icon" aria-hidden="true">👥</span>
+            <span data-i18n="nav_users">المستخدمون</span>
+          </button>
+          <button type="button" class="nav-item" data-section="rides">
+            <span class="nav-icon" aria-hidden="true">🚕</span>
+            <span data-i18n="nav_rides">الرحلات</span>
+          </button>
+          <button type="button" class="nav-item" data-section="reports">
+            <span class="nav-icon" aria-hidden="true">🚩</span>
+            <span data-i18n="nav_reports">البلاغات</span>
+          </button>
+        </div>
+        <div class="nav-group">
+          <span class="nav-group-label" data-i18n="nav_group_insights">التحليلات</span>
+          <button type="button" class="nav-item" data-section="tx">
+            <span class="nav-icon" aria-hidden="true">💳</span>
+            <span data-i18n="nav_tx">المعاملات</span>
+          </button>
+          <button type="button" class="nav-item" data-section="audit">
+            <span class="nav-icon" aria-hidden="true">📋</span>
+            <span data-i18n="nav_audit">سجل القرارات</span>
+          </button>
+        </div>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="sidebar-user-card">
+          <div class="sidebar-avatar" id="sidebar-avatar" aria-hidden="true">A</div>
+          <div class="sidebar-user-meta">
+            <strong id="sidebar-user-name">Admin</strong>
+            <span class="sidebar-role-badge" data-i18n="nav_role_admin">Super Admin</span>
+            <span id="whoami" class="mono whoami"></span>
+          </div>
+        </div>
+        <button type="button" class="secondary btn-block sidebar-logout" id="btn-logout" data-i18n="btn_logout">تسجيل
+          الخروج</button>
+      </div>
+    </aside>
+
+    <div class="main-column">
+      <header class="top-bar">
+        <nav class="breadcrumb" aria-label="Breadcrumb">
+          <div class="weret-logo-img weret-logo-img--inline" data-weret-logo="inline"></div>
+          <span class="breadcrumb-sep">›</span>
+          <span id="breadcrumb-current" class="breadcrumb-current">لوحة التحكم</span>
+        </nav>
+        <div class="top-bar-center">
+          <input type="search" id="global-search" class="search-input" data-i18n-placeholder="ph_search"
+            placeholder="بحث في القائمة الحالية…" autocomplete="off" />
+        </div>
+        <div class="top-bar-end">
+          <div class="lang-switch" role="group" aria-label="Language">
+            <button type="button" class="lang-btn" data-set-lang="ar" data-i18n="lang_ar">العربية</button>
+            <button type="button" class="lang-btn" data-set-lang="en" data-i18n="lang_en">English</button>
+          </div>
+          <span id="profile-pill" class="profile-pill mono"></span>
+          <button type="button" class="top-icon-btn" id="btn-refresh" title="Refresh" aria-label="Refresh">↻</button>
+        </div>
+      </header>
+
+      <main class="main-scroll">
+        <header class="page-hero fade-up">
+          <div class="page-hero-text">
+            <div class="weret-logo-img weret-logo-img--eyebrow" data-weret-logo="eyebrow"></div>
+            <h1 id="page-title">لوحة التحكم</h1>
+            <p id="page-subtitle" class="page-subtitle" data-i18n="hero_overview_sub">نظرة عامة على المنصة — مستخدمون،
+              رحلات، ونشاط مباشر.</p>
+          </div>
+          <button type="button" class="btn-hero-action" id="btn-hero-action" data-i18n="btn_refresh">تحديث</button>
+        </header>
+
+        <section id="section-overview" class="section-panel fade-up">
+          <div id="dashboard-command" class="dashboard-command hidden">
+            <div class="command-left">
+              <span class="live-pulse" aria-hidden="true"></span>
+              <div>
+                <strong class="command-title" data-i18n="dash_live_title">مركز القيادة المباشر</strong>
+                <p id="dash-live-sub" class="command-sub"></p>
+              </div>
+            </div>
+            <div class="command-right">
+              <span id="dash-updated" class="command-updated mono"></span>
+            </div>
+          </div>
+          <div id="db-status-banner" class="db-status-banner hidden" role="status"></div>
+          <div id="stats-skeleton" class="kpi-grid kpi-grid--hero skeleton-grid hidden"></div>
+          <div id="stats-grid" class="kpi-grid kpi-grid--hero stagger-children"></div>
+          <div id="stats-secondary" class="kpi-grid kpi-grid--secondary stagger-children hidden"></div>
+          <div id="dashboard-insights" class="dashboard-insights hidden">
+            <article class="insight-card">
+              <header class="insight-head">
+                <h3 data-i18n="dash_rides_breakdown">توزيع الرحلات</h3>
+              </header>
+              <div id="ride-status-chart" class="status-bar-chart"></div>
+            </article>
+            <article class="insight-card">
+              <header class="insight-head">
+                <h3 data-i18n="dash_quick_actions">إجراءات سريعة</h3>
+              </header>
+              <div id="quick-actions" class="quick-nav-grid"></div>
+            </article>
+            <article class="insight-card insight-card--wide">
+              <header class="insight-head">
+                <h3 data-i18n="dash_recent_activity">النشاط الأخير</h3>
+              </header>
+              <div id="activity-feed" class="activity-feed"></div>
+            </article>
+          </div>
+          <p id="stats-error" class="err hidden"></p>
+        </section>
+
+        <section id="section-users" class="section-panel hidden fade-up">
+          <div class="table-card">
+            <div class="table-card-head">
+              <div class="table-card-title">
+                <h3 data-i18n="sec_users">المستخدمون</h3>
+                <span class="count-badge" id="users-count">0</span>
+              </div>
+            </div>
+            <div id="users-skeleton" class="table-skeleton hidden"></div>
+            <div class="table-wrap">
+              <table class="data-table" id="users-table">
+                <thead>
+                  <tr>
+                    <th data-i18n="th_name">الاسم</th>
+                    <th data-i18n="th_email">البريد</th>
+                    <th data-i18n="th_role">الدور</th>
+                    <th data-i18n="th_status">الحالة</th>
+                    <th data-i18n="th_online">متصل</th>
+                    <th data-i18n="th_vehicle">مركبة</th>
+                    <th class="col-actions" data-i18n="th_actions">إجراءات</th>
+                  </tr>
+                </thead>
+                <tbody id="users-body"></tbody>
+              </table>
+            </div>
+            <nav id="users-pagination" class="pagination-bar hidden" data-pager="users" aria-label="Users pagination">
+            </nav>
+          </div>
+          <p id="users-error" class="err hidden"></p>
+        </section>
+
+        <section id="section-rides" class="section-panel hidden fade-up">
+          <div class="table-card">
+            <div class="table-card-head">
+              <div class="table-card-title">
+                <h3 data-i18n="sec_rides">الرحلات</h3>
+                <span class="count-badge" id="rides-count">0</span>
+              </div>
+            </div>
+            <div id="rides-skeleton" class="table-skeleton hidden"></div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th data-i18n="th_ride_status">الحالة</th>
+                    <th data-i18n="th_passenger">الراكب</th>
+                    <th data-i18n="th_driver">السائق</th>
+                    <th data-i18n="th_fare">الأجرة</th>
+                    <th data-i18n="th_rating">التقييم</th>
+                    <th data-i18n="th_review">مراجعة</th>
+                    <th data-i18n="th_date">تاريخ</th>
+                  </tr>
+                </thead>
+                <tbody id="rides-body"></tbody>
+              </table>
+            </div>
+            <nav id="rides-pagination" class="pagination-bar hidden" data-pager="rides" aria-label="Rides pagination">
+            </nav>
+          </div>
+          <p id="rides-error" class="err hidden"></p>
+        </section>
+
+        <section id="section-reports" class="section-panel hidden fade-up">
+          <div class="table-card">
+            <div class="table-card-head">
+              <div class="table-card-title">
+                <h3 data-i18n="sec_reports">البلاغات</h3>
+                <span class="count-badge" id="reports-count">0</span>
+              </div>
+            </div>
+            <div id="reports-skeleton" class="table-skeleton hidden"></div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th data-i18n="th_status">الحالة</th>
+                    <th data-i18n="th_reason">السبب</th>
+                    <th data-i18n="th_reporter_target">مُبلِغ ← مُبلَّغ عنه</th>
+                    <th data-i18n="th_description">وصف</th>
+                    <th data-i18n="th_report_date">التاريخ</th>
+                    <th class="col-actions" data-i18n="th_update_status">تحديث الحالة</th>
+                  </tr>
+                </thead>
+                <tbody id="reports-body"></tbody>
+              </table>
+            </div>
+            <nav id="reports-pagination" class="pagination-bar hidden" data-pager="reports"
+              aria-label="Reports pagination"></nav>
+          </div>
+          <p id="reports-error" class="err hidden"></p>
+        </section>
+
+        <section id="section-tx" class="section-panel hidden fade-up">
+          <div class="table-card">
+            <div class="table-card-head">
+              <div class="table-card-title">
+                <h3 data-i18n="sec_tx">المعاملات</h3>
+                <span class="count-badge" id="tx-count">0</span>
+              </div>
+            </div>
+            <div id="tx-skeleton" class="table-skeleton hidden"></div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th data-i18n="th_user">المستخدم</th>
+                    <th data-i18n="th_type">النوع</th>
+                    <th data-i18n="th_amount">المبلغ</th>
+                    <th data-i18n="tx_status_hdr">الحالة</th>
+                    <th data-i18n="th_flagged">علامة</th>
+                    <th data-i18n="th_date">تاريخ</th>
+                    <th class="col-actions" data-i18n="th_single_action">إجراء</th>
+                  </tr>
+                </thead>
+                <tbody id="tx-body"></tbody>
+              </table>
+            </div>
+            <nav id="tx-pagination" class="pagination-bar hidden" data-pager="tx" aria-label="Transactions pagination">
+            </nav>
+          </div>
+          <p id="tx-error" class="err hidden"></p>
+        </section>
+
+        <section id="section-audit" class="section-panel hidden fade-up">
+          <div class="table-card">
+            <div class="table-card-head">
+              <div class="table-card-title">
+                <h3 data-i18n="sec_audit">سجل القرارات</h3>
+                <span class="count-badge" id="audit-count">0</span>
+              </div>
+            </div>
+            <div id="audit-skeleton" class="table-skeleton hidden"></div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th data-i18n="th_time">وقت</th>
+                    <th data-i18n="th_decision">القرار</th>
+                    <th data-i18n="th_admin">المسؤول</th>
+                    <th data-i18n="th_target">الهدف</th>
+                    <th data-i18n="th_summary">ملخص</th>
+                  </tr>
+                </thead>
+                <tbody id="audit-body"></tbody>
+              </table>
+            </div>
+            <nav id="audit-pagination" class="pagination-bar hidden" data-pager="audit" aria-label="Audit pagination">
+            </nav>
+          </div>
+          <p id="audit-error" class="err hidden"></p>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script src="weret-logo-mark.js"></script>
+  <script src="app.js"></script>
+</body>
+
+</html>

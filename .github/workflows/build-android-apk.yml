@@ -1,0 +1,40 @@
+name: Build Android APK (Flutter)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: apps/mobile-flutter
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: "3.27.4"
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Create Android platform if missing
+        run: |
+          if [ ! -d android ]; then
+            flutter create . --platforms=android,ios --org com.weret.app
+          fi
+
+      - name: Build debug APK
+        env:
+          API_URL: ${{ vars.API_URL || 'http://192.168.1.9:3000' }}
+        run: flutter build apk --debug --dart-define=API_URL=$API_URL
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: WERET-debug-apk
+          path: apps/mobile-flutter/build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error

@@ -1,0 +1,538 @@
+﻿======================================================================
+FILE: FREE_TIER_STRATEGY.md
+======================================================================
+# Free-Tier Strategy
+
+> **Goal:** Deliver a working ride-hailing graduation project with **zero operating cost**.
+> **Constraint:** No service may exceed its free quota. No paid upgrades.
+
+---
+
+## Service Quotas & Monitoring
+
+### Vercel Hobby
+
+| Limit | Value | Monitoring | Action if Exceeded |
+|-------|-------|-----------|-------------------|
+| Function timeout | 10s | Vercel dashboard → Analytics → Duration | Split long queries; add explicit `.timeout(8000)` on DB calls |
+| Bandwidth | 100 GB/mo | Vercel dashboard → Usage | Compress JSON responses; add ETag/304 for polling; reduce poll frequency |
+| Concurrent executions | 3 | Not visible; estimate from analytics | Acceptable for graduation demo (<50 concurrent users) |
+| Cron Jobs | Not available | N/A | Use MongoDB TTL indexes instead of scheduled cleanup |
+| Team features | Not available | N/A | Single developer project |
+| Custom domains | 1 | Vercel dashboard → Domains | vercel.app subdomain is free and sufficient for graduation |
+| Serverless function regions | 1 (default) | Vercel dashboard | Single region (Washington D.C., iad1) — sufficient for Egypt demo |
+
+**Mitigation Strategy:**
+- All API responses under 8s (buffer below 10s limit)
+- Enable response compression (`res.set('Content-Encoding', 'gzip')`) on large payloads
+- Polling intervals at 3s minimum to stay within bandwidth
+- No file proxying through Vercel (Cloudinary direct upload)
+
+### MongoDB Atlas M0 (Free Tier)
+
+| Limit | Value | Monitoring | Action if Exceeded |
+|-------|-------|-----------|-------------------|
+| Storage | 512 MB | Atlas dashboard → Cluster → Metrics → Disk Usage | TTL indexes on OTP (5min), audit_log (30d), notifications (7d); compress large fields |
+| Connections | 100 | Atlas dashboard → Cluster → Metrics → Connections | Pool max 5 per instance × 3 concurrent = 15, well under limit |
+| RAM | Shared (variable) | Atlas → Performance Advisor | Index hot queries; avoid collection scans |
+| vCPU | Shared (burst) | Atlas → Real Time → CPU | Cache popular endpoints; stagger poll intervals |
+| $geoNear with 2dsphere | Not supported | N/A | App-level distance sort after indexed find |
+| Continuous backup | Not available | N/A | Manual `mongodump` weekly; document restore procedure |
+| Data transfer | 5 GB/mo out | Atlas → Network → Security → Data Transfer | Minimize response sizes; use partial responses with field projection |
+
+**Mitigation Strategy:**
+- TTL indexes on all time-bounded collections (OTP, audit_log, notifications)
+- `projection` in every query (never `return full document`)
+- Index all query patterns (verify with `explain()` before deploying)
+- Archive/deletion strategy: delete soft-deleted rides older than 90 days
+- Monthly `mongodump` to local disk as backup
+
+### Cloudinary Free
+
+| Limit | Value | Monitoring | Action if Exceeded |
+|-------|-------|-----------|-------------------|
+| Storage | 25 GB | Cloudinary dashboard → Media Library → Storage | Delete unused uploads; max image size 800px; max 500KB per image |
+| Bandwidth | 25 GB/mo | Cloudinary dashboard → Analytics → Bandwidth | Compress to WebP; serve transformed URLs with `f_auto,q_auto` |
+| Transformations | 5,000 total | Cloudinary dashboard → Analytics → Transformations | Avoid unnecessary transforms; cache transformed URLs in DB |
+| Max image size | 10 MB (upload limit) | Client-side validation | Reject files >5MB client-side before upload |
+| Concurrent uploads | Limited (shared) | Cloudinary dashboard | Rare for graduation project; stagger if needed |
+
+**Mitigation Strategy:**
+- Upload directly from Flutter client (not proxied through Vercel)
+- Set `maxFileSize: 5242880` (5MB) in Flutter image picker
+- Use `f_auto,q_auto` in Cloudinary URL for automatic format/quality optimization
+- Limit avatar uploads to 800×800px, ride images to 1920×1080px
+- Delete old unused assets via Cloudinary Admin API periodically
+
+### Firebase FCM (Free)
+
+| Limit | Value | Notes |
+|-------|-------|-------|
+| Messages per day | Unlimited | No daily cap on FCM |
+| Topics per app | Unlimited | Each user gets a personal topic |
+| Subscriptions per device | Unlimited | Device can subscribe to multiple topics |
+| Payload size | 4 KB max | Keep notification payloads minimal (title, body, data fields only) |
+| Uptime SLA | None (best effort) | Acceptable for graduation project |
+
+**Mitigation Strategy:**
+- FCM is used exclusively for push notifications — no Firestore, no Realtime DB
+- Notification payload contains only: `title`, `body`, `rideId`, `type`
+- Full data fetched via REST polling after notification tap
+
+---
+
+## System Boundaries
+
+### What We Can Build (Within Free Quotas)
+
+| Feature | Implementation | Free-Tier Feasibility |
+|---------|---------------|----------------------|
+| User auth (OTP) | MongoDB `otp` collection + console SMS | ✅ TTL index auto-cleans OTPs |
+| Ride CRUD | MongoDB `rides` collection | ✅ Sub-100 rides/day fits easily |
+| Real-time updates | REST polling at 3-5s intervals | ✅ 100 users × 20 polls/min × 60 min = 120K requests/day, fits bandwidth |
+| Chat | REST polling, 1000 chars/msg | ✅ Low storage, low bandwidth |
+| Driver location | POLL driver location every 3s | ✅ 50 drivers × 20 updates/min = 86K writes/day |
+| Push notifications | FCM topic push | ✅ Unlimited, free |
+| Image upload | Cloudinary direct upload | ✅ 1000 images × 500KB = 500MB storage, 2% of quota |
+| Admin dashboard | Aggregated MongoDB queries | ✅ Keep under 10s Vercel timeout; cache results |
+| File storage | Cloudinary only (no local files) | ✅ No Vercel /tmp dependency |
+
+### System Capacity Estimates
+
+| Metric | Daily Estimate | Monthly Estimate | Quota | Buffer |
+|--------|---------------|------------------|-------|--------|
+| API requests (all endpoints) | 20,000 | 600,000 | Vercel Hobby bandwidth (~100M req/mo equivalent) | ✅ 99%+ |
+| MongoDB writes | 5,000 | 150,000 | M0 unlimited writes (shared) | ✅ |
+| MongoDB storage | 2 MB/day | 60 MB/mo | 512 MB | ✅ ~90% free |
+| Cloudinary uploads | 20 images | 600 images | 25 GB | ✅ 98% free |
+| Cloudinary bandwidth | 10 MB/day | 300 MB/mo | 25 GB | ✅ 98% free |
+| FCM pushes | 500 | 15,000 | Unlimited | ✅ |
+
+---
+
+## When Free Tier Isn't Enough (Graduation Scope)
+
+These scenarios are **out of scope** for the graduation project. Documented here for future reference.
+
+### Scenario 1: Storage Exceeds 450MB
+- **Trigger:** MongoDB M0 reaches 90% capacity
+- **Before graduation:** Add TTL indexes early; delete test data; keep docs lean with projections
+- **After graduation:** Upgrade to M2 ($9/mo) or M10 ($57/mo)
+
+### Scenario 2: Bandwidth Exceeds 90GB/mo
+- **Trigger:** Vercel Hobby bandwidth approaching limit
+- **Before graduation:** Reduce poll intervals (3s → 5s); compress JSON; add ETag/304
+- **After graduation:** Upgrade to Vercel Pro ($20/mo)
+
+### Scenario 3: Cloudinary Runs Out
+- **Trigger:** Storage or bandwidth approaching 90%
+- **Before graduation:** Delete unused uploads; reduce image quality; limit uploads
+- **After graduation:** Upgrade to Cloudinary Basic ($89/mo) or migrate to AWS S3
+
+### Scenario 4: Need WebSockets
+- **Trigger:** REST polling latency unacceptable
+- **Before graduation:** Optimize polling (reduce intervals, add cache, use 304)
+- **After graduation:** Deploy Socket.io on a $5/mo VPS (Hetzner, DigitalOcean) or upgrade Vercel
+
+---
+
+## Architecture Boundary Enforcement
+
+```
+CAN USE                           CANNOT USE
+─────────                         ─────────
+Vercel Hobby (serverless)         Vercel Pro / Enterprise
+MongoDB Atlas M0 (shared)         M2+ clusters, Atlas Search
+Cloudinary Free                   Cloudinary paid plans
+Firebase FCM only                 Firestore, Realtime DB, Auth
+In-memory Map cache               Redis, Memcached, any external cache
+Console SMS (no Twilio)           Twilio, any paid SMS provider
+Client-side image compression     Server-side image processing
+REST polling                      WebSockets, SSE (optional but free)
+Manual deploy (`vercel deploy`)   CI/CD pipeline, GitHub Actions
+Console logging                   Sentry, LogRocket, Datadog
+```
+
+---
+
+## Migration Path (Post-Graduation)
+
+If this project continues beyond graduation, the recommended paid upgrade path is:
+
+| Step | Service | Cost | Why |
+|------|---------|------|-----|
+| 1 | Vercel Pro | $20/mo | Cron jobs, 300s timeout, team features, 1K concurrent |
+| 2 | MongoDB M10 | $57/mo | 2GB storage, dedicated vCPU, $geoNear, backups |
+| 3 | Cloudinary Basic | $89/mo | 50GB storage, 50GB bandwidth, advanced transforms |
+| 4 | Sentry Team | $26/mo | Error tracking with stack traces |
+| 5 | Twilio | ~$0.01/SMS | Real SMS OTP |
+| **Total** | | **~$192/mo** | |
+
+For a graduation demo, **Step 0** (all free tier, $0/mo) is sufficient.
+
+
+
+======================================================================
+FILE: PROJECT_MASTER_PLAN.md
+======================================================================
+# Project Master Plan
+
+> **Last updated:** 2026-06-24  
+> **Constraint:** Free-tier only — graduation project, zero budget.
+
+---
+
+## Goal
+
+Transform the ReachNative Car codebase from a non-functional prototype (Socket.io on Vercel, in-memory ODM, broken Firebase, committed secrets) into a working ride-hailing platform using **only free-tier services**.
+
+## Free-Tier Architecture
+
+```
+┌─────────────────────────────────────────────────┐
+│                  Vercel Hobby                     │
+│  ┌───────────────────────────────────────────┐   │
+│  │        Express API (serverless)            │   │
+│  │  ┌───────┐ ┌──────────┐ ┌─────────────┐  │   │
+│  │  │Routes │ │Middleware│ │  Services    │  │   │
+│  │  └───────┘ └──────────┘ └─────────────┘  │   │
+│  │  ┌────────────────────────────────────┐   │   │
+│  │  │  In-Memory Cache (Map, per-inst.)  │   │   │
+│  │  └────────────────────────────────────┘   │   │
+│  └───────────────────────────────────────────┘   │
+└──────────────────────┬──────────────────────────┘
+                       │
+         ┌─────────────┼─────────────┐
+         ▼             ▼             ▼
+┌──────────────┐ ┌──────────┐ ┌──────────┐
+│ MongoDB M0   │ │Cloudinary│ │ Firebase │
+│ (512MB, free)│ │ (Free 25G)│ │ FCM only │
+└──────────────┘ └──────────┘ └──────────┘
+```
+
+## Free-Tier Limits That Shape Architecture
+
+| Service | Limit | Impact on Design |
+|---------|-------|-----------------|
+| **Vercel Hobby** | 10s function timeout, 100GB bandwidth, no Cron, 3 concurrent instances | No long-running ops; TTL indexes replace Cron; no WebSocket |
+| **MongoDB M0** | 512MB storage, 100 connections, shared vCPU, no $geoNear with 2dsphere (sort only) | Driver geo-lookup via JS sort; keep collections lean; TTL indexes remove stale data |
+| **Cloudinary Free** | 25GB storage, 25GB/month bandwidth | Compress images client-side; set max dimensions; use WebP auto |
+| **Firebase FCM** | Unlimited push, no cost | Push notifications only; no Firestore, no Realtime DB |
+| **No Redis** | Not available | In-memory Map cache (per-instance, lost on cold start) |
+| **No paid services** | $0 budget | Everything must fit within free quotas; no Sentry (console logging only) |
+
+## Timeline
+
+```
+Week 1 ─── Foundation ─── Tasks 1-5
+  Mon:  Android app ID fix (Task 1)
+  Mon:  Cloudinary config (Task 2)
+  Tue:  MongoDB Atlas verify (Task 3)
+  Tue:  Flutter OAuth population (Task 4)
+  Wed:  .env.example generation (Task 5)
+
+Week 2 ─── Data Layer ─── Tasks 6-8
+  Mon-Wed: ODM rewrite — basic CRUD (Task 6)
+  Thu:     ODM rewrite — aggregation (Task 7)
+  Fri:     In-memory cache (Task 8)
+
+Week 3 ─── Services ─── Tasks 9-11
+  Mon-Wed: Replace Socket.io with REST polling (Task 9)
+  Thu-Fri: Fix Firebase push + admin stats (Task 10)
+  Fri:     Security hardening (Task 11)
+
+Week 4 ─── Polish ─── Tasks 12-14
+  Mon:  Cloudinary direct upload (Task 12)
+  Tue:  Flutter optimization (Task 13)
+  Wed:  Flutter cleanup (Task 14)
+  Thu:  Final integration test + deploy to Vercel (Task 15)
+```
+
+## Task Dependency Graph
+
+```
+Task 1 (App ID) ───► Task 3 (MongoDB verify)
+Task 2 (Cloudinary) ─── Standalone
+Task 3 (MongoDB) ───► Task 6 (ODM CRUD) ───► Task 7 (Aggregation)
+                                                │
+                                                ▼
+                                           Task 8 (Cache)
+                                                │
+                                                ▼
+                                           Task 9 (Polling)
+                                                │
+                                                ▼
+                                           Task 10 (Push)
+
+Task 11 (Security) ─── Standalone (after Task 9 CORS fix)
+Task 12 (Upload) ─── Standalone (after Task 2 config)
+Task 13 (Flutter) ───► Task 14 (Flutter Cleanup)
+Task 15 (Deploy) ─── After all tasks
+```
+
+## Success Criteria
+
+| Criterion | Current | Target | Measured By |
+|-----------|---------|--------|-------------|
+| Android app builds | Placeholder app ID | Correct app ID | `flutter build apk --debug` |
+| Admin stats page load | ~4s | <1s | Browser DevTools |
+| Ride request → driver notified | Broken | <5s | End-to-end test |
+| Chat message delivery | Broken | <5s | End-to-end test |
+| OTP expiry | Infinite | 5 min | Verification |
+| Audit log retention | Infinite | 30 days | MongoDB TTL |
+| Push notifications | Broken | Working | Device test |
+| Image upload | Broken | Working | End-to-end test |
+| Rate limiting (Vercel-friendly) | No-op | Enforced | Load test |
+| Secrets in git | Exposed | None | `git log --all --diff-filter=A -- .env` |
+| No paid services | N/A | $0/mo bill | Invoice check |
+| MongoDB M0 storage | N/A | <450MB used | Atlas dashboard |
+| Vercel Hobby bandwidth | N/A | <95GB/mo | Vercel dashboard |
+
+## Risk Register
+
+| Risk | Likelihood | Impact | Mitigation |
+|------|-----------|--------|------------|
+| ODM rewrite breaks queries | Medium | High | Migrate one service at a time, test after each |
+| REST polling overwhelms M0 | Medium | Medium | Cache + indexed queries; limit poll rate client-side |
+| M0 512MB storage exceeded | Medium | High | TTL indexes on OTP, audit_log, notifications; monitor monthly |
+| M0 100 connection limit | Low | Medium | Connection pooling with max 5 concurrent; Vercel scales slowly |
+| Secrets already compromised | Unknown | Critical | Rotate immediately |
+| Vercel 10s timeout on aggregates | Low | Medium | Split large aggregations; add .timeout(8000) on queries |
+| Cloudinary 25GB bandwidth exceeded | Low | Medium | Compress images client-side; limit upload resolution |
+| No paid upgrade path for demo | Low | Low | Acceptable for graduation; document migration steps |
+
+## Deliverables
+
+| Document | Status |
+|----------|--------|
+| Full Audit (`WERET_FULL_AUDIT.md`) | ✅ Complete |
+| Audit Validation (`AUDIT_VALIDATION.md`) | ✅ Complete |
+| Current Architecture (`ARCHITECTURE_CURRENT.md`) | ✅ Complete |
+| Target Architecture (`TARGET_ARCHITECTURE.md`) | ✅ Complete |
+| Architecture Rules (`ARCHITECTURE_RULES.md`) | ✅ Complete |
+| Infrastructure (`INFRASTRUCTURE.md`) | ✅ Complete |
+| Environment Spec (`ENVIRONMENT_SPEC.md`) | ✅ Complete |
+| Database Spec (`DATABASE_SPEC.md`) | ✅ Complete |
+| API Spec (`API_SPEC.md`) | ✅ Complete |
+| Free-Tier Strategy (`FREE_TIER_STRATEGY.md`) | ✅ Complete |
+| Real-time Strategy (`REALTIME_STRATEGY.md`) | ✅ Complete |
+| Upload Strategy (`UPLOAD_STRATEGY.md`) | ✅ Complete |
+| Notification Strategy (`NOTIFICATION_STRATEGY.md`) | ✅ Complete |
+| Test Plan (`TEST_PLAN.md`) | ✅ Complete |
+| Migration Plan (`MIGRATION_PLAN.md`) | ✅ Complete |
+| Deployment Guide (`DEPLOYMENT_GUIDE.md`) | ✅ Complete |
+| Project Master Plan (`PROJECT_MASTER_PLAN.md`) | ✅ Complete |
+| Missing Infrastructure (`MISSING_INFRASTRUCTURE.md`) | ✅ Complete |
+
+
+
+======================================================================
+FILE: TARGET_ARCHITECTURE.md
+======================================================================
+# Target Architecture (Free-Tier)
+
+> **Constraint:** Zero budget — graduation project. All services on free tier.
+
+---
+
+## Deployment Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        Vercel Hobby                                 │
+│  ┌─────────────────────────────────────────────────────────────┐    │
+│  │                    Express API (serverless)                   │    │
+│  │                                                               │    │
+│  │  ┌──── routes/ ────┐  ┌── middleware/ ──┐  ┌── services/ ──┐│    │
+│  │  │  admin.js       │  │  auth.js        │  │  otpService   ││    │
+│  │  │  auth.js        │  │  rateLimiter    │  │  pushService  ││    │
+│  │  │  rides.js       │  │  errorHandler   │  │  emailService ││    │
+│  │  │  users.js       │  │  validate.js    │  └───────────────┘│    │
+│  │  │  drivers.js     │  └─────────────────┘                     │    │
+│  │  │  chat.js        │                                           │    │
+│  │  │  notifications  │  ┌── mongo/ ───────┐  ┌── utils/ ────┐ │    │
+│  │  │  payments.js    │  │  queries/*.js   │  │  cache.js    │ │    │
+│  │  │  upload.js      │  │  db.js          │  │  helpers.js  │ │    │
+│  │  │  reviews.js     │  └─────────────────┘  └──────────────┘ │    │
+│  │  └─────────────────┘                                          │    │
+│  └─────────────────────────────────────────────────────────────┘    │
+└──────────────────────────┬──────────────────────────────────────────┘
+                           │
+            ┌──────────────┼──────────────┐
+            ▼              ▼              ▼
+┌──────────────────┐ ┌──────────┐ ┌──────────────┐
+│  MongoDB Atlas M0 │ │Cloudinary│ │ Firebase FCM │
+│  (512MB, free)    │ │(Free 25G)│ │ (Push only)  │
+│                   │ │          │ │              │
+│ Collections:      │ │Signed    │ │ Topics:      │
+│  - users          │ │URLs with │ │ - driver_{id}│
+│  - drivers        │ │expiry    │ │ - user_{id}  │
+│  - rides          │ │WebP auto │ │ - admin_alerts│
+│  - otp (TTL idx)  │ │Client    │ └──────────────┘
+│  - transactions   │ │upload    │
+│  - subscriptions  │ └──────────┘
+│  - reviews        │
+│  - audit_log (TTL)│
+│  - notifications  │
+│  - promo_codes    │
+│  - sms_log        │
+│  - saved_locations│
+│  - service_areas  │
+│                   │
+│ Index strategy:   │
+│ - TTL on otp (5m) │
+│ - TTL on audit(30d)│
+│ - Compound on     │
+│   rides.status+ts │
+│ - drivers.online  │
+└──────────────────┘
+```
+
+## Key Architectural Decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| Replace Socket.io with REST polling | Vercel Hobby has no WebSocket support; polling is the only free option |
+| Rewrite ODM to native MongoDB driver | Current ODM loads collections into RAM — impossible on M0's shared vCPU |
+| In-memory Map cache (no Redis) | Redis requires a paid addon; per-instance Map is free and sufficient for <100 concurrent users |
+| TTL indexes replace Cron cleanup | Vercel Hobby has no Cron Jobs; TTL indexes achieve the same at zero cost |
+| No $geoNear — app-level sort instead | M0 does not support 2dsphere index with $geoNear stage; sort results in app after find |
+| FCM push only (no Firestore) | Free, unlimited push; Firestore adds complexity and no benefit since all data is in MongoDB |
+| Cloudinary client-upload (not through Vercel) | Avoids 10s Vercel timeout and ephemeral /tmp storage |
+| No Sentry | Console logging is free; Sentry free tier exists but adds scope creep for a graduation project |
+| MongoDB connection pool max 5 | M0 supports ~100 connections; 5 per Vercel instance × 3 concurrent = 15, well within limit |
+
+## Data Flow — Ride Lifecycle
+
+```
+User request ──► POST /api/rides ──► Native find(drivers) via indexed query
+                    │
+                    ▼
+                 App-level distance sort (no $geoNear)
+                    │
+                    ▼
+                 Store ride → update cache → respond 201
+                 Mobile polls GET /api/rides/:id/status every 3s
+                    │
+                    ▼
+                 Driver polls GET /api/rides/requested every 3s
+                 Driver accepts ──► POST /api/rides/:id/accept
+                    │
+                    ▼
+                 Status via REST polling (3-5s intervals)
+                 Chat via GET/POST /api/chat/:rideId/messages?since=
+                 Location via GET/POST /api/drivers/:id/location
+```
+
+## Authentication Flow
+
+```
+Mobile App ──► POST /api/auth/send-otp
+                   │
+                   ▼
+               MongoDB create(otp) + Console SMS
+                   │
+                   ▼
+               POST /api/auth/verify-otp
+                   │
+                   ▼
+               MongoDB findOne(otp) → verify → JWT (60d)
+                   │
+                   ▼
+               authMiddleware — Bearer → JWT.verify() → req.user
+```
+
+## Real-time Communication
+
+```
+REST Polling (replaces Socket.io — no WebSocket available)
+├── Ride status     → GET /api/rides/:id/status          (3s interval)
+├── Chat messages   → GET /api/chat/:rideId/messages     (3s interval)
+├── Driver location → GET /api/drivers/:id/location      (3s interval)
+├── Notifications   → GET /api/notifications?since=<ts>  (5s interval)
+└── Online drivers  → GET /api/drivers/online            (5s interval)
+
+Write operations remain REST:
+├── Chat send       → POST /api/chat/:rideId/send
+├── Location update → POST /api/drivers/:id/location
+├── Ride action     → POST /api/rides/:id/{accept,start,end,cancel}
+└── Server-side FCM → notifyUser() via Firebase Admin SDK
+```
+
+## Technology Stack
+
+| Layer | Technology | Version | Cost Tier | Notes |
+|-------|-----------|---------|-----------|-------|
+| Hosting | Vercel Hobby | N/A | Free | 10s timeout, 100GB/mo, no Cron |
+| Runtime | Node.js | 18.x LTS | Free | Included in Vercel |
+| Framework | Express | 4.x | Free | Included in bundle |
+| Database | MongoDB Atlas M0 | 7.x | Free | 512MB, 100 connections, shared vCPU |
+| Driver | mongodb (native) | 6.x | Free | NPM package |
+| Cache | In-memory Map | N/A | Free | Per-instance, lost on cold start |
+| Auth | JWT (jsonwebtoken) | 9.x | Free | NPM package |
+| Push | Firebase Admin SDK | 11.x | Free | FCM only — no Firestore |
+| SMS | Console log only | N/A | Free | Twilio not used ($0) |
+| Upload | Cloudinary direct | N/A | Free | 25GB storage, 25GB/mo bandwidth |
+| Mobile | Flutter | 3.x | Free | Open source |
+| Admin | Vanilla JS + Chart.js | Latest | Free | Static files served by Vercel |
+
+## System Boundaries
+
+### In Scope (Free-Tier Viable)
+- Ride creation, acceptance, lifecycle (CRUD on MongoDB)
+- OTP auth via phone (console mode, no Twilio)
+- REST polling for real-time updates
+- In-memory cache (per-instance Map)
+- FCM push notifications (topic-based)
+- Profile image upload (Cloudinary direct)
+- Chat during ride (polling-based)
+- Admin dashboard with aggregated stats
+- Rate limiting (in-function, Vercel-compatible)
+- CORS whitelist (env-configurable)
+- Console SMS for OTP (no Twilio cost)
+
+### Out of Scope (Requires Paid Services)
+- Real-time WebSocket communication
+- Redis or any external cache
+- Cron jobs (Vercel Hobby limitation)
+- File uploads through Vercel (10s timeout)
+- Geo-spatial queries via $geoNear (M0 limitation)
+- Sentry or external error tracking
+- Staging/production separation (single Vercel project)
+- CI/CD pipeline (manual deploy only)
+- Twilio SMS
+- iOS builds (no Mac builder)
+- Automated backup/restore
+
+## Major Risks
+
+| Risk | Impact | Mitigation |
+|------|--------|------------|
+| M0 512MB fills up | App stops writing | TTL indexes purge OTP (5min), audit_log (30d), notifications (7d). Monitor monthly. |
+| Vercel 10s timeout on admin stats | Admin panel broken | Split stats into 2-3 parallel queries; client-side aggregation; timeout at 8s. |
+| REST polling overloads M0 shared CPU | Slow responses | Cache popular endpoints (online drivers, ride status); increase poll interval to 5s. |
+| Cloudinary 25GB bandwidth exceeded | Uploads fail | Compress to 800px max; use WebP; set client-side file size limits. |
+| Cold start latency on Vercel | First request slow | Keep-alive ping every 5 min; minimal module imports. |
+| Flutter app expects Socket.io | Real-time broken | Remove socket.io-client; replace with polling loops + exponential backoff. |
+| Firebase service account rotated | Push notifications break | Document rotation procedure; alert via console on failure. |
+
+## Success Criteria
+
+| Criterion | Current | Target |
+|-----------|---------|--------|
+| Android app builds with correct app ID | `com.example.ecommerce_app` | `com.weret.app` |
+| Admin dashboard loads | ~4s | <2s |
+| Ride request to driver notification | Broken (Socket.io) | <5s (polling) |
+| Chat message delivery | Broken | <5s |
+| OTP expires after 5 min | Never | TTL index enforces |
+| Audit log retains 30 days | Forever | TTL index enforces |
+| Push notifications | Broken | Working |
+| Image upload | Broken | Working (Cloudinary) |
+| Rate limiting | No-op | Enforced |
+| Secrets in git | Exposed | None |
+| Monthly bill | Unknown | **$0.00** |
+| MongoDB storage used | Unknown | <450MB |
+| Vercel bandwidth consumed | Unknown | <95GB/mo |
+
+
+

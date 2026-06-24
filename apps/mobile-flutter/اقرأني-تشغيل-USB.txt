@@ -1,0 +1,47 @@
+WERET — تشغيل على Samsung A56 (USB)
+=====================================
+
+الجهاز المتصل:
+  SM A566B  •  RKGYC04CVDX  •  Android 16
+
+── Android Studio ──────────────────────────────
+
+1) وصّل A56 بـ USB Type-C
+2) على الموبايل:
+   - الإعدادات → خيارات المطور → USB debugging = ON
+   - Allow USB debugging (Allow) لما يظهر
+3) افتح Android Studio
+4) File → Open → اختر:
+   D:\Games\ReachNative Car\apps\mobile-flutter
+   (مش مجلد android لوحده — افتح جذر Flutter)
+5) انتظر Gradle sync
+6) فوق: Device selector → SM A566B (RKGYC04CVDX)
+7) Run ▶ (أو Shift+F10)
+
+لو مش ظاهر:
+  - View → Tool Windows → Device Manager
+  - أو Terminal في Android Studio:
+    %LOCALAPPDATA%\Android\Sdk\platform-tools\adb.exe devices
+
+── Flutter من Terminal ─────────────────────────
+
+cd D:\Games\ReachNative Car\apps\mobile-flutter
+flutter pub get
+flutter run -d RKGYC04CVDX --dart-define=API_URL=http://YOUR_PC_IP:3000
+
+أو دبل كليك: run-on-phone.bat
+
+── Cursor / VS Code ────────────────────────────
+
+Run and Debug → WERET Mobile (Samsung A56 USB)
+
+── مهم ─────────────────────────────────────────
+
+❌ لا تشغّل: dart.exe main.dart
+✅ استخدم: flutter run  أو  Android Studio Run ▶
+
+Backend لازم يشتغل:
+  cd D:\Games\ReachNative Car\backend
+  npm run dev
+
+استبدل YOUR_PC_IP بـ IP الكمبيوتر على نفس Wi‑Fi (مش localhost)

@@ -1,0 +1,68 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Backend API (MongoDB Atlas)",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/backend/src/index.js",
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/backend/.env",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "name": "Flutter — Windows (localhost API)",
+      "type": "dart",
+      "request": "launch",
+      "program": "lib/main.dart",
+      "cwd": "${workspaceFolder}/apps/mobile-flutter",
+      "toolArgs": ["--dart-define=API_URL=http://127.0.0.1:3000"]
+    },
+    {
+      "name": "Flutter — Android Emulator (10.0.2.2 API)",
+      "type": "dart",
+      "request": "launch",
+      "program": "lib/main.dart",
+      "cwd": "${workspaceFolder}/apps/mobile-flutter",
+      "toolArgs": ["--dart-define=API_URL=http://10.0.2.2:3000"]
+    },
+    {
+      "name": "Flutter — Phone on Wi‑Fi (LAN API)",
+      "type": "dart",
+      "request": "launch",
+      "program": "lib/main.dart",
+      "cwd": "${workspaceFolder}/apps/mobile-flutter",
+      "toolArgs": ["--dart-define=API_URL=${input:flutterLanApiUrl}"]
+    },
+    {
+      "name": "Attach: Backend (already running)",
+      "type": "node",
+      "request": "attach",
+      "port": 9229,
+      "skipFiles": ["<node_internals>/**"]
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Full Stack: Backend + Flutter (Windows)",
+      "configurations": ["Backend API (MongoDB Atlas)", "Flutter — Windows (localhost API)"],
+      "stopAll": true,
+      "presentation": { "group": "weret", "order": 1 }
+    },
+    {
+      "name": "Full Stack: Backend + Flutter (Android Emulator)",
+      "configurations": ["Backend API (MongoDB Atlas)", "Flutter — Android Emulator (10.0.2.2 API)"],
+      "stopAll": true,
+      "presentation": { "group": "weret", "order": 2 }
+    }
+  ],
+  "inputs": [
+    {
+      "id": "flutterLanApiUrl",
+      "type": "promptString",
+      "description": "Backend API URL for physical device (run npm run vscode:sync for suggested IP)",
+      "default": "http://192.168.1.15:3000"
+    }
+  ]
+}

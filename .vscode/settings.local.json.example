@@ -1,0 +1,11 @@
+{
+  "mdb.presetConnections": [
+    {
+      "name": "WERET Atlas (weret)",
+      "connectionString": "mongodb+srv://USER:PASSWORD@cluster0.bccjvvm.mongodb.net/weret?retryWrites=true&w=majority"
+    }
+  ],
+  "weret.apiUrlLan": "http://192.168.1.15:3000",
+  "weret.apiUrlLocal": "http://127.0.0.1:3000",
+  "weret.apiUrlAndroidEmulator": "http://10.0.2.2:3000"
+}

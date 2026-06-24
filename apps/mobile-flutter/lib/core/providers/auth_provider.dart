@@ -1,0 +1,324 @@
+import 'dart:convert';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../api/api_client.dart';
+import '../api/api_endpoints.dart';
+import '../services/session_reset.dart';
+import '../utils/api_error_message.dart';
+import '../../shared/models/weret_user.dart';
+
+const _userCacheKey = 'weret_user_cache';
+const _postRegisterDriverKey = 'post_register_driver_onboarding';
+
+GoogleSignIn? _googleSignInInstance;
+
+class AuthState {
+  const AuthState({
+    this.user,
+    this.token,
+    this.hydrated = false,
+    this.loading = false,
+    this.error,
+    this.googleWebClientId,
+    this.googleSignInEnabled = false,
+  });
+
+  final WeretUser? user;
+  final String? token;
+  final bool hydrated;
+  final bool loading;
+  final String? error;
+  final String? googleWebClientId;
+  final bool googleSignInEnabled;
+
+  bool get isAuthenticated => token != null && token!.isNotEmpty;
+
+  AuthState copyWith({
+    WeretUser? user,
+    String? token,
+    bool? hydrated,
+    bool? loading,
+    String? error,
+    String? googleWebClientId,
+    bool? googleSignInEnabled,
+    bool clearError = false,
+  }) {
+    return AuthState(
+      user: user ?? this.user,
+      token: token ?? this.token,
+      hydrated: hydrated ?? this.hydrated,
+      loading: loading ?? this.loading,
+      error: clearError ? null : (error ?? this.error),
+      googleWebClientId: googleWebClientId ?? this.googleWebClientId,
+      googleSignInEnabled: googleSignInEnabled ?? this.googleSignInEnabled,
+    );
+  }
+}
+
+class AuthNotifier extends StateNotifier<AuthState> {
+  AuthNotifier(this._ref) : super(const AuthState());
+
+  final Ref _ref;
+
+  Future<ApiClient> get _api async => _ref.read(apiClientProvider.future);
+
+  Future<void> hydrate() async {
+    await _loadGoogleConfig();
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('weret_token');
+    WeretUser? user;
+    final cached = prefs.getString(_userCacheKey);
+    if (cached != null) {
+      try {
+        user = WeretUser.fromJson(jsonDecode(cached) as Map<String, dynamic>);
+      } catch (_) {}
+    }
+    state = state.copyWith(token: token, user: user, hydrated: true);
+    if (token != null && token.isNotEmpty) {
+      await validateSession();
+    }
+  }
+
+  Future<void> _loadGoogleConfig() async {
+    try {
+      final api = await _api;
+      final data = await api.getJson(ApiEndpoints.authGoogleConfig);
+      final webId = '${data['webClientId'] ?? ''}'.trim();
+      state = state.copyWith(
+        googleWebClientId: webId.isNotEmpty ? webId : null,
+        googleSignInEnabled: data['enabled'] == true,
+      );
+    } catch (_) {}
+  }
+
+  GoogleSignIn get googleSignIn {
+    _googleSignInInstance ??= GoogleSignIn(
+      scopes: const ['email', 'profile', 'openid'],
+      serverClientId: _resolveGoogleWebClientId(),
+    );
+    return _googleSignInInstance!;
+  }
+
+  String? _resolveGoogleWebClientId() {
+    const fromEnv = String.fromEnvironment('GOOGLE_WEB_CLIENT_ID');
+    if (fromEnv.isNotEmpty) return fromEnv;
+    final fromServer = state.googleWebClientId;
+    if (fromServer != null && fromServer.isNotEmpty) return fromServer;
+    return null;
+  }
+
+  Future<void> validateSession() async {
+    try {
+      final api = await _api;
+      final data = await api.getJson(ApiEndpoints.authMe);
+      final user = WeretUser.fromJson(data['user'] as Map<String, dynamic>? ?? data);
+      await _cacheUser(user);
+      state = state.copyWith(user: user, clearError: true);
+    } catch (_) {
+      await logout();
+    }
+  }
+
+  Future<void> _cacheUser(WeretUser user) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_userCacheKey, jsonEncode(user.toJson()));
+  }
+
+  Future<void> applySession({required String token, required WeretUser user}) async {
+    final api = await _api;
+    await api.setToken(token);
+    await _cacheUser(user);
+    state = state.copyWith(token: token, user: user, clearError: true, loading: false);
+  }
+
+  Future<void> loginEmail(String email, String password) async {
+    state = state.copyWith(loading: true, clearError: true);
+    try {
+      final api = await _api;
+      final data = await api.postJson(ApiEndpoints.authLogin, {'email': email, 'password': password});
+      final token = '${data['token']}';
+      final user = WeretUser.fromJson(data['user'] as Map<String, dynamic>);
+      await applySession(token: token, user: user);
+    } catch (e) {
+      state = state.copyWith(loading: false, error: localizedApiError(e, fallbackKey: 'error'));
+      rethrow;
+    }
+  }
+
+  Future<void> register(Map<String, dynamic> body, {bool driverOnboardingAfter = false}) async {
+    state = state.copyWith(loading: true, clearError: true);
+    try {
+      final api = await _api;
+      final payload = Map<String, dynamic>.from(body)..remove('role');
+      final data = await api.postJson(ApiEndpoints.authRegister, payload);
+      final token = '${data['token']}';
+      final user = WeretUser.fromJson(data['user'] as Map<String, dynamic>);
+      if (driverOnboardingAfter) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_postRegisterDriverKey, '1');
+      }
+      await applySession(token: token, user: user);
+    } catch (e) {
+      state = state.copyWith(loading: false, error: localizedApiError(e, fallbackKey: 'error'));
+      rethrow;
+    }
+  }
+
+  static Future<bool> consumePostRegisterDriverFlag() async {
+    final prefs = await SharedPreferences.getInstance();
+    final v = prefs.getString(_postRegisterDriverKey);
+    if (v != null) {
+      await prefs.remove(_postRegisterDriverKey);
+      return true;
+    }
+    return false;
+  }
+
+  Future<Map<String, dynamic>?> fetchDriverApplication() async {
+    try {
+      final api = await _api;
+      return await api.getJson(ApiEndpoints.driverApplicationMe);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> submitDriverApplication(Map<String, dynamic> body) async {
+    state = state.copyWith(loading: true, clearError: true);
+    try {
+      final api = await _api;
+      final data = await api.postJson(ApiEndpoints.driverApplicationSubmit, body);
+      if (data['token'] != null) await api.setToken('${data['token']}');
+      if (data['user'] is Map) {
+        final user = WeretUser.fromJson(data['user'] as Map<String, dynamic>);
+        await _cacheUser(user);
+        state = state.copyWith(user: user, loading: false, clearError: true);
+      } else {
+        state = state.copyWith(loading: false, clearError: true);
+      }
+    } catch (e) {
+      state = state.copyWith(loading: false, error: localizedApiError(e, fallbackKey: 'error'));
+      rethrow;
+    }
+  }
+
+  Future<void> verifyPassword(String password) async {
+    final api = await _api;
+    await api.postJson(ApiEndpoints.authVerifyPassword, {'password': password});
+  }
+
+  Future<Map<String, dynamic>> requestPhoneOtp(String phone, {bool forRegister = false}) async {
+    state = state.copyWith(clearError: true);
+    try {
+      final api = await _api;
+      return await api.postJson(ApiEndpoints.authPhoneOtp, {
+        'phone': phone,
+        if (forRegister) 'forRegister': true,
+      });
+    } catch (e) {
+      state = state.copyWith(error: localizedApiError(e, fallbackKey: 'error'));
+      rethrow;
+    }
+  }
+
+  Future<void> verifyPhoneOtp(String phone, String otp, {String? name}) async {
+    state = state.copyWith(loading: true, clearError: true);
+    try {
+      final api = await _api;
+      final data = await api.postJson(ApiEndpoints.authPhoneVerify, {
+        'phone': phone,
+        'otp': otp,
+        if (name != null && name.isNotEmpty) 'name': name,
+      });
+      final token = '${data['token']}';
+      final user = WeretUser.fromJson(data['user'] as Map<String, dynamic>);
+      await applySession(token: token, user: user);
+    } catch (e) {
+      state = state.copyWith(loading: false, error: localizedApiError(e, fallbackKey: 'error'));
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> requestPasswordResetOtp(String email) async {
+    state = state.copyWith(clearError: true);
+    try {
+      final api = await _api;
+      return await api.postJson(ApiEndpoints.authForgotPassword, {'email': email.trim()});
+    } catch (e) {
+      state = state.copyWith(error: localizedApiError(e, fallbackKey: 'error'));
+      rethrow;
+    }
+  }
+
+  Future<void> resetPasswordWithOtp(String email, String otp, String password) async {
+    state = state.copyWith(loading: true, clearError: true);
+    try {
+      final api = await _api;
+      await api.postJson(ApiEndpoints.authResetPassword, {
+        'email': email.trim(),
+        'otp': otp.trim(),
+        'password': password,
+      });
+      state = state.copyWith(loading: false, clearError: true);
+    } catch (e) {
+      state = state.copyWith(loading: false, error: localizedApiError(e, fallbackKey: 'error'));
+      rethrow;
+    }
+  }
+
+  Future<void> signInWithGoogle(String idToken, {String? accessToken}) async {
+    state = state.copyWith(loading: true, clearError: true);
+    try {
+      final api = await _api;
+      final data = await api.postJson(ApiEndpoints.authGoogle, {'idToken': idToken});
+      final token = '${data['token']}';
+      final user = WeretUser.fromJson(data['user'] as Map<String, dynamic>);
+      await applySession(token: token, user: user);
+    } catch (e) {
+      state = state.copyWith(loading: false, error: localizedApiError(e, fallbackKey: 'error'));
+      rethrow;
+    }
+  }
+
+  Future<void> switchRole(String role) async {
+    final api = await _api;
+    final data = await api.postJson(ApiEndpoints.switchRole, {'role': role});
+    if (data['token'] != null) await api.setToken('${data['token']}');
+    final user = WeretUser.fromJson(data['user'] as Map<String, dynamic>);
+    await _cacheUser(user);
+    state = state.copyWith(user: user, token: data['token'] != null ? '${data['token']}' : state.token);
+  }
+
+  Future<void> updateProfile(Map<String, dynamic> patch) async {
+    final api = await _api;
+    final data = await api.patchJson(ApiEndpoints.authProfile, patch);
+    final user = WeretUser.fromJson(data['user'] as Map<String, dynamic>);
+    await _cacheUser(user);
+    state = state.copyWith(user: user);
+  }
+
+  Future<void> logout() async {
+    resetSessionProviders(_ref);
+    if (_googleSignInInstance != null) {
+      try {
+        await _googleSignInInstance!.signOut();
+      } catch (_) {}
+    }
+    final api = await _api;
+    await api.setToken(null);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_userCacheKey);
+    state = AuthState(hydrated: true, googleWebClientId: state.googleWebClientId, googleSignInEnabled: state.googleSignInEnabled);
+  }
+
+  void clearError() => state = state.copyWith(clearError: true);
+}
+
+final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
+  return AuthNotifier(ref);
+});
+
+final authHydrateProvider = FutureProvider<void>((ref) async {
+  await ref.read(authProvider.notifier).hydrate();
+});

@@ -1,0 +1,10 @@
+{
+  "recommendations": [
+    "dart-code.dart-code",
+    "dart-code.flutter",
+    "mongodb.mongodb-vscode",
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode"
+  ],
+  "unwantedRecommendations": ["ms-vscode.vscode-typescript-next"]
+}

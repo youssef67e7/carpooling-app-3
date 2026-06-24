@@ -1,0 +1,63 @@
+import path from "path";
+import { Router } from "express";
+import multer from "multer";
+import { randomBytes } from "crypto";
+import { authRequired, blockCheck } from "../middleware/auth.js";
+import { AppError } from "../errors/AppError.js";
+import { userUploadDir } from "../uploadPaths.js";
+
+const router = Router();
+
+router.use(authRequired, blockCheck);
+
+function normVisibility(raw) {
+  const v = String(raw || "").trim().toLowerCase();
+  return v === "private" ? "private" : "public";
+}
+
+const diskStorage = multer.diskStorage({
+  destination: (req, _file, cb) => {
+    try {
+      const vis = normVisibility(req.body?.visibility);
+      cb(null, userUploadDir(vis, req.userId));
+    } catch (e) {
+      cb(e);
+    }
+  },
+  filename: (_req, file, cb) => {
+    const ext = (path.extname(file.originalname || "") || "").slice(0, 12).toLowerCase();
+    const safeExt = ext && ext.length <= 12 ? ext : "";
+    const name = `${Date.now()}-${randomBytes(8).toString("hex")}${safeExt}`;
+    cb(null, name);
+  },
+});
+
+const upload = multer({
+  storage: diskStorage,
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, cb) => {
+    const ok = typeof file.mimetype === "string" && file.mimetype.startsWith("image/");
+    cb(ok ? null : new AppError("Only image uploads are allowed", 400), ok);
+  },
+});
+
+router.post("/", upload.single("image"), async (req, res, next) => {
+  try {
+    if (!req.file) throw new AppError("Missing image", 400);
+    const vis = normVisibility(req.body?.visibility);
+
+    const rel = `/uploads/${vis}/${encodeURIComponent(String(req.userId))}/${encodeURIComponent(req.file.filename)}`;
+    return res.status(201).json({
+      url: rel,
+      visibility: vis,
+      mime: req.file.mimetype,
+      size: req.file.size,
+      storage: "local",
+      path: req.file.path,
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+export default router;

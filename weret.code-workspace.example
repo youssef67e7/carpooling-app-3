@@ -1,0 +1,24 @@
+{
+  "folders": [
+    { "name": "WERET (root)", "path": "." },
+    { "name": "Backend — Atlas API", "path": "backend" },
+    { "name": "Flutter App", "path": "apps/mobile-flutter" },
+    { "name": "Admin Web", "path": "apps/web" }
+  ],
+  "settings": {
+    "files.exclude": {
+      "**/node_modules": true,
+      "**/.dart_tool": true
+    },
+    "dart.lineLength": 100,
+    "mdb.showMongoDBConnectionExplorer": true,
+    "mdb.connectionSaving.defaultConnectionSavingLocation": "Workspace"
+  },
+  "extensions": {
+    "recommendations": [
+      "dart-code.dart-code",
+      "dart-code.flutter",
+      "mongodb.mongodb-vscode"
+    ]
+  }
+}

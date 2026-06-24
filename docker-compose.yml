@@ -1,0 +1,15 @@
+# Optional persistent local MongoDB for dev (requires Docker Desktop).
+# Usage: docker compose up -d mongo
+# Then in backend/.env:
+#   MONGODB_LOCAL_URI=mongodb://127.0.0.1:27017/weret
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - weret_mongo_data:/data/db
+
+volumes:
+  weret_mongo_data:

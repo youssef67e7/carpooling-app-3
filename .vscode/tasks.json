@@ -1,0 +1,50 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "WERET: Sync VS Code (Atlas + Flutter API)",
+      "type": "shell",
+      "command": "npm run vscode:sync",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "WERET: Backend API (Atlas)",
+      "type": "shell",
+      "command": "npm run backend",
+      "options": { "cwd": "${workspaceFolder}" },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "node",
+        "pattern": { "regexp": "^.*$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".",
+          "endsPattern": "API http://localhost"
+        }
+      },
+      "presentation": { "reveal": "always", "panel": "dedicated", "group": "weret" }
+    },
+    {
+      "label": "WERET: MongoDB Test Atlas",
+      "type": "shell",
+      "command": "npm run mongo:test-atlas --prefix backend",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "WERET: MongoDB Verify CRUD",
+      "type": "shell",
+      "command": "npm run mongo:verify --prefix backend",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "WERET: Flutter pub get",
+      "type": "shell",
+      "command": "flutter pub get",
+      "options": { "cwd": "${workspaceFolder}/apps/mobile-flutter" },
+      "problemMatcher": []
+    }
+  ]
+}

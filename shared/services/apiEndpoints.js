@@ -1,0 +1,96 @@
+/**
+ * Canonical REST API contract shared by web admin (apps/web) and mobile (Flutter).
+ * Base URL is configured per app; paths are identical.
+ */
+export const API_ENDPOINTS = {
+  health: "GET /health",
+  auth: {
+    me: "GET /auth/me",
+    googleConfig: "GET /auth/google-config",
+    google: "POST /auth/google",
+    phoneOtp: "POST /auth/phone/otp",
+    phoneVerify: "POST /auth/phone/verify",
+    login: "POST /auth/login",
+    register: "POST /auth/register",
+    forgotPassword: "POST /auth/forgot-password",
+    resetPassword: "POST /auth/reset-password",
+    profile: "PATCH /auth/profile",
+  },
+  switchRole: "POST /switch-role",
+  ai: {
+    fareSuggest: "POST /ai/fare/suggest",
+    placesRerank: "POST /ai/places/rerank",
+  },
+  driverApplication: {
+    me: "GET /driver-application/me",
+    submit: "POST /driver-application/submit",
+  },
+  driver: {
+    status: "GET /driver/status",
+    cars: "POST /driver/cars",
+    carPatch: "PATCH /driver/cars/:carId",
+    carDelete: "DELETE /driver/cars/:carId",
+    carSetActive: "PATCH /driver/cars/:carId/set-active",
+    toggleStatus: "POST /driver/toggle-status",
+    locationUpdate: "POST /driver/location-update",
+  },
+  passenger: {
+    locationUpdate: "POST /passenger/location-update",
+  },
+  rides: {
+    vehicles: "GET /vehicles",
+    nearbyDrivers: "GET /rides/nearby-drivers",
+    create: "POST /rides/create",
+    get: "GET /rides/:rideId",
+    messages: "GET /rides/:rideId/messages",
+    postMessage: "POST /rides/:rideId/messages",
+    history: "GET /rides/history",
+    available: "GET /rides/available",
+    accept: "POST /rides/accept",
+    respondProposal: "POST /rides/respond-proposal",
+    passengerMinFare: "POST /rides/passenger-min-fare",
+    driverConfirmBooking: "POST /rides/driver-confirm-booking",
+    withdrawOffer: "POST /rides/withdraw-offer",
+    driverCancel: "POST /rides/driver-cancel",
+    start: "POST /rides/start",
+    end: "POST /rides/end",
+    rate: "POST /rides/rate",
+  },
+  wallet: {
+    accounts: "GET /wallet/accounts",
+    createAccount: "POST /wallet/accounts",
+    deleteAccount: "DELETE /wallet/accounts/:id",
+    deposit: "POST /wallet/deposit",
+    withdrawRequest: "POST /wallet/withdraw/request",
+    withdrawConfirm: "POST /wallet/withdraw/confirm",
+    transactions: "GET /wallet/transactions",
+  },
+  admin: {
+    users: "GET /admin/users",
+    userPatch: "PATCH /admin/users/:userId",
+    userDelete: "DELETE /admin/users/:userId",
+    rides: "GET /admin/rides",
+    stats: "GET /admin/stats",
+    reports: "GET /admin/reports",
+    reportPatch: "PATCH /admin/reports/:id",
+    transactions: "GET /admin/transactions",
+    audit: "GET /admin/audit",
+    transactionFlag: "PATCH /admin/transactions/:id/flag",
+  },
+  reports: "POST /reports",
+  upload: "POST /upload",
+};
+
+export const SOCKET_EVENTS = {
+  listen: ["ride:update", "ride:message", "ride:typing", "webrtc:signal"],
+  emit: [
+    "subscribeRide",
+    "unsubscribeRide",
+    "ride:typing",
+    "subscribeDriverFeed",
+    "unsubscribeDriverFeed",
+    "webrtc:join",
+    "webrtc:leave",
+    "webrtc:signal",
+  ],
+};

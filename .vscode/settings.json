@@ -1,0 +1,29 @@
+{
+  "files.exclude": {
+    "**/.dart_tool": true,
+    "**/node_modules": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/build": true,
+    "**/.dart_tool": true
+  },
+  "dart.analysisExcludedFolders": ["**/node_modules", "**/build"],
+  "dart.openDevTools": "flutter",
+  "dart.previewFlutterUiGuides": true,
+  "editor.formatOnSave": true,
+  "[dart]": {
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "Dart-Code.dart-code",
+    "editor.rulers": [100]
+  },
+  "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "eslint.workingDirectories": [{ "directory": "backend", "changeProcessCWD": true }],
+  "terminal.integrated.defaultProfile.windows": "PowerShell",
+  "mdb.showMongoDBConnectionExplorer": true,
+  "mdb.showMongoDBPlaygrounds": true,
+  "mdb.connectionSaving.defaultConnectionSavingLocation": "Workspace",
+  "mdb.defaultLimit": 25
+}
