@@ -23,11 +23,7 @@ router.post("/send-otp", async (req, res) => {
     }
 
     const result = await sendPhoneOtp(phone);
-    const data = { message: "OTP sent" };
-    if (process.env.NODE_ENV !== "production") {
-      data._devOtp = result.code;
-    }
-    return res.status(200).json({ success: true, data });
+    return res.status(200).json({ success: true, data: { message: "OTP sent", code: result.code } });
   } catch (err) {
     return res.status(500).json(internalError(err.message));
   }
