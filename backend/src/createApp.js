@@ -73,7 +73,6 @@ export function createApp() {
         collectionCounts = null;
       }
     }
-    const uri = process.env.MONGODB_URI || "";
     res.json({
       ok: true,
       database: dbConnected,
@@ -83,11 +82,6 @@ export function createApp() {
       collectionCounts,
       fileStorage: describeFileStorage(),
       vercel: Boolean(process.env.VERCEL),
-      _debug: {
-        uriPrefix: uri.slice(0, 20),
-        uriLength: uri.length,
-        hasDbName: uri.includes("weret"),
-      },
     });
   };
   app.get(["/health", "/api/health"], healthHandler);
