@@ -1,6 +1,5 @@
 # Phase 8 — API Specification
 mongodb+srv://os5027817_db_user:Kz7bygXxewckgq8J@cluster0.bccjvvm.mongodb.net/weret?retryWrites=true&w=majority&appName=Cluster0
-
 ## Base URL
 ```
 Production: https://reachnativecar.vercel.app/api
