@@ -64,13 +64,14 @@ router.post("/verify-firebase-phone", async (req, res) => {
     return res.status(200).json({ success: true, data: result });
   } catch (err) {
     const msg = err.message || String(err);
-    if (msg.includes("Invalid Firebase token")) {
-      return res.status(401).json(authError(msg));
+    try {
+      if (msg.includes("Invalid Firebase token")) {
+        return res.status(401).json(authError(msg));
+      }
+      return res.status(500).json(internalError(msg));
+    } catch (serializeErr) {
+      return res.status(500).type("text").send("Server error: " + msg);
     }
-    if (msg.includes("credentials not configured")) {
-      return res.status(500).json(internalError("Firebase is not configured on the server"));
-    }
-    return res.status(500).json(internalError(msg));
   }
 });
 
