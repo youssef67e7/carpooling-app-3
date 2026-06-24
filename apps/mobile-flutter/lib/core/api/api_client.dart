@@ -14,8 +14,16 @@ class ApiConfig {
 
   static String get baseUrl {
     const fromEnv = String.fromEnvironment('API_URL');
-    if (fromEnv.isNotEmpty) return fromEnv.replaceAll(RegExp(r'/$'), '');
-    if (kDebugMode) return 'http://192.168.1.15:3000';
+    if (fromEnv.isNotEmpty) {
+      final url = fromEnv.replaceAll(RegExp(r'/$'), '');
+      print('🌐 APP IS CONNECTING TO: $url');
+      return url;
+    }
+    if (kDebugMode) {
+      print('🌐 APP IS CONNECTING TO: http://192.168.1.15:3000 (default debug)');
+      return 'http://192.168.1.15:3000';
+    }
+    print('🌐 APP IS CONNECTING TO: http://localhost:3000 (default release)');
     return 'http://localhost:3000';
   }
 }

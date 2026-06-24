@@ -163,16 +163,39 @@ class RideNotifier extends StateNotifier<RideState> {
 
   Future<Map<String, dynamic>> createRide(Map<String, dynamic> body) async {
     final api = await _api;
-    final data = await api.postJson(ApiEndpoints.ridesCreate, body);
-    final ride = data['ride'] as Map<String, dynamic>;
-    _applyActiveRides(_mergeActiveRide(ride));
-    return ride;
+    final passengerId = _ref.read(authProvider).user?.id ?? '';
+    final v2Body = {
+      'passengerId': passengerId,
+      'vehicleType': body['vehicleType'],
+      'pickup': {
+        'latitude': body['pickupLocation']['lat'],
+        'longitude': body['pickupLocation']['lng'],
+        'address': body['pickupLocation']['address'] ?? '',
+      },
+      'dropoff': {
+        'latitude': body['destinationLocation']['lat'],
+        'longitude': body['destinationLocation']['lng'],
+        'address': body['destinationLocation']['address'] ?? '',
+      },
+    };
+    print('📦 SENDING RIDE REQUEST: $v2Body');
+    try {
+      final response = await api.postJson(ApiEndpoints.ridesCreate, v2Body);
+      print('✅ RIDE RESPONSE: $response');
+      final data = response['data'] as Map<String, dynamic>;
+      final ride = data['ride'] as Map<String, dynamic>;
+      _applyActiveRides(_mergeActiveRide(ride));
+      return ride;
+    } catch (e) {
+      print('❌ RIDE ERROR: $e');
+      rethrow;
+    }
   }
 
   Future<void> fetchRideById(String id) async {
     final api = await _api;
-    final data = await api.getJson(ApiEndpoints.ride(id));
-    final ride = data['ride'] as Map<String, dynamic>?;
+    final response = await api.getJson(ApiEndpoints.rideStatus(id));
+    final ride = response['data'] as Map<String, dynamic>?;
     if (ride != null) _applyActiveRides(_mergeActiveRide(ride));
   }
 
@@ -224,25 +247,25 @@ class RideNotifier extends StateNotifier<RideState> {
     await fetchHistory();
   }
 
-  Future<void> fetchAvailable() async {
+  Future<void> fetchAvailable({String? vehicleType}) async {
     final api = await _api;
-    final data = await api.getJson(ApiEndpoints.ridesAvailable);
-    final maxC = (data['maxConcurrent'] as num?)?.toInt() ?? kMaxDriverConcurrentRides;
-    final count = (data['assignedCount'] as num?)?.toInt() ?? state.driverAssignedCount;
+    final query = vehicleType != null ? <String, dynamic>{'vehicleType': vehicleType} : null;
+    final response = await api.getJson(ApiEndpoints.ridesAvailable, query: query);
+    final rides = response['data'] as List? ?? [];
     state = state.copyWith(
-      availableRides: data['rides'] as List? ?? [],
-      driverAssignedCount: count,
-      driverMaxConcurrent: maxC,
-      driverCanTakeMore: data['canTakeMore'] == true || count < maxC,
+      availableRides: rides,
+      driverAssignedCount: state.driverAssignedCount,
+      driverMaxConcurrent: kMaxDriverConcurrentRides,
+      driverCanTakeMore: state.driverAssignedCount < kMaxDriverConcurrentRides,
     );
   }
 
   Future<Map<String, dynamic>> acceptRide(String rideId, {num? proposedFare}) async {
     final api = await _api;
-    final body = <String, dynamic>{'rideId': rideId};
-    if (proposedFare != null) body['proposedFare'] = proposedFare;
-    final data = await api.postJson(ApiEndpoints.ridesAccept, body);
-    final ride = data['ride'] as Map<String, dynamic>;
+    final driverId = _ref.read(authProvider).user?.id ?? '';
+    final body = <String, dynamic>{'driverId': driverId};
+    final response = await api.postJson(ApiEndpoints.ridesAccept(rideId), body);
+    final ride = response['data'] as Map<String, dynamic>;
     await fetchAvailable();
     return ride;
   }

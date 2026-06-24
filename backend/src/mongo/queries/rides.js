@@ -44,7 +44,15 @@ export async function createRide(rideData) {
  */
 export async function findRideById(rideId) {
   const db = await getDb();
-  return db.collection(RIDES).findOne({ _id: new ObjectId(rideId) });
+  let ride = await db.collection(RIDES).findOne({ _id: rideId });
+  if (!ride) {
+    try {
+      ride = await db.collection(RIDES).findOne({ _id: new ObjectId(rideId) });
+    } catch {
+      // not a valid ObjectId hex string
+    }
+  }
+  return ride;
 }
 
 /**
@@ -69,10 +77,16 @@ export async function findActiveRideByPassenger(passengerId) {
  */
 export async function updateRideStatus(rideId, newStatus, extraFields = {}) {
   const db = await getDb();
-  await db.collection(RIDES).updateOne(
-    { _id: new ObjectId(rideId) },
-    { $set: { status: newStatus, ...extraFields } }
-  );
+  let filter = { _id: rideId };
+  try {
+    const found = await db.collection(RIDES).findOne({ _id: rideId }, { projection: { _id: 1 } });
+    if (!found) {
+      filter = { _id: new ObjectId(rideId) };
+    }
+  } catch {
+    filter = { _id: new ObjectId(rideId) };
+  }
+  await db.collection(RIDES).updateOne(filter, { $set: { status: newStatus, ...extraFields } });
 }
 
 /**

@@ -1,4 +1,3 @@
-import { ObjectId } from "mongodb";
 import { createRide, findRideById, findActiveRideByPassenger, updateRideStatus, findNearbyAvailableDrivers } from "../mongo/queries/rides.js";
 import { findById } from "../mongo/queries/users.js";
 import { getDb } from "../mongo/nativeClient.js";
@@ -12,7 +11,7 @@ export async function requestRide(passengerId, pickup, dropoff, vehicleType) {
   const nearbyDrivers = await findNearbyAvailableDrivers(pickup.latitude, pickup.longitude, vehicleType, 5000);
 
   const rideId = await createRide({
-    passenger_id: new ObjectId(passengerId),
+    passenger_id: passengerId,
     pickup: {
       address: pickup.address,
       coordinates: [pickup.longitude, pickup.latitude],
@@ -56,6 +55,6 @@ export async function acceptRide(rideId, driverId) {
   if (ride.status !== "pending") {
     throw new Error("Ride is no longer available");
   }
-  await updateRideStatus(rideId, "accepted", { driver_id: new ObjectId(driverId), accepted_at: new Date() });
+  await updateRideStatus(rideId, "accepted", { driver_id: driverId, accepted_at: new Date() });
   return findRideById(rideId);
 }

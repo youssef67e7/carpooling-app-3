@@ -35,13 +35,14 @@ class ApiEndpoints {
   static const vehicles = '/vehicles';
   static const ridesNearbyDrivers = '/rides/nearby-drivers';
   static const ridesRoutePreview = '/rides/route-preview';
-  static const ridesCreate = '/rides/create';
+  static const ridesCreate = '/v2/rides';
   static String ride(String id) => '/rides/$id';
+  static String rideStatus(String id) => '/v2/rides/$id/status';
   static String rideMessages(String id) => '/rides/$id/messages';
   static const ridesHistory = '/rides/history';
-  static const ridesAvailable = '/rides/available';
+  static const ridesAvailable = '/v2/rides/requested';
   static const ridesMyActive = '/rides/my-active';
-  static const ridesAccept = '/rides/accept';
+  static String ridesAccept(String id) => '/v2/rides/$id/accept';
   static const ridesRespondProposal = '/rides/respond-proposal';
   static const ridesPassengerMinFare = '/rides/passenger-min-fare';
   static const ridesDriverConfirmBooking = '/rides/driver-confirm-booking';
