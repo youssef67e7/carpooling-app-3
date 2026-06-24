@@ -57,21 +57,17 @@ router.post("/verify-otp", async (req, res) => {
 router.post("/verify-firebase-phone", async (req, res) => {
   const { firebaseIdToken, name } = req.body;
   if (!firebaseIdToken) {
-    return res.status(400).json(validationError("firebaseIdToken is required"));
+    return res.status(400).type("json").send(JSON.stringify(validationError("firebaseIdToken is required")));
   }
   try {
     const result = await verifyFirebasePhoneToken(firebaseIdToken, name);
-    return res.status(200).json({ success: true, data: result });
+    return res.status(200).type("json").send(JSON.stringify({ success: true, data: result }));
   } catch (err) {
     const msg = err.message || String(err);
-    try {
-      if (msg.includes("Invalid Firebase token")) {
-        return res.status(401).json(authError(msg));
-      }
-      return res.status(500).json(internalError(msg));
-    } catch (serializeErr) {
-      return res.status(500).type("text").send("Server error: " + msg);
+    if (msg.includes("Invalid Firebase token")) {
+      return res.status(401).type("json").send(JSON.stringify(authError(msg)));
     }
+    return res.status(500).type("json").send(JSON.stringify(internalError(msg)));
   }
 });
 

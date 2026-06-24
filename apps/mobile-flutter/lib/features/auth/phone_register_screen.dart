@@ -71,14 +71,9 @@ class _PhoneRegisterScreenState extends ConsumerState<PhoneRegisterScreen> {
     ref.read(authProvider.notifier).clearError();
     try {
       final phone = _phone.text.trim();
-      final data = await ref.read(authProvider.notifier).requestPhoneOtp(phone, forRegister: true);
-      setState(() {
-        _step = 'details';
-        _devOtpHint = data['_devOtp']?.toString();
-        _normalizedPhone = '${data['phone'] ?? phone}';
-        _otp.clear();
-      });
-      _startResendCooldown();
+      final e164 = phone.startsWith('+') ? phone : '+20${phone.replaceFirst(RegExp(r'^0+'), '')}';
+      setState(() => _normalizedPhone = e164);
+      await _sendRealSmsOtp(e164);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(localizedApiError(e))));
@@ -96,17 +91,7 @@ class _PhoneRegisterScreenState extends ConsumerState<PhoneRegisterScreen> {
     }
     if (!_detailsFormKey.currentState!.validate()) return;
     try {
-      await ref.read(authProvider.notifier).verifyPhoneOtp(
-            _normalizedPhone ?? _phone.text.trim(),
-            _otp.text.trim(),
-            name: _name.text.trim(),
-          );
-      if (!mounted) return;
-      if (widget.forDriver) {
-        context.go('/driver/onboarding');
-      } else {
-        context.go(AuthNavigation.homeForUser(ref.read(authProvider).user));
-      }
+      await _verifyRealSmsOtp(_otp.text.trim());
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(localizedApiError(e))));
@@ -120,7 +105,8 @@ class _PhoneRegisterScreenState extends ConsumerState<PhoneRegisterScreen> {
       await FirebaseAuth.instance.verifyPhoneNumber(
         phoneNumber: phoneNumber,
         verificationCompleted: (PhoneAuthCredential credential) async {
-          String? idToken = await credential.user?.getIdToken();
+          final userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
+          final idToken = await userCredential.user?.getIdToken();
           if (idToken != null) {
             await _sendTokenToBackend(idToken);
           }
@@ -131,6 +117,7 @@ class _PhoneRegisterScreenState extends ConsumerState<PhoneRegisterScreen> {
           }
         },
         codeSent: (String verificationId, int? resendToken) {
+          if (!mounted) return;
           setState(() {
             _verificationId = verificationId;
             _step = 'details';
@@ -236,7 +223,7 @@ class _PhoneRegisterScreenState extends ConsumerState<PhoneRegisterScreen> {
             textInputAction: TextInputAction.done,
             onFieldSubmitted: (_) => _sendOtp(),
           ),
-          CustomButton(title: 'phoneLoginSendCode'.tr(), loading: _sendingOtp, onPressed: _sendOtp),
+          CustomButton(title: 'phoneLoginSendCode'.tr(), loading: _sendingOtp || _firebaseLoading, onPressed: _sendOtp),
           WeretLinkButton(title: 'login'.tr(), onPressed: () => context.go('/login')),
         ],
       ),

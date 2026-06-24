@@ -28,13 +28,12 @@ class _ScreenLogObserver extends NavigatorObserver {
 final _rootKey = GlobalKey<NavigatorState>();
 
 final appRouterProvider = Provider<GoRouter>((ref) {
-  final auth = ref.watch(authProvider);
-
-  return GoRouter(
+  final router = GoRouter(
     navigatorKey: _rootKey,
     initialLocation: '/onboarding',
     observers: [_ScreenLogObserver()],
     redirect: (context, state) {
+      final auth = ref.read(authProvider);
       if (!auth.hydrated) return null;
       final loggedIn = auth.isAuthenticated;
       final loc = state.matchedLocation;
@@ -120,5 +119,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
     ],
   );
+
+  ref.listen(authProvider, (_, __) => router.refresh());
+
+  return router;
 });
 

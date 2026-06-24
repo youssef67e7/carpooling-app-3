@@ -1,17 +1,24 @@
 import { findByPhone, create } from "../mongo/queries/users.js";
 import { signUserToken } from "../utils/signUserToken.js";
 
+const FIREBASE_WEB_API_KEY = process.env.FIREBASE_WEB_API_KEY;
+
 export async function verifyFirebasePhoneToken(firebaseIdToken, name) {
   let payload;
   try {
-    const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?idToken=${encodeURIComponent(firebaseIdToken)}`);
-    if (!res.ok) throw new Error("Invalid Firebase token");
-    payload = await res.json();
+    const res = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${FIREBASE_WEB_API_KEY}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idToken: firebaseIdToken }),
+    });
+    const json = await res.json();
+    if (!res.ok || !json.users || json.users.length === 0) throw new Error("Invalid Firebase token");
+    payload = json.users[0];
   } catch {
     throw new Error("Invalid Firebase token");
   }
 
-  const phoneNumber = payload.phone_number;
+  const phoneNumber = payload.phoneNumber;
   if (!phoneNumber) {
     throw new Error("Firebase token does not contain a phone number");
   }
