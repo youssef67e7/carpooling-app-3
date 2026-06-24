@@ -1,5 +1,5 @@
 import admin from "firebase-admin";
-import { readFileSync, existsSync } from "fs";
+import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { findByPhone, create } from "../mongo/queries/users.js";
@@ -8,35 +8,30 @@ import { ObjectId } from "mongodb";
 
 let firebaseInitialized = false;
 
-function initFirebase() {
+function initializeFirebase() {
   if (firebaseInitialized) return;
-  if (admin.apps.length) {
-    firebaseInitialized = true;
-    return;
-  }
-  const __dirname = dirname(fileURLToPath(import.meta.url));
-  let serviceAccount;
-  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-  } else {
-    const filePath = resolve(__dirname, "../../firebase-service-account.json");
-    if (!existsSync(filePath)) {
-      throw new Error("Firebase credentials not configured. Set FIREBASE_SERVICE_ACCOUNT env var or place firebase-service-account.json in backend/");
+  try {
+    let credential;
+    if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+      const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+      credential = admin.credential.cert(serviceAccount);
+    } else {
+      const __dirname = dirname(fileURLToPath(import.meta.url));
+      credential = admin.credential.cert(resolve(__dirname, "../../firebase-service-account.json"));
     }
-    serviceAccount = JSON.parse(readFileSync(filePath, "utf8"));
+    if (!admin.apps.length) {
+      admin.initializeApp({ credential });
+    }
+    firebaseInitialized = true;
+  } catch (err) {
+    console.error("Firebase Admin init failed:", err.message);
+    throw new Error("Firebase configuration is missing or invalid.");
   }
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-  });
-  firebaseInitialized = true;
 }
 
+initializeFirebase();
+
 export async function verifyFirebasePhoneToken(firebaseIdToken, name) {
-  try {
-    initFirebase();
-  } catch {
-    throw new Error("Firebase is not configured on the server");
-  }
   let decoded;
   try {
     decoded = await admin.auth().verifyIdToken(firebaseIdToken);
