@@ -1,5 +1,5 @@
 import admin from "firebase-admin";
-import { readFileSync } from "fs";
+import { readFileSync, existsSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { findByPhone, create } from "../mongo/queries/users.js";
@@ -8,30 +8,32 @@ import { ObjectId } from "mongodb";
 
 let firebaseInitialized = false;
 
-function initializeFirebase() {
+function tryInitFirebase() {
   if (firebaseInitialized) return;
+  if (admin.apps.length) { firebaseInitialized = true; return; }
   try {
-    let credential;
+    let serviceAccount;
     if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-      const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-      credential = admin.credential.cert(serviceAccount);
+      serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
     } else {
       const __dirname = dirname(fileURLToPath(import.meta.url));
-      credential = admin.credential.cert(resolve(__dirname, "../../firebase-service-account.json"));
+      const filePath = resolve(__dirname, "../../firebase-service-account.json");
+      if (!existsSync(filePath)) return;
+      serviceAccount = JSON.parse(readFileSync(filePath, "utf8"));
     }
-    if (!admin.apps.length) {
-      admin.initializeApp({ credential });
-    }
+    admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
     firebaseInitialized = true;
   } catch (err) {
     console.error("Firebase Admin init failed:", err.message);
-    throw new Error("Firebase configuration is missing or invalid.");
   }
 }
 
-initializeFirebase();
+tryInitFirebase();
 
 export async function verifyFirebasePhoneToken(firebaseIdToken, name) {
+  if (!firebaseInitialized) {
+    throw new Error("Firebase is not configured");
+  }
   let decoded;
   try {
     decoded = await admin.auth().verifyIdToken(firebaseIdToken);
