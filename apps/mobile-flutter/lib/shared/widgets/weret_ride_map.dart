@@ -49,6 +49,11 @@ class WeretRideMap extends StatefulWidget {
   State<WeretRideMap> createState() => _WeretRideMapState();
 }
 
+LatLng _sanitize(LatLng p) => LatLng(
+      p.latitude.isFinite ? p.latitude : 0,
+      p.longitude.isFinite ? p.longitude : 0,
+    );
+
 class _WeretRideMapState extends State<WeretRideMap> with SingleTickerProviderStateMixin {
   LatLng? _displayDriver;
   AnimationController? _anim;
@@ -117,7 +122,7 @@ class _WeretRideMapState extends State<WeretRideMap> with SingleTickerProviderSt
 
   void _maybeFit() {
     if (!widget.autoFit) return;
-    final pts = _fitPoints;
+    final pts = _fitPoints.where((p) => p.latitude.isFinite && p.longitude.isFinite).toList();
     if (pts.length >= 2) fitMapToPoints(widget.controller, pts);
   }
 
@@ -145,13 +150,13 @@ class _WeretRideMapState extends State<WeretRideMap> with SingleTickerProviderSt
         height: widget.height,
         child: Stack(
           children: [
-            FlutterMap(
-              mapController: widget.controller,
-              options: MapOptions(
-                initialCenter: widget.center,
-                initialZoom: 13,
-                interactionOptions: InteractionOptions(flags: flags),
-              ),
+              FlutterMap(
+                mapController: widget.controller,
+                options: MapOptions(
+                  initialCenter: _sanitize(widget.center),
+                  initialZoom: 13,
+                  interactionOptions: InteractionOptions(flags: flags),
+                ),
               children: [
                 TileLayer(
                   urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
@@ -163,7 +168,7 @@ class _WeretRideMapState extends State<WeretRideMap> with SingleTickerProviderSt
                         .where((p) => p.points.length >= 2)
                         .map(
                           (p) => Polyline(
-                            points: p.points,
+                            points: p.points.map((pt) => _sanitize(pt)).toList(),
                             color: p.color,
                             strokeWidth: p.strokeWidth,
                             pattern: p.dashed ? StrokePattern.dashed(segments: const [12, 10]) : const StrokePattern.solid(),
@@ -174,14 +179,14 @@ class _WeretRideMapState extends State<WeretRideMap> with SingleTickerProviderSt
                 if (_nearby.isNotEmpty)
                   MarkerLayer(
                     markers: _nearby
-                        .map((p) => Marker(point: p, width: 28, height: 28, child: const NearbyDriverMarker()))
+                        .map((p) => Marker(point: _sanitize(p), width: 28, height: 28, child: const NearbyDriverMarker()))
                         .toList(),
                   ),
                 if (driverPoint != null)
                   MarkerLayer(
                     markers: [
                       Marker(
-                        point: driverPoint,
+                        point: _sanitize(driverPoint),
                         width: 44,
                         height: 44,
                         child: DriverMapMarker(bearing: _bearing, pulse: true),
@@ -192,7 +197,7 @@ class _WeretRideMapState extends State<WeretRideMap> with SingleTickerProviderSt
                   MarkerLayer(
                     markers: [
                       Marker(
-                        point: _pickup!,
+                        point: _sanitize(_pickup!),
                         width: 34,
                         height: 34,
                         child: const Icon(Icons.trip_origin, color: Colors.green, size: 28),
@@ -203,7 +208,7 @@ class _WeretRideMapState extends State<WeretRideMap> with SingleTickerProviderSt
                   MarkerLayer(
                     markers: [
                       Marker(
-                        point: _destination!,
+                        point: _sanitize(_destination!),
                         width: 34,
                         height: 34,
                         child: const Icon(Icons.place, color: Colors.red, size: 30),

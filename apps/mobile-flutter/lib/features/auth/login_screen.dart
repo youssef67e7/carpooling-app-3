@@ -95,7 +95,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Future<void> _sendOtp() async {
-    if (!_phoneFormKey.currentState!.validate()) return;
+    if (_phoneFormKey.currentState == null || !_phoneFormKey.currentState!.validate()) return;
     setState(() => _sendingOtp = true);
     ref.read(authProvider.notifier).clearError();
     try {
@@ -192,7 +192,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Future<void> _emailLogin() async {
-    if (!_emailFormKey.currentState!.validate()) return;
+    if (_emailFormKey.currentState == null || !_emailFormKey.currentState!.validate()) return;
     ref.read(authProvider.notifier).clearError();
     try {
       await ref.read(authProvider.notifier).loginEmail(_email.text.trim(), _password.text);

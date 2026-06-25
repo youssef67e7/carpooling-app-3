@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'auth_interceptor.dart';
+import '../services/debug_logger.dart';
 
 class ApiClient {
   ApiClient() {
@@ -18,6 +19,8 @@ class ApiClient {
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) {
+          final logger = DebugLogger.instance;
+          logger.network('${options.method} ${options.uri}', options.uri.toString());
           debugPrint('');
           debugPrint('════════ REQUEST ════════');
           debugPrint('${options.method} ${options.uri}');
@@ -27,6 +30,8 @@ class ApiClient {
           handler.next(options);
         },
         onResponse: (response, handler) {
+          final logger = DebugLogger.instance;
+          logger.network('${response.requestOptions.method}', '${response.requestOptions.uri}', statusCode: response.statusCode);
           debugPrint('');
           debugPrint('════════ RESPONSE ════════');
           debugPrint('${response.statusCode}');
@@ -36,6 +41,8 @@ class ApiClient {
           handler.next(response);
         },
         onError: (error, handler) {
+          final logger = DebugLogger.instance;
+          logger.network('${error.requestOptions.method}', '${error.requestOptions.uri}', error: error.message);
           debugPrint('');
           debugPrint('════════ ERROR ════════');
           debugPrint('${error.requestOptions.method}');
@@ -65,11 +72,7 @@ class ApiClient {
   }
 
   Future<Map<String, dynamic>> postMultipart(String path, FormData formData) async {
-    final res = await _dio.post<Map<String, dynamic>>(
-      path,
-      data: formData,
-      options: Options(contentType: 'multipart/form-data'),
-    );
+    final res = await _dio.post<Map<String, dynamic>>(path, data: formData);
     return res.data ?? {};
   }
 

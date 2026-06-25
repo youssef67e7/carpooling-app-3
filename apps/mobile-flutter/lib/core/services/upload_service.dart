@@ -1,4 +1,4 @@
-import 'package:dio/dio.dart';
+import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import '../api/api_client.dart';
@@ -16,12 +16,16 @@ class UploadService {
 
   Future<String> uploadImage(XFile file, {String visibility = 'private'}) async {
     final api = await _ref.read(apiClientProvider.future);
-    final formData = FormData.fromMap({
-      'visibility': visibility,
-      'image': await MultipartFile.fromFile(file.path, filename: file.name),
+    final bytes = await file.readAsBytes();
+    final ext = file.name.split('.').last.toLowerCase();
+    final mime = ext == 'png' ? 'image/png' : ext == 'webp' ? 'image/webp' : 'image/jpeg';
+    final base64 = base64Encode(bytes);
+    final dataUrl = 'data:$mime;base64,$base64';
+    final res = await api.postJson(ApiEndpoints.upload, {
+      'image': dataUrl,
+      'folder': 'driver_uploads',
     });
-    final data = await api.postMultipart(ApiEndpoints.upload, formData);
-    final url = '${data['url'] ?? ''}'.trim();
+    final url = '${res['data']?['url'] ?? ''}'.trim();
     if (url.isEmpty) throw Exception('Upload failed');
     return url;
   }

@@ -13,11 +13,25 @@ import 'trip_fare.dart';
 void fitMapToPoints(MapController? controller, List<LatLng> points, {EdgeInsets padding = const EdgeInsets.all(40)}) {
   if (controller == null || points.length < 2) {
     if (controller != null && points.length == 1) {
-      controller.move(points.first, 15);
+      final p = points.first;
+      if (p.latitude.isFinite && p.longitude.isFinite) {
+        controller.move(p, 15);
+      }
     }
     return;
   }
-  final bounds = LatLngBounds.fromPoints(points);
+  final valid = points.where((p) => p.latitude.isFinite && p.longitude.isFinite).toList();
+  if (valid.length < 2) {
+    if (valid.length == 1) {
+      controller.move(valid.first, 15);
+    }
+    return;
+  }
+  final bounds = LatLngBounds.fromPoints(valid);
+  if (bounds.south == bounds.north && bounds.east == bounds.west) {
+    controller.move(valid.first, 15);
+    return;
+  }
   controller.fitCamera(
     CameraFit.bounds(bounds: bounds, padding: padding),
   );

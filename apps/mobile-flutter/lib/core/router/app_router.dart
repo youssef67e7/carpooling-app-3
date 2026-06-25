@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/auth_provider.dart';
+import '../services/debug_logger.dart';
 import '../utils/auth_navigation.dart';
 import '../../features/auth/weret_onboarding_screen.dart';
 import '../../features/auth/login_screen.dart';
@@ -14,6 +15,7 @@ import '../../features/auth/phone_register_screen.dart';
 import '../../features/auth/ride_chat_screen.dart';
 import '../../features/driver/driver_status_screens.dart';
 import '../../features/driver/driver_request_detail_screen.dart';
+import '../../features/debug/debug_log_screen.dart';
 import 'passenger_shell.dart';
 import 'driver_shell.dart';
 import 'admin_shell.dart';
@@ -21,7 +23,10 @@ import 'admin_shell.dart';
 class _ScreenLogObserver extends NavigatorObserver {
   @override
   void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
-    debugPrint('📱 OPENED ${route.settings.name ?? route.settings.toString()}');
+    final name = route.settings.name ?? route.settings.toString();
+    final prev = previousRoute?.settings.name ?? 'start';
+    DebugLogger.instance.navigation(prev, name);
+    DebugLogger.instance.setCurrentScreen(name);
   }
 }
 
@@ -100,6 +105,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(path: '/ride-chat/:rideId', builder: (c, s) => RideChatScreen(rideId: s.pathParameters['rideId']!)),
       GoRoute(path: '/in-app-call/:rideId', builder: (c, s) => InAppCallScreen(rideId: s.pathParameters['rideId']!)),
+      GoRoute(path: '/debug/log', builder: (_, __) => const DebugLogScreen()),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) => PassengerShell(navigationShell: navigationShell),
         branches: [
