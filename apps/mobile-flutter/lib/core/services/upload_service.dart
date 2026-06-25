@@ -11,7 +11,7 @@ class UploadService {
   final _picker = ImagePicker();
 
   Future<XFile?> pickImage({ImageSource source = ImageSource.gallery}) {
-    return _picker.pickImage(source: source, maxWidth: 2048, maxHeight: 2048, imageQuality: 85);
+    return _picker.pickImage(source: source, maxWidth: 1200, maxHeight: 1200, imageQuality: 70);
   }
 
   Future<String> uploadImage(XFile file, {String visibility = 'private'}) async {

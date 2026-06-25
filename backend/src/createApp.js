@@ -41,7 +41,7 @@ export function createApp() {
     })
   );
   app.use(cors());
-  app.use(express.json());
+  app.use(express.json({ limit: "10mb" }));
 
   app.use(async (req, res, next) => {
     if (req.path === "/health" || req.path === "/api/health" || req.path.startsWith("/admin-ui")) return next();
