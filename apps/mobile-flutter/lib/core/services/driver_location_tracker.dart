@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
@@ -35,15 +36,20 @@ class DriverLocationTracker {
         distanceFilter: 12,
       );
 
-      _sub = Geolocator.getPositionStream(locationSettings: settings).listen((pos) async {
-        _ref.read(driverGpsProvider.notifier).state = LatLng(pos.latitude, pos.longitude);
-        await _ref.read(rideProvider.notifier).updateDriverLocation(pos.latitude, pos.longitude);
-      });
+      _sub = Geolocator.getPositionStream(locationSettings: settings).listen(
+        (pos) async {
+          _ref.read(driverGpsProvider.notifier).state = LatLng(pos.latitude, pos.longitude);
+          await _ref.read(rideProvider.notifier).updateDriverLocation(pos.latitude, pos.longitude);
+        },
+        onError: (e) => debugPrint('[LocationTracker] Stream error: $e'),
+      );
 
       final pos = await Geolocator.getCurrentPosition();
       _ref.read(driverGpsProvider.notifier).state = LatLng(pos.latitude, pos.longitude);
       await _ref.read(rideProvider.notifier).updateDriverLocation(pos.latitude, pos.longitude);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[LocationTracker] Error: $e');
+    }
   }
 }
 

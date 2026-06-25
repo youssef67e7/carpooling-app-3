@@ -54,12 +54,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       if (loggedIn) {
         final role = auth.user?.effectiveRole ?? 'passenger';
         if (auth.user?.role == 'admin' && !loc.startsWith('/admin')) return '/admin/dashboard';
+        if (auth.user?.role != 'admin' && loc.startsWith('/admin')) return AuthNavigation.homeForUser(auth.user);
         if (role == 'passenger' &&
             loc.startsWith('/driver') &&
             loc != '/driver/onboarding' &&
             loc != '/driver/application-received' &&
-            loc != '/driver/verification-status' &&
-            !loc.startsWith('/passenger/more/driver-onboarding')) {
+            loc != '/driver/verification-status') {
           return '/passenger/home';
         }
         if (role == 'driver' && loc.startsWith('/passenger')) return '/driver/home';

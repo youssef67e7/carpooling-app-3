@@ -6,13 +6,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/providers/auth_provider.dart';
+import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_styles.dart';
 import '../../core/utils/api_error_message.dart';
 import '../../core/utils/auth_navigation.dart';
 import '../../core/utils/auth_validators.dart';
 import '../../core/utils/google_o_auth_errors.dart';
-import '../../shared/widgets/auth_form_field.dart';
-import '../../shared/widgets/custom_button.dart';
-import '../../shared/widgets/weret_auth_scaffold.dart';
+import '../../shared/widgets/weret_logo.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -237,147 +237,282 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final auth = ref.watch(authProvider);
     final isWelcome = _step == 'welcome';
 
-    return WeretAuthScaffold(
-      title: isWelcome ? null : 'login'.tr(),
-      showBack: !isWelcome,
-      onBack: isWelcome ? null : _back,
-      showBrand: true,
-      showLanguage: true,
-      showConnection: !isWelcome,
-      centerBrand: isWelcome,
-      subtitle: switch (_step) {
-        'phone' => 'phoneLoginSubtitle'.tr(),
-        'phoneOtp' => _normalizedPhone != null
-            ? 'phoneLoginSentTo'.tr(namedArgs: {'phone': _normalizedPhone!})
-            : 'phoneLoginOtpLabel'.tr(),
-        'email' => 'loginSubtitle'.tr(),
-        _ => null,
-      },
-      child: switch (_step) {
-        'welcome' => _welcome(auth),
-        'phone' => _phoneStep(auth.error),
-        'phoneOtp' => _otpStep(auth.loading, auth.error),
-        'email' => _emailStep(auth.loading, auth.error),
-        _ => _welcome(auth),
-      },
+    return Scaffold(
+      backgroundColor: AppColors.secondary,
+      appBar: isWelcome
+          ? null
+          : AppBar(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: AppColors.textPrimary),
+                onPressed: _back,
+              ),
+            ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: switch (_step) {
+            'welcome' => _welcome(auth),
+            'phone' => _phoneStep(auth.error),
+            'phoneOtp' => _otpStep(auth.loading, auth.error),
+            'email' => _emailStep(auth.loading, auth.error),
+            _ => _welcome(auth),
+          },
+        ),
+      ),
     );
   }
 
   Widget _welcome(AuthState auth) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        const SizedBox(height: 48),
+        const SizedBox(height: 60),
+        const WeretLogo.wordmark(fontSize: 32),
+        const SizedBox(height: 8),
+        Text('Welcome back', style: AppStyles.headlineMedium),
+        const SizedBox(height: 32),
         _errorBanner(auth.error),
-        CustomButton(title: 'weretContinuePhone'.tr(), icon: Icons.phone_outlined, onPressed: () => setState(() => _step = 'phone')),
-        const SizedBox(height: 12),
+        SizedBox(
+          height: 50,
+          child: TextField(
+            controller: _phone,
+            keyboardType: TextInputType.phone,
+            decoration: InputDecoration(
+              hintText: 'Phone number or Email',
+              hintStyle: TextStyle(color: AppColors.textMuted, fontSize: 14),
+              filled: true,
+              fillColor: AppColors.inputBackground,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: AppColors.borderLight),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: AppColors.borderLight),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          width: double.infinity,
+          height: 55,
+          child: FilledButton(
+            onPressed: () => setState(() => _step = 'phone'),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+            ),
+            child: const Text('Continue'),
+          ),
+        ),
+        const SizedBox(height: 24),
+        Row(
+          children: [
+            const Expanded(child: Divider(color: AppColors.borderLight, thickness: 1)),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Text('OR', style: TextStyle(color: AppColors.textMuted, fontSize: 12, fontWeight: FontWeight.w500)),
+            ),
+            const Expanded(child: Divider(color: AppColors.borderLight, thickness: 1)),
+          ],
+        ),
+        const SizedBox(height: 24),
         if (auth.googleSignInEnabled)
-          CustomButton(
-            title: 'weretContinueGoogle'.tr(),
-            icon: Icons.g_mobiledata_rounded,
-            loading: auth.loading,
-            onPressed: _google,
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: OutlinedButton.icon(
+              onPressed: _google,
+              icon: Image.asset('assets/images/placeholder.png', width: 20, height: 20),
+              label: Text('Google', style: TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w600)),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: AppColors.borderLight),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                backgroundColor: Colors.transparent,
+              ),
+            ),
           )
         else
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: Text('weretGoogleDevHint'.tr(), textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, height: 1.35)),
           ),
-        const SizedBox(height: 12),
-        WeretLinkButton(title: 'weretContinueEmail'.tr(), onPressed: () => setState(() => _step = 'email')),
-        const SizedBox(height: 8),
-        WeretLinkButton(title: 'register'.tr(), onPressed: () => context.push('/register')),
+        const SizedBox(height: 24),
+        TextButton(
+          onPressed: () => setState(() => _step = 'email'),
+          child: Text('Sign in with Email', style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600, fontSize: 14)),
+        ),
+        TextButton(
+          onPressed: () => context.push('/register'),
+          child: Text('Create an account', style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600, fontSize: 14)),
+        ),
       ],
     );
   }
 
-  Widget _phoneStep(String? error) {
-    return Form(
-      key: _phoneFormKey,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _errorBanner(error),
-          AuthFormField(
-            label: 'phone'.tr(),
-            controller: _phone,
-            keyboardType: TextInputType.phone,
-            hint: 'phonePlaceholder'.tr(),
-            helper: 'phoneLoginHint'.tr(),
-            validator: (v) => validatePhone(v, required: true),
-            textInputAction: TextInputAction.done,
-            onFieldSubmitted: (_) => _sendOtp(),
+  Widget _buildInput(TextEditingController controller, {String? hint, bool obscure = false, TextInputType? keyboardType, String? Function(String?)? validator, TextInputAction? textInputAction, void Function(String)? onFieldSubmitted}) {
+    return SizedBox(
+      height: 50,
+      child: TextFormField(
+        controller: controller,
+        obscureText: obscure,
+        keyboardType: keyboardType,
+        validator: validator,
+        textInputAction: textInputAction,
+        onFieldSubmitted: onFieldSubmitted,
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: TextStyle(color: AppColors.textMuted, fontSize: 14),
+          filled: true,
+          fillColor: AppColors.inputBackground,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: AppColors.borderLight),
           ),
-          CustomButton(title: 'phoneLoginSendCode'.tr(), loading: _sendingOtp || _firebaseLoading, onPressed: _sendOtp),
-          WeretLinkButton(title: 'weretContinueEmail'.tr(), onPressed: () => setState(() => _step = 'email')),
-          WeretLinkButton(title: 'register'.tr(), onPressed: () => context.push('/register')),
-        ],
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: AppColors.borderLight),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+          ),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        ),
       ),
+    );
+  }
+
+  Widget _primaryButton(String label, {bool loading = false, VoidCallback? onPressed}) {
+    return SizedBox(
+      width: double.infinity,
+      height: 55,
+      child: FilledButton(
+        onPressed: onPressed,
+        style: FilledButton.styleFrom(
+          backgroundColor: AppColors.primary,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+        ),
+        child: loading
+            ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+            : Text(label),
+      ),
+    );
+  }
+
+  Widget _textLink(String label, {VoidCallback? onPressed}) {
+    return TextButton(
+      onPressed: onPressed,
+      child: Text(label, style: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600, fontSize: 14)),
+    );
+  }
+
+  Widget _phoneStep(String? error) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 32),
+        Text('Enter your phone number', style: AppStyles.headlineSmall),
+        const SizedBox(height: 8),
+        Text("We'll send you a verification code", style: AppStyles.bodyRegular),
+        const SizedBox(height: 24),
+        _errorBanner(error),
+        _buildInput(
+          _phone,
+          hint: 'Phone number',
+          keyboardType: TextInputType.phone,
+          validator: (v) => validatePhone(v, required: true),
+          textInputAction: TextInputAction.done,
+          onFieldSubmitted: (_) => _sendOtp(),
+        ),
+        const SizedBox(height: 16),
+        _primaryButton('Send Code', loading: _sendingOtp || _firebaseLoading, onPressed: _sendOtp),
+        const SizedBox(height: 16),
+        _textLink('Sign in with Email', onPressed: () => setState(() => _step = 'email')),
+        _textLink('Create an account', onPressed: () => context.push('/register')),
+      ],
     );
   }
 
   Widget _otpStep(bool loading, String? error) {
-    return Form(
-      key: _otpFormKey,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _errorBanner(error),
-          if (_devOtpHint != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Text('phoneOtpDevHint'.tr(namedArgs: {'code': _devOtpHint!}), style: const TextStyle(fontSize: 12, color: Colors.orange)),
-            ),
-          AuthFormField(
-            label: 'phoneLoginOtpLabel'.tr(),
-            controller: _otp,
-            keyboardType: TextInputType.number,
-            maxLength: 8,
-            validator: validateOtp,
-            textInputAction: TextInputAction.done,
-            onFieldSubmitted: (_) => _verifyOtp(),
-          ),
-          CustomButton(title: 'phoneLoginVerify'.tr(), loading: loading, onPressed: _verifyOtp),
-          WeretLinkButton(
-            title: _resendSeconds > 0
-                ? 'phoneLoginResendIn'.tr(namedArgs: {'sec': '$_resendSeconds'})
-                : 'phoneLoginResend'.tr(),
-            onPressed: _resendSeconds > 0 ? () {} : _sendOtp,
-          ),
-          WeretLinkButton(title: 'phoneLoginChangeNumber'.tr(), onPressed: () => setState(() => _step = 'phone')),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 32),
+        Text('Enter verification code', style: AppStyles.headlineSmall),
+        if (_normalizedPhone != null) ...[
+          const SizedBox(height: 8),
+          Text("Sent to $_normalizedPhone", style: AppStyles.bodyRegular),
         ],
-      ),
+        const SizedBox(height: 24),
+        _errorBanner(error),
+        if (_devOtpHint != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text('phoneOtpDevHint'.tr(namedArgs: {'code': _devOtpHint!}), style: const TextStyle(fontSize: 12, color: Colors.orange)),
+          ),
+        _buildInput(
+          _otp,
+          hint: 'Code',
+          keyboardType: TextInputType.number,
+          validator: validateOtp,
+          textInputAction: TextInputAction.done,
+          onFieldSubmitted: (_) => _verifyOtp(),
+        ),
+        const SizedBox(height: 16),
+        _primaryButton('Verify', loading: loading, onPressed: _verifyOtp),
+        const SizedBox(height: 16),
+        _textLink(
+          _resendSeconds > 0 ? 'Resend in $_resendSeconds sec' : 'Resend code',
+          onPressed: _resendSeconds > 0 ? () {} : _sendOtp,
+        ),
+        _textLink('Change phone number', onPressed: () => setState(() => _step = 'phone')),
+      ],
     );
   }
 
   Widget _emailStep(bool loading, String? error) {
-    return Form(
-      key: _emailFormKey,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _errorBanner(error),
-          AuthFormField(
-            label: 'email'.tr(),
-            controller: _email,
-            keyboardType: TextInputType.emailAddress,
-            validator: validateEmail,
-            textInputAction: TextInputAction.next,
-          ),
-          AuthFormField(
-            label: 'password'.tr(),
-            controller: _password,
-            obscure: true,
-            validator: validatePassword,
-            textInputAction: TextInputAction.done,
-            onFieldSubmitted: (_) => _emailLogin(),
-          ),
-          const SizedBox(height: 8),
-          CustomButton(title: 'login'.tr(), loading: loading, onPressed: _emailLogin),
-          WeretLinkButton(title: 'authForgotPasswordTitle'.tr(), onPressed: () => context.push('/forgot-password')),
-          WeretLinkButton(title: 'register'.tr(), onPressed: () => context.push('/register')),
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 32),
+        Text('Sign in with Email', style: AppStyles.headlineSmall),
+        const SizedBox(height: 24),
+        _errorBanner(error),
+        _buildInput(
+          _email,
+          hint: 'Email',
+          keyboardType: TextInputType.emailAddress,
+          validator: validateEmail,
+          textInputAction: TextInputAction.next,
+        ),
+        const SizedBox(height: 16),
+        _buildInput(
+          _password,
+          hint: 'Password',
+          obscure: true,
+          validator: validatePassword,
+          textInputAction: TextInputAction.done,
+          onFieldSubmitted: (_) => _emailLogin(),
+        ),
+        const SizedBox(height: 16),
+        _primaryButton('Login', loading: loading, onPressed: _emailLogin),
+        const SizedBox(height: 16),
+        _textLink('Forgot password?', onPressed: () => context.push('/forgot-password')),
+        _textLink('Create an account', onPressed: () => context.push('/register')),
+      ],
     );
   }
 }

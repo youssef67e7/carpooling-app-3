@@ -2,18 +2,45 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/providers/driver_provider.dart';
 import '../../core/theme/weret_tokens.dart';
 import '../../shared/widgets/custom_button.dart';
 import 'driver_shared_widgets.dart';
 
-class DriverApplicationReceivedScreen extends ConsumerWidget {
+class DriverApplicationReceivedScreen extends ConsumerStatefulWidget {
   const DriverApplicationReceivedScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DriverApplicationReceivedScreen> createState() => _DriverApplicationReceivedScreenState();
+}
+
+class _DriverApplicationReceivedScreenState extends ConsumerState<DriverApplicationReceivedScreen> {
+  Map<String, dynamic>? _application;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final data = await ref.read(authProvider.notifier).fetchDriverApplication();
+    if (mounted) setState(() => _application = data);
+  }
+
+  String _status(String key) {
+    if (_application?['verification'] is Map) {
+      final steps = Map<String, dynamic>.from((_application!['verification'] as Map)['steps'] as Map? ?? {});
+      final s = steps[key] as String?;
+      if (s != null && s != 'none') return s;
+    }
+    if (_application == null) return 'under_review';
+    return 'under_review';
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: WeretTokens.bg,
       body: SafeArea(
@@ -44,9 +71,9 @@ class DriverApplicationReceivedScreen extends ConsumerWidget {
                 children: [
                   Text('driverApplicationStatusHeader'.tr(), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1.2, color: WeretTokens.textSecondary)),
                   const SizedBox(height: 12),
-                  _StatusRow(icon: Icons.person_outline, title: 'driverProfilePersonal'.tr(), status: 'under_review'),
-                  _StatusRow(icon: Icons.directions_car_outlined, title: 'driverVehicleInfo'.tr(), status: 'under_review'),
-                  _StatusRow(icon: Icons.account_balance_outlined, title: 'driverBanking'.tr(), status: 'under_review'),
+                  _StatusRow(icon: Icons.person_outline, title: 'driverProfilePersonal'.tr(), status: _status('personalInfo')),
+                  _StatusRow(icon: Icons.directions_car_outlined, title: 'driverVehicleInfo'.tr(), status: _status('vehicleReg')),
+                  _StatusRow(icon: Icons.account_balance_outlined, title: 'driverBanking'.tr(), status: _status('banking')),
                 ],
               ),
             ),
@@ -56,14 +83,14 @@ class DriverApplicationReceivedScreen extends ConsumerWidget {
             DriverTimelineStep(
               title: 'driverNextDocVerification'.tr(),
               subtitle: 'driverNextDocVerificationBody'.tr(),
-              status: 'under_review',
+              status: _status('identityDocs'),
               isLast: false,
               active: true,
             ),
             DriverTimelineStep(
               title: 'driverNextBackground'.tr(),
               subtitle: 'driverNextBackgroundBody'.tr(),
-              status: 'pending',
+              status: _status('backgroundCheck'),
               isLast: false,
             ),
             DriverTimelineStep(
@@ -127,6 +154,7 @@ class DriverVerificationStatusScreen extends ConsumerStatefulWidget {
 class _DriverVerificationStatusScreenState extends ConsumerState<DriverVerificationStatusScreen> {
   Map<String, dynamic>? _verification;
   bool _loading = true;
+  String? _fetchError;
 
   @override
   void initState() {
@@ -136,31 +164,52 @@ class _DriverVerificationStatusScreenState extends ConsumerState<DriverVerificat
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final data = await ref.read(authProvider.notifier).fetchDriverApplication();
-    if (data == null) {
-      try {
-        await ref.read(driverProvider.notifier).fetchDashboard();
-        final dash = ref.read(driverProvider).dashboard;
-        if (mounted) {
-          setState(() {
-            _verification = dash?['verification'] as Map<String, dynamic>?;
-            _loading = false;
-          });
+    try {
+      final data = await ref.read(authProvider.notifier).fetchDriverApplication();
+      if (data == null) {
+        try {
+          await ref.read(driverProvider.notifier).fetchDashboard();
+          final dash = ref.read(driverProvider).dashboard;
+          if (mounted) {
+            setState(() {
+              _verification = dash?['verification'] as Map<String, dynamic>?;
+              _loading = false;
+              _fetchError = null;
+            });
+          }
+          await ref.read(authProvider.notifier).validateSession();
+          return;
+        } catch (_) {
+          if (mounted) {
+            setState(() {
+              _loading = false;
+              _fetchError = 'Failed to load status';
+            });
+          }
+          return;
         }
-        return;
-      } catch (_) {}
-    }
-    if (mounted) {
-      setState(() {
-        _verification = data?['verification'] as Map<String, dynamic>?;
-        _loading = false;
-      });
+      }
+      if (mounted) {
+        setState(() {
+          _verification = data['verification'] as Map<String, dynamic>?;
+          _loading = false;
+          _fetchError = null;
+        });
+      }
+      await ref.read(authProvider.notifier).validateSession();
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _fetchError = 'Failed to load status';
+        });
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final progress = (_verification?['overallProgress'] as num?)?.toInt() ?? 25;
+    final progress = (_verification?['overallProgress'] as num?)?.toInt() ?? 0;
     final steps = Map<String, dynamic>.from(_verification?['steps'] as Map? ?? {});
     final estRaw = _verification?['estimatedCompletionDate'];
     final est = DateTime.tryParse('$estRaw');
@@ -171,13 +220,29 @@ class _DriverVerificationStatusScreenState extends ConsumerState<DriverVerificat
       appBar: AppBar(title: Text('driverVerificationProgress'.tr())),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _load,
-              child: ListView(
-                padding: const EdgeInsets.all(20),
-                children: [
-                  const DriverWordmark(),
-                  const SizedBox(height: 16),
+          : _fetchError != null
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.cloud_off, size: 48, color: WeretTokens.textSecondary),
+                        const SizedBox(height: 12),
+                        Text(_fetchError!, style: const TextStyle(color: WeretTokens.error, fontSize: 15), textAlign: TextAlign.center),
+                        const SizedBox(height: 16),
+                        FilledButton(onPressed: _load, child: const Text('Retry')),
+                      ],
+                    ),
+                  ),
+                )
+              : RefreshIndicator(
+                  onRefresh: _load,
+                  child: ListView(
+                    padding: const EdgeInsets.all(20),
+                    children: [
+                      const DriverWordmark(),
+                      const SizedBox(height: 16),
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(

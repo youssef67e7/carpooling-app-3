@@ -38,6 +38,7 @@ class _ApiSyncBridge {
   String? _userId;
   String _activeRole = 'passenger';
   bool _fcmInitialized = false;
+  StreamSubscription<String>? _tokenSub;
 
   Duration _pollInterval() {
     if (_userId == null) return const Duration(seconds: 30);
@@ -70,7 +71,7 @@ class _ApiSyncBridge {
 
     await FcmService.initialize();
 
-    FcmService.listenTokenRefresh((token) {
+    _tokenSub = FcmService.listenTokenRefresh((token) {
       _registerFcmToken().catchError((_) {});
     });
 
@@ -106,7 +107,6 @@ class _ApiSyncBridge {
       final wallet = _ref.read(walletProvider.notifier);
       await ride.fetchVehicles();
       await wallet.refresh();
-      await ride.fetchHistory();
       await ride.refreshActiveRide();
       if (_activeRole == 'passenger') {
         final vt = auth.user?.vehicleType;
@@ -115,6 +115,7 @@ class _ApiSyncBridge {
       if (_activeRole == 'driver') {
         await ride.fetchDriverActiveRides();
         await ride.fetchAvailable();
+        await ride.fetchHistory();
       }
       _ref.read(apiSyncReadyProvider.notifier).state = true;
     } catch (_) {
@@ -129,5 +130,8 @@ class _ApiSyncBridge {
     _ref.read(apiSyncReadyProvider.notifier).state = false;
   }
 
-  void dispose() => disconnect();
+  void dispose() {
+    _tokenSub?.cancel();
+    disconnect();
+  }
 }

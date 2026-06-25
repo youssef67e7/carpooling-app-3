@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:easy_localization/easy_localization.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../../core/theme/weret_tokens.dart';
-import '../../shared/widgets/custom_button.dart';
-import '../../shared/widgets/weret_ambient_background.dart';
-import '../../shared/widgets/weret_brand_header.dart';
+import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_styles.dart';
+import '../../shared/widgets/weret_logo.dart';
 
 const _onboardingKey = 'weret_onboarding_done_v1';
 
@@ -18,17 +16,25 @@ class WeretOnboardingScreen extends ConsumerStatefulWidget {
 
 class _WeretOnboardingScreenState extends ConsumerState<WeretOnboardingScreen> {
   final _page = PageController();
-  int _index = 0;
+  int _pageIndex = 0;
+  bool _splashDone = false;
 
   @override
   void initState() {
     super.initState();
-    _checkDone();
+    _start();
   }
 
-  Future<void> _checkDone() async {
+  Future<void> _start() async {
     final prefs = await SharedPreferences.getInstance();
-    if (prefs.getString(_onboardingKey) == '1' && mounted) context.go('/login');
+    final done = prefs.getString(_onboardingKey) == '1';
+    if (done) {
+      await Future.delayed(const Duration(seconds: 2));
+      if (mounted) context.go('/login');
+      return;
+    }
+    await Future.delayed(const Duration(seconds: 2));
+    if (mounted) setState(() => _splashDone = true);
   }
 
   Future<void> _finish() async {
@@ -38,68 +44,169 @@ class _WeretOnboardingScreenState extends ConsumerState<WeretOnboardingScreen> {
   }
 
   @override
+  void dispose() {
+    _page.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: WeretAmbientBackground(
-        child: SafeArea(
-          child: Column(
+    if (!_splashDone) {
+      return Scaffold(
+        backgroundColor: AppColors.primary,
+        body: Center(
+          child: Stack(
             children: [
-              Expanded(
-                child: PageView(
-                  controller: _page,
-                  onPageChanged: (i) => setState(() => _index = i),
-                  children: [
-                    _slide('weretOnboardHeroPremium'.tr(), 'weretOnboardHeroCars'.tr()),
-                    _slide('weretOnboardStoryTitle'.tr(), 'weretOnboardStoryBody'.tr()),
-                  ],
+              Text(
+                'WERET',
+                style: TextStyle(
+                  fontSize: 36,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 6,
+                  foreground: Paint()
+                    ..style = PaintingStyle.stroke
+                    ..strokeWidth = 3
+                    ..color = Colors.black,
                 ),
               ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(
-                  2,
-                  (i) => Container(
-                    margin: const EdgeInsets.all(4),
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: _index == i ? WeretTokens.brand : WeretTokens.textMuted,
-                    ),
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(24),
-                child: CustomButton(
-                  title: _index == 1 ? 'weretOnboardGetStarted'.tr() : 'weretOnboardingNext'.tr(),
-                  onPressed: () {
-                    if (_index == 1) {
-                      _finish();
-                    } else {
-                      _page.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
-                    }
-                  },
+              const Text(
+                'WERET',
+                style: TextStyle(
+                  fontSize: 36,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 6,
+                  color: Colors.white,
                 ),
               ),
             ],
           ),
         ),
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: AppColors.secondary,
+      body: SafeArea(
+        child: Column(
+          children: [
+            if (_pageIndex > 0)
+              Align(
+                alignment: Alignment.topRight,
+                child: TextButton(
+                  onPressed: _finish,
+                  child: Text('Skip', style: TextStyle(color: AppColors.textMuted, fontSize: 14, fontWeight: FontWeight.w500)),
+                ),
+              ),
+            Expanded(
+              child: PageView(
+                controller: _page,
+                onPageChanged: (i) => setState(() => _pageIndex = i),
+                children: [
+                  _carPage1(),
+                  _carPage2(),
+                ],
+              ),
+            ),
+            if (_pageIndex == 0 || _pageIndex == 1)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 32),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(
+                    2,
+                    (i) => Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: _pageIndex == i ? AppColors.primary : AppColors.borderLight,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _slide(String title, String body) {
+  Widget _carPage1() {
     return Padding(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const WeretBrandHeader(showLanguage: true),
           const SizedBox(height: 32),
-          Text(title, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 22)),
-          const SizedBox(height: 12),
-          Text(body, textAlign: TextAlign.center, style: const TextStyle(height: 1.5)),
+          const WeretLogo.wordmark(fontSize: 24),
+          const SizedBox(height: 4),
+          Text('PREMIUM CARS', style: AppStyles.sectionLabel),
+          const SizedBox(height: 24),
+          Expanded(
+            child: Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: Image.asset('assets/images/placeholder.png', fit: BoxFit.cover),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _carPage2() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 32),
+          const WeretLogo.wordmark(fontSize: 24),
+          const SizedBox(height: 32),
+          SizedBox(
+            width: MediaQuery.of(context).size.width * 0.4,
+            height: 180,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: Image.asset('assets/images/placeholder.png', fit: BoxFit.cover),
+              ),
+            ),
+          ),
+          const Spacer(),
+          Text('Premium cars. to destination.', style: AppStyles.headlineLarge),
+          const SizedBox(height: 8),
+          Text(
+            'Premium and prestige car daily trip. pay lower price',
+            style: AppStyles.bodyRegular,
+          ),
+          const SizedBox(height: 32),
+          Align(
+            alignment: Alignment.centerRight,
+            child: GestureDetector(
+              onTap: _finish,
+              child: Container(
+                width: 48,
+                height: 48,
+                decoration: const BoxDecoration(
+                  color: AppColors.primary,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.arrow_forward, color: Colors.white, size: 20),
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
         ],
       ),
     );

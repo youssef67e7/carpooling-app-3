@@ -66,8 +66,8 @@ class FcmService {
     }
   }
 
-  static void listenTokenRefresh(void Function(String token) onRefresh) {
-    FirebaseMessaging.instance.onTokenRefresh.listen(onRefresh);
+  static StreamSubscription<String> listenTokenRefresh(void Function(String token) onRefresh) {
+    return FirebaseMessaging.instance.onTokenRefresh.listen(onRefresh);
   }
 
   static void _handleForegroundMessage(RemoteMessage message) {

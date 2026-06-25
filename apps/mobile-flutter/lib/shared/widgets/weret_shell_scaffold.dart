@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../core/theme/weret_tokens.dart';
+import '../../core/theme/app_colors.dart';
 import 'offline_banner.dart';
 
 class WeretShellScaffold extends ConsumerWidget {
@@ -17,16 +17,32 @@ class WeretShellScaffold extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      backgroundColor: WeretTokens.bg,
+      backgroundColor: AppColors.secondary,
       body: OfflineBanner(child: navigationShell),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: navigationShell.currentIndex,
-        onDestinationSelected: navigationShell.goBranch,
-        backgroundColor: WeretTokens.surface,
-        indicatorColor: WeretTokens.inputFill,
-        height: 68,
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        destinations: destinations,
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: AppColors.secondary,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 10,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom),
+          child: NavigationBar(
+            selectedIndex: navigationShell.currentIndex,
+            onDestinationSelected: navigationShell.goBranch,
+            backgroundColor: Colors.transparent,
+            indicatorColor: Colors.transparent,
+            elevation: 0,
+            height: 68,
+            labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+            destinations: destinations,
+          ),
+        ),
       ),
     );
   }

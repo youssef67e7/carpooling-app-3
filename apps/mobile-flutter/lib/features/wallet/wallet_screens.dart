@@ -1,20 +1,20 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import '../../core/providers/wallet_provider.dart';
-import '../../core/theme/weret_tokens.dart';
+import '../../core/theme/app_colors.dart';
 import '../../core/utils/api_error_message.dart';
+import '../../shared/widgets/success_modal.dart';
 import 'wallet_labels.dart';
-import '../../shared/widgets/custom_button.dart';
-import '../../shared/widgets/weret_page_scaffold.dart';
-import '../../shared/widgets/weret_section_card.dart';
-import '../../shared/widgets/weret_text_field.dart';
 
 const _walletTypes = ['cash', 'instapay', 'vodafone', 'etisalat', 'orange', 'wepay'];
 
 List<Map<String, dynamic>> _accounts(WalletState w) =>
     w.accounts.map((a) => Map<String, dynamic>.from(a as Map)).toList();
+
+// ────────────────────────────────────────────────────────────
+//  WalletDepositScreen
+// ────────────────────────────────────────────────────────────
 
 class WalletDepositScreen extends ConsumerStatefulWidget {
   const WalletDepositScreen({super.key});
@@ -24,30 +24,42 @@ class WalletDepositScreen extends ConsumerStatefulWidget {
 }
 
 class _WalletDepositScreenState extends ConsumerState<WalletDepositScreen> {
-  final _amount = TextEditingController();
-  String? _accountId;
+  final _amountCtrl = TextEditingController();
+  String? _selectedAccountId;
   bool _busy = false;
 
   @override
   void dispose() {
-    _amount.dispose();
+    _amountCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
-    final id = _accountId;
-    final amt = num.tryParse(_amount.text.trim());
-    if (id == null || amt == null || amt <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('walletFillFields'.tr())));
+    final accountId = _selectedAccountId;
+    if (accountId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('walletSelectAccount'.tr())));
+      return;
+    }
+    final amount = num.tryParse(_amountCtrl.text.trim());
+    if (amount == null || amount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('walletEnterValidAmount'.tr())));
       return;
     }
     setState(() => _busy = true);
     try {
-      await ref.read(walletProvider.notifier).deposit(id, amt);
-      await ref.read(walletProvider.notifier).fetchTransactions();
+      await ref.read(walletProvider.notifier).deposit(accountId, amount);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('walletDepositDone'.tr())));
-        context.pop();
+        SuccessModal.show(
+          context,
+          title: 'Top-up Success',
+          description: 'Your payment wallet has been successfully done',
+          amount: amount.toStringAsFixed(2),
+          onDone: () {
+            Navigator.pop(context);
+            Navigator.pop(context);
+          },
+          onPayAgain: () => Navigator.pop(context),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -60,50 +72,117 @@ class _WalletDepositScreenState extends ConsumerState<WalletDepositScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final accounts = _accounts(ref.watch(walletProvider));
-    _accountId ??= accounts.isNotEmpty ? walletAccountId(accounts.first) : null;
-
-    return WeretPageScaffold(
-      title: 'walletAddMoney'.tr(),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Text('walletSimulatedDisclaimer'.tr(), style: const TextStyle(color: WeretTokens.textSecondary, fontSize: 13)),
-          const SizedBox(height: 16),
-          WeretSectionCard(
-            title: 'walletPickAccount'.tr(),
-            child: accounts.isEmpty
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text('walletNoMethods'.tr()),
-                      const SizedBox(height: 12),
-                      CustomButton(title: 'walletAddMethod'.tr(), onPressed: () => context.push('add-account')),
-                    ],
-                  )
-                : DropdownButtonFormField<String>(
-                    initialValue: _accountId,
-                    decoration: InputDecoration(border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
-                    items: accounts
-                        .map(
-                          (a) => DropdownMenuItem(
-                            value: walletAccountId(a),
-                            child: Text('${walletTypeLabel('${a['walletType']}')} — ${a['balance'] ?? 0}'),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (v) => setState(() => _accountId = v),
+    final w = ref.watch(walletProvider);
+    final accounts = _accounts(w);
+    return Scaffold(
+      backgroundColor: AppColors.secondary,
+      body: SafeArea(
+        child: Column(
+          children: [
+            Container(
+              width: double.infinity,
+              height: 180,
+              decoration: const BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: BorderRadius.only(
+                  bottomLeft: Radius.circular(30),
+                  bottomRight: Radius.circular(30),
+                ),
+              ),
+              child: Stack(
+                children: [
+                  Positioned(
+                    left: 16,
+                    top: 16,
+                    child: IconButton(
+                      icon: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
+                      onPressed: () => Navigator.pop(context),
+                    ),
                   ),
-          ),
-          const SizedBox(height: 16),
-          WeretTextField(controller: _amount, label: 'walletAmount'.tr(), keyboardType: TextInputType.number),
-          const SizedBox(height: 20),
-          CustomButton(title: 'walletAddMoney'.tr(), loading: _busy, onPressed: _submit),
-        ],
+                  const Center(
+                    child: Text('Debit Card top-up',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Amount',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textDarkGray)),
+                    const SizedBox(height: 6),
+                    Container(
+                      height: 50,
+                      decoration: BoxDecoration(
+                        border: Border.all(color: AppColors.borderMedium),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: TextField(
+                        controller: _amountCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          hintText: '0.00',
+                          hintStyle: TextStyle(color: AppColors.textMuted, fontSize: 14),
+                          border: InputBorder.none,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text('Select account',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textDarkGray)),
+                    const SizedBox(height: 6),
+                    DropdownButtonFormField<String>(
+                      value: _selectedAccountId,
+                      decoration: InputDecoration(
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                      ),
+                      hint: const Text('Choose one', style: TextStyle(color: AppColors.textMuted)),
+                      items: accounts.map((a) {
+                        final id = walletAccountId(a);
+                        final label = a['label']?.toString() ?? walletTypeLabel('${a['walletType'] ?? ''}');
+                        return DropdownMenuItem(value: id, child: Text(label));
+                      }).toList(),
+                      onChanged: (v) => setState(() => _selectedAccountId = v),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: SizedBox(
+                width: double.infinity,
+                height: 55,
+                child: FilledButton(
+                  onPressed: (_busy || w.loading) ? null : _submit,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                  ),
+                  child: _busy
+                      ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Text('Confirm'),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
+
+// ────────────────────────────────────────────────────────────
+//  WalletWithdrawScreen
+// ────────────────────────────────────────────────────────────
 
 class WalletWithdrawScreen extends ConsumerStatefulWidget {
   const WalletWithdrawScreen({super.key});
@@ -113,59 +192,71 @@ class WalletWithdrawScreen extends ConsumerStatefulWidget {
 }
 
 class _WalletWithdrawScreenState extends ConsumerState<WalletWithdrawScreen> {
-  final _amount = TextEditingController();
-  final _otp = TextEditingController();
-  String? _accountId;
+  final _amountCtrl = TextEditingController();
+  final _otpCtrl = TextEditingController();
+  String? _selectedAccountId;
   String? _requestId;
-  String? _devOtp;
   bool _busy = false;
-  bool _awaitingOtp = false;
+  bool _step2 = false;
 
   @override
   void dispose() {
-    _amount.dispose();
-    _otp.dispose();
+    _amountCtrl.dispose();
+    _otpCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _requestCode() async {
-    final id = _accountId;
-    final amt = num.tryParse(_amount.text.trim());
-    if (id == null || amt == null || amt <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('walletFillFields'.tr())));
+  Future<void> _request() async {
+    final accountId = _selectedAccountId;
+    if (accountId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('walletSelectAccount'.tr())));
+      return;
+    }
+    final amount = num.tryParse(_amountCtrl.text.trim());
+    if (amount == null || amount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('walletEnterValidAmount'.tr())));
       return;
     }
     setState(() => _busy = true);
     try {
-      final data = await ref.read(walletProvider.notifier).requestWithdraw(id, amt);
-      setState(() {
-        _awaitingOtp = true;
-        _requestId = '${data['requestId']}';
-        _devOtp = data['_devOtp']?.toString();
-      });
+      final data = await ref.read(walletProvider.notifier).requestWithdraw(accountId, amount);
+      if (mounted) {
+        setState(() {
+          _requestId = data['requestId']?.toString();
+          _step2 = true;
+          _busy = false;
+        });
+      }
     } catch (e) {
       if (mounted) {
+        setState(() => _busy = false);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(apiErrorMessage(e))));
       }
-    } finally {
-      if (mounted) setState(() => _busy = false);
     }
   }
 
   Future<void> _confirm() async {
-    final req = _requestId;
-    final code = _otp.text.trim();
-    if (req == null || code.isEmpty) {
+    final requestId = _requestId;
+    final otp = _otpCtrl.text.trim();
+    if (requestId == null || otp.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('walletEnterOtp'.tr())));
       return;
     }
     setState(() => _busy = true);
     try {
-      await ref.read(walletProvider.notifier).confirmWithdraw(req, code);
-      await ref.read(walletProvider.notifier).fetchTransactions();
+      await ref.read(walletProvider.notifier).confirmWithdraw(requestId, otp);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('walletWithdrawDone'.tr())));
-        context.pop();
+        SuccessModal.show(
+          context,
+          title: 'Transfer Success',
+          description: 'Your transfer has been completed successfully',
+          amount: _amountCtrl.text.trim(),
+          onDone: () {
+            Navigator.pop(context);
+            Navigator.pop(context);
+          },
+          onPayAgain: () => Navigator.pop(context),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -176,69 +267,156 @@ class _WalletWithdrawScreenState extends ConsumerState<WalletWithdrawScreen> {
     }
   }
 
-  void _cancelOtp() {
-    setState(() {
-      _awaitingOtp = false;
-      _requestId = null;
-      _devOtp = null;
-      _otp.clear();
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
-    final accounts = _accounts(ref.watch(walletProvider));
-    _accountId ??= accounts.isNotEmpty ? walletAccountId(accounts.first) : null;
-
-    return WeretPageScaffold(
-      title: 'walletWithdraw'.tr(),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Text('walletWithdrawOtpHint'.tr(), style: const TextStyle(color: WeretTokens.textSecondary, fontSize: 13)),
-          if (_devOtp != null) ...[
-            const SizedBox(height: 8),
-            Text('DEV OTP: $_devOtp', style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.orange)),
-          ],
-          const SizedBox(height: 16),
-          if (!_awaitingOtp) ...[
-            WeretSectionCard(
-              title: 'walletPickAccount'.tr(),
-              child: accounts.isEmpty
-                  ? Text('walletNoMethods'.tr())
-                  : DropdownButtonFormField<String>(
-                      initialValue: _accountId,
-                      decoration: InputDecoration(border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
-                      items: accounts
-                          .map(
-                            (a) => DropdownMenuItem(
-                              value: walletAccountId(a),
-                              child: Text('${walletTypeLabel('${a['walletType']}')} — ${a['balance'] ?? 0}'),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (v) => setState(() => _accountId = v),
+    final w = ref.watch(walletProvider);
+    final accounts = _accounts(w);
+    return Scaffold(
+      backgroundColor: AppColors.secondary,
+      body: SafeArea(
+        child: Column(
+          children: [
+            Container(
+              width: double.infinity,
+              height: 120,
+              decoration: const BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: BorderRadius.only(
+                  bottomLeft: Radius.circular(30),
+                  bottomRight: Radius.circular(30),
+                ),
+              ),
+              child: Stack(
+                children: [
+                  Positioned(
+                    left: 16,
+                    top: 16,
+                    child: IconButton(
+                      icon: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
+                      onPressed: () => Navigator.pop(context),
                     ),
+                  ),
+                  const Center(
+                    child: Text('Transfer',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 16),
-            WeretTextField(controller: _amount, label: 'walletAmount'.tr(), keyboardType: TextInputType.number),
-            const SizedBox(height: 20),
-            CustomButton(title: 'walletSendCode'.tr(), loading: _busy, onPressed: _requestCode),
-          ] else ...[
-            WeretSectionCard(
-              title: 'walletEnterOtpTitle'.tr(),
-              child: WeretTextField(controller: _otp, label: 'walletEnterOtpTitle'.tr(), keyboardType: TextInputType.number),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+                child: _step2 ? _buildOtpStep() : _buildRequestStep(accounts),
+              ),
             ),
-            const SizedBox(height: 20),
-            CustomButton(title: 'walletConfirmWithdraw'.tr(), loading: _busy, onPressed: _confirm),
-            const SizedBox(height: 10),
-            CustomButton(title: 'walletCancelRequest'.tr(), variant: 'outline', onPressed: _cancelOtp),
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: SizedBox(
+                width: double.infinity,
+                height: 55,
+                child: FilledButton(
+                  onPressed: (_busy || w.loading) ? null : (_step2 ? _confirm : _request),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                  ),
+                  child: _busy
+                      ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : Text(_step2 ? 'Confirm OTP' : 'Request Transfer'),
+                ),
+              ),
+            ),
           ],
-        ],
+        ),
       ),
     );
   }
+
+  Widget _buildRequestStep(List<Map<String, dynamic>> accounts) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Amount',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textDarkGray)),
+        const SizedBox(height: 6),
+        Container(
+          height: 50,
+          decoration: BoxDecoration(
+            border: Border.all(color: AppColors.borderMedium),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: TextField(
+            controller: _amountCtrl,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              hintText: '0.00',
+              hintStyle: TextStyle(color: AppColors.textMuted, fontSize: 14),
+              border: InputBorder.none,
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        const Text('From account',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textDarkGray)),
+        const SizedBox(height: 6),
+        DropdownButtonFormField<String>(
+          value: _selectedAccountId,
+          decoration: InputDecoration(
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+          ),
+          hint: const Text('Choose one', style: TextStyle(color: AppColors.textMuted)),
+          items: accounts.map((a) {
+            final id = walletAccountId(a);
+            final label = a['label']?.toString() ?? walletTypeLabel('${a['walletType'] ?? ''}');
+            return DropdownMenuItem(value: id, child: Text(label));
+          }).toList(),
+          onChanged: (v) => setState(() => _selectedAccountId = v),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildOtpStep() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Enter the OTP sent to your registered phone number',
+          style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+        ),
+        const SizedBox(height: 24),
+        const Text('OTP',
+            style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
+        const SizedBox(height: 6),
+        Container(
+          height: 50,
+          decoration: BoxDecoration(
+            border: Border.all(color: AppColors.borderMedium),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: TextField(
+            controller: _otpCtrl,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              hintText: 'Enter OTP',
+              hintStyle: TextStyle(color: AppColors.textMuted, fontSize: 14),
+              border: InputBorder.none,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }
+
+// ────────────────────────────────────────────────────────────
+//  WalletHistoryScreen (preserved, minor style update)
+// ────────────────────────────────────────────────────────────
 
 class WalletHistoryScreen extends ConsumerStatefulWidget {
   const WalletHistoryScreen({super.key});
@@ -256,22 +434,45 @@ class _WalletHistoryScreenState extends ConsumerState<WalletHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final txs = ref.watch(walletProvider).transactions;
-
-    return WeretPageScaffold(
-      title: 'walletHistory'.tr(),
+    final w = ref.watch(walletProvider);
+    final txs = w.transactions;
+    return Scaffold(
+      backgroundColor: AppColors.secondary,
+      appBar: AppBar(
+        title: const Text('Wallet History', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black)),
+        centerTitle: true,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: Colors.black),
+          onPressed: () => Navigator.pop(context),
+        ),
+      ),
       body: RefreshIndicator(
         onRefresh: () => ref.read(walletProvider.notifier).fetchTransactions(),
-        child: txs.isEmpty
-            ? ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                children: [SizedBox(height: MediaQuery.sizeOf(context).height * 0.3), Center(child: Text('walletNoTx'.tr()))],
-              )
-            : ListView.separated(
-                padding: const EdgeInsets.all(16),
-                itemCount: txs.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 8),
-                itemBuilder: (_, i) {
+        child: w.loading && txs.isEmpty
+            ? const Center(child: CircularProgressIndicator())
+            : w.error != null && txs.isEmpty
+                ? ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    children: [
+                      SizedBox(height: MediaQuery.sizeOf(context).height * 0.3),
+                      Center(child: Text(w.error!, style: const TextStyle(color: Colors.red))),
+                    ],
+                  )
+                : txs.isEmpty
+                    ? ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        children: [
+                          SizedBox(height: MediaQuery.sizeOf(context).height * 0.3),
+                          const Center(child: Text('No transactions', style: TextStyle(color: AppColors.textMuted))),
+                        ],
+                      )
+                    : ListView.separated(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: txs.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (_, i) {
                   final tx = Map<String, dynamic>.from(txs[i] as Map);
                   final type = '${tx['type'] ?? ''}';
                   final amt = tx['amount'] ?? 0;
@@ -281,9 +482,9 @@ class _WalletHistoryScreenState extends ConsumerState<WalletHistoryScreen> {
                   return Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: WeretTokens.surface,
-                      borderRadius: BorderRadius.circular(WeretTokens.cardRadius),
-                      border: Border.all(color: WeretTokens.border.withValues(alpha: 0.7)),
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppColors.borderLight.withValues(alpha: 0.7)),
                     ),
                     child: Row(
                       children: [
@@ -292,8 +493,8 @@ class _WalletHistoryScreenState extends ConsumerState<WalletHistoryScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(walletTxTypeLabel(type), style: const TextStyle(fontWeight: FontWeight.w700)),
-                              if (note.isNotEmpty) Text(note, style: const TextStyle(color: WeretTokens.textSecondary, fontSize: 12)),
-                              if (created.isNotEmpty) Text(created, style: const TextStyle(color: WeretTokens.textSecondary, fontSize: 11)),
+                              if (note.isNotEmpty) Text(note, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                              if (created.isNotEmpty) Text(created, style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
                             ],
                           ),
                         ),
@@ -302,7 +503,7 @@ class _WalletHistoryScreenState extends ConsumerState<WalletHistoryScreen> {
                           style: TextStyle(
                             fontWeight: FontWeight.w800,
                             fontSize: 18,
-                            color: isCredit ? Colors.green.shade700 : WeretTokens.textPrimary,
+                            color: isCredit ? Colors.green.shade700 : Colors.black,
                           ),
                         ),
                       ],
@@ -314,6 +515,10 @@ class _WalletHistoryScreenState extends ConsumerState<WalletHistoryScreen> {
     );
   }
 }
+
+// ────────────────────────────────────────────────────────────
+//  WalletAddAccountScreen (preserved, minor style update)
+// ────────────────────────────────────────────────────────────
 
 class WalletAddAccountScreen extends ConsumerStatefulWidget {
   const WalletAddAccountScreen({super.key});
@@ -349,7 +554,7 @@ class _WalletAddAccountScreenState extends ConsumerState<WalletAddAccountScreen>
           );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('walletMethodAdded'.tr())));
-        context.pop();
+        Navigator.pop(context);
       }
     } catch (e) {
       if (mounted) {
@@ -362,28 +567,98 @@ class _WalletAddAccountScreenState extends ConsumerState<WalletAddAccountScreen>
 
   @override
   Widget build(BuildContext context) {
-    return WeretPageScaffold(
-      title: 'walletAddMethod'.tr(),
+    return Scaffold(
+      backgroundColor: AppColors.secondary,
+      appBar: AppBar(
+        title: const Text('Add Payment Method', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black)),
+        centerTitle: true,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: Colors.black),
+          onPressed: () => Navigator.pop(context),
+        ),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          WeretSectionCard(
-            title: 'walletSelectType'.tr(),
-            child: DropdownButtonFormField<String>(
-              initialValue: _type,
-              decoration: InputDecoration(border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
-              items: _walletTypes.map((t) => DropdownMenuItem(value: t, child: Text(walletTypeLabel(t)))).toList(),
-              onChanged: (v) => setState(() => _type = v ?? 'cash'),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.borderLight.withValues(alpha: 0.7)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Select type', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  initialValue: _type,
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  items: _walletTypes.map((t) => DropdownMenuItem(value: t, child: Text(walletTypeLabel(t)))).toList(),
+                  onChanged: (v) => setState(() => _type = v ?? 'cash'),
+                ),
+              ],
             ),
           ),
           if (_type != 'cash') ...[
             const SizedBox(height: 16),
-            WeretTextField(controller: _phone, label: 'walletPhoneMsisdn'.tr(), keyboardType: TextInputType.phone),
+            Container(
+              height: 50,
+              decoration: BoxDecoration(
+                border: Border.all(color: AppColors.borderMedium),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: TextField(
+                controller: _phone,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(
+                  hintText: 'Phone number',
+                  hintStyle: TextStyle(color: AppColors.textMuted, fontSize: 14),
+                  border: InputBorder.none,
+                ),
+              ),
+            ),
           ],
           const SizedBox(height: 16),
-          WeretTextField(controller: _label, label: 'walletOptionalLabel'.tr(), hint: 'walletOptionalLabelPh'.tr()),
+          Container(
+            height: 50,
+            decoration: BoxDecoration(
+              border: Border.all(color: AppColors.borderMedium),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: TextField(
+              controller: _label,
+              decoration: const InputDecoration(
+                hintText: 'Label (optional)',
+                hintStyle: TextStyle(color: AppColors.textMuted, fontSize: 14),
+                border: InputBorder.none,
+              ),
+            ),
+          ),
           const SizedBox(height: 20),
-          CustomButton(title: 'walletSaveMethod'.tr(), loading: _busy, onPressed: _save),
+          SizedBox(
+            width: double.infinity,
+            height: 55,
+            child: FilledButton(
+              onPressed: _busy ? null : _save,
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+              ),
+              child: _busy
+                  ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Text('Save'),
+            ),
+          ),
         ],
       ),
     );

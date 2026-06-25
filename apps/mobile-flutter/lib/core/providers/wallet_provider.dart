@@ -48,10 +48,9 @@ class WalletNotifier extends StateNotifier<WalletState> {
     try {
       final api = await _api;
       final data = await api.getJson(ApiEndpoints.walletAccounts);
-      state = WalletState(
+      state = state.copyWith(
         accounts: data['accounts'] as List? ?? [],
         totalBalance: data['totalBalance'] ?? 0,
-        transactions: state.transactions,
         loading: false,
       );
     } catch (e) {
@@ -60,9 +59,15 @@ class WalletNotifier extends StateNotifier<WalletState> {
   }
 
   Future<void> fetchTransactions() async {
-    final api = await _api;
-    final data = await api.getJson(ApiEndpoints.walletTransactions, query: {'limit': 60});
-    state = state.copyWith(transactions: data['transactions'] as List? ?? []);
+    state = state.copyWith(loading: true);
+    try {
+      final api = await _api;
+      final data = await api.getJson(ApiEndpoints.walletTransactions, query: {'limit': 60});
+      final nested = data['data'] as Map? ?? {};
+      state = state.copyWith(transactions: nested['items'] as List? ?? [], loading: false);
+    } catch (e) {
+      state = state.copyWith(loading: false, error: e.toString());
+    }
   }
 
   Future<void> refresh() async {
@@ -71,42 +76,72 @@ class WalletNotifier extends StateNotifier<WalletState> {
   }
 
   Future<void> createAccount(String walletType, {String? phoneNumber, String? label}) async {
-    final api = await _api;
-    await api.postJson(ApiEndpoints.walletAccounts, {
-      'walletType': walletType,
-      if (phoneNumber != null) 'phoneNumber': phoneNumber,
-      if (label != null) 'label': label,
-    });
-    await fetchAccounts();
+    state = state.copyWith(loading: true);
+    try {
+      final api = await _api;
+      await api.postJson(ApiEndpoints.walletAccounts, {
+        'walletType': walletType,
+        if (phoneNumber != null) 'phoneNumber': phoneNumber,
+        if (label != null) 'label': label,
+      });
+      await fetchAccounts();
+    } catch (e) {
+      state = state.copyWith(loading: false, error: e.toString());
+      rethrow;
+    }
   }
 
   Future<void> deleteAccount(String id) async {
-    final api = await _api;
-    await api.delete(ApiEndpoints.walletAccountDelete(id));
-    await fetchAccounts();
+    state = state.copyWith(loading: true);
+    try {
+      final api = await _api;
+      await api.delete(ApiEndpoints.walletAccountDelete(id));
+      await fetchAccounts();
+    } catch (e) {
+      state = state.copyWith(loading: false, error: e.toString());
+      rethrow;
+    }
   }
 
   Future<void> deposit(String walletAccountId, num amount) async {
-    final api = await _api;
-    await api.postJson(ApiEndpoints.walletDeposit, {'walletAccountId': walletAccountId, 'amount': amount});
-    await fetchAccounts();
+    state = state.copyWith(loading: true);
+    try {
+      final api = await _api;
+      await api.postJson(ApiEndpoints.walletDeposit, {'walletAccountId': walletAccountId, 'amount': amount});
+      await fetchAccounts();
+    } catch (e) {
+      state = state.copyWith(loading: false, error: e.toString());
+      rethrow;
+    }
   }
 
   Future<Map<String, dynamic>> requestWithdraw(String walletAccountId, num amount) async {
-    final api = await _api;
-    final data = await api.postJson(ApiEndpoints.walletWithdrawRequest, {
-      'walletAccountId': walletAccountId,
-      'amount': amount,
-    });
-    state = state.copyWith(lastWithdrawMeta: {'requestId': data['requestId'], 'expiresAt': data['expiresAt']});
-    return data;
+    state = state.copyWith(loading: true);
+    try {
+      final api = await _api;
+      final data = await api.postJson(ApiEndpoints.walletWithdrawRequest, {
+        'walletAccountId': walletAccountId,
+        'amount': amount,
+      });
+      state = state.copyWith(loading: false, lastWithdrawMeta: {'requestId': data['requestId'], 'expiresAt': data['expiresAt']});
+      return data;
+    } catch (e) {
+      state = state.copyWith(loading: false, error: e.toString());
+      rethrow;
+    }
   }
 
   Future<void> confirmWithdraw(String requestId, String otp) async {
-    final api = await _api;
-    await api.postJson(ApiEndpoints.walletWithdrawConfirm, {'requestId': requestId, 'otp': otp});
-    state = state.copyWith(lastWithdrawMeta: null);
-    await fetchAccounts();
+    state = state.copyWith(loading: true);
+    try {
+      final api = await _api;
+      await api.postJson(ApiEndpoints.walletWithdrawConfirm, {'requestId': requestId, 'otp': otp});
+      state = state.copyWith(loading: false, lastWithdrawMeta: null);
+      await fetchAccounts();
+    } catch (e) {
+      state = state.copyWith(loading: false, error: e.toString());
+      rethrow;
+    }
   }
 
   void syncAccountsFromFirestore(List<Map<String, dynamic>> accounts) {

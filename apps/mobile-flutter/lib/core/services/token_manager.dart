@@ -1,5 +1,4 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class TokenManager {
   TokenManager._();
@@ -12,11 +11,19 @@ class TokenManager {
   static const _accessTokenKey = 'weret_token';
   static const _refreshTokenKey = 'weret_refresh_token';
 
+  /// In-memory cache to avoid secure storage read on every API request.
+  static String? _cachedAccessToken;
+
   static void Function()? onForceLogout;
 
   static Future<String?> getAccessToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_accessTokenKey);
+    if (_cachedAccessToken != null) return _cachedAccessToken;
+    try {
+      _cachedAccessToken = await _secureStorage.read(key: _accessTokenKey);
+    } catch (_) {
+      return null;
+    }
+    return _cachedAccessToken;
   }
 
   static Future<String?> getRefreshToken() async {
@@ -40,19 +47,19 @@ class TokenManager {
     required String accessToken,
     required String refreshToken,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_accessTokenKey, accessToken);
+    _cachedAccessToken = accessToken;
+    await _secureStorage.write(key: _accessTokenKey, value: accessToken);
     await _secureStorage.write(key: _refreshTokenKey, value: refreshToken);
   }
 
   static Future<void> saveAccessToken(String token) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_accessTokenKey, token);
+    _cachedAccessToken = token;
+    await _secureStorage.write(key: _accessTokenKey, value: token);
   }
 
   static Future<void> clearAll() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_accessTokenKey);
+    _cachedAccessToken = null;
+    await _secureStorage.delete(key: _accessTokenKey);
     await _secureStorage.delete(key: _refreshTokenKey);
   }
 }

@@ -17,6 +17,7 @@ class WeretLogo extends StatefulWidget {
     this.showTile,
     this.onDark = false,
     this.animate,
+    this.fontSize = 24.0,
   });
 
   final double? markWidth;
@@ -25,19 +26,22 @@ class WeretLogo extends StatefulWidget {
   final bool? showTile;
   final bool onDark;
   final bool? animate;
+  final double fontSize;
 
   const WeretLogo.hero({super.key, this.animate})
       : markWidth = 184,
         height = 112,
         compact = false,
         showTile = true,
-        onDark = false;
+        onDark = false,
+        fontSize = 24.0;
 
   const WeretLogo.standard({super.key, this.onDark = false, this.animate})
       : markWidth = 164,
         height = 100,
         compact = false,
-        showTile = null;
+        showTile = null,
+        fontSize = 24.0;
 
   /// Light surfaces — three strokes + wordmark, no dark tile.
   const WeretLogo.onLight({super.key})
@@ -46,7 +50,8 @@ class WeretLogo extends StatefulWidget {
         compact = false,
         showTile = false,
         onDark = false,
-        animate = false;
+        animate = false,
+        fontSize = 24.0;
 
   const WeretLogo.chip({super.key})
       : markWidth = 124,
@@ -54,7 +59,8 @@ class WeretLogo extends StatefulWidget {
         compact = true,
         showTile = false,
         onDark = false,
-        animate = null;
+        animate = null,
+        fontSize = 24.0;
 
   /// Breadcrumb / inline headers — strokes + wordmark, no tile.
   const WeretLogo.inline({super.key})
@@ -63,7 +69,8 @@ class WeretLogo extends StatefulWidget {
         compact = true,
         showTile = false,
         onDark = false,
-        animate = false;
+        animate = false,
+        fontSize = 24.0;
 
   /// AppBar — full three-stroke mark on light chrome.
   const WeretLogo.appBar({super.key})
@@ -72,7 +79,17 @@ class WeretLogo extends StatefulWidget {
         compact = true,
         showTile = false,
         onDark = false,
-        animate = null;
+        animate = null,
+        fontSize = 24.0;
+
+  /// Stroke‑outlined wordmark for the new design spec.
+  const WeretLogo.wordmark({super.key, this.fontSize = 24.0})
+      : markWidth = null,
+        height = 0,
+        compact = true,
+        showTile = false,
+        onDark = false,
+        animate = false;
 
   @override
   State<WeretLogo> createState() => _WeretLogoState();
@@ -165,6 +182,22 @@ class _WeretLogoState extends State<WeretLogo> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    // Wordmark-only variant — no animation, just stroke text.
+    if (widget.markWidth == null && widget.height == 0) {
+      return Text(
+        'WERET',
+        style: TextStyle(
+          fontSize: widget.fontSize,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 4,
+          foreground: Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2.0
+            ..color = Colors.black,
+        ),
+      );
+    }
+
     return AnimatedBuilder(
       animation: Listenable.merge([_entrance, _shimmer, _float, _breathe]),
       builder: (context, _) {

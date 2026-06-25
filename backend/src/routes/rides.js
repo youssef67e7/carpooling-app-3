@@ -56,7 +56,15 @@ router.post("/", validate(createRideSchema), async (req, res) => {
     if (!passengerId || !pickup || !dropoff || !vehicleType) {
       return res.status(400).json({ success: false, error: { code: "RIDE_ERROR", message: "passengerId, pickup, dropoff, and vehicleType are required" } });
     }
-    const result = await requestRide(passengerId, pickup, dropoff, vehicleType);
+    const result = await requestRide(passengerId, {
+      latitude: pickup.lat,
+      longitude: pickup.lng,
+      address: pickup.address || '',
+    }, {
+      latitude: dropoff.lat,
+      longitude: dropoff.lng,
+      address: dropoff.address || '',
+    }, vehicleType);
     return res.status(201).json({ success: true, data: { ride: result.ride, nearbyDrivers: result.nearbyDrivers.length } });
   } catch (err) {
     const status = err.message === "User already has an active ride" ? 400 : 500;
@@ -81,6 +89,7 @@ router.post("/:id/accept", validate(acceptRideSchema), async (req, res) => {
     if (!driverId) {
       return res.status(400).json({ success: false, error: { code: "RIDE_ERROR", message: "driverId is required" } });
     }
+    await assertDriverCanTakeAnotherRide(driverId);
     const result = await acceptRide(id, driverId);
     return res.status(200).json({ success: true, data: result });
   } catch (err) {
@@ -88,6 +97,7 @@ router.post("/:id/accept", validate(acceptRideSchema), async (req, res) => {
     let status = 500;
     if (msg.includes("not found")) status = 404;
     else if (msg.includes("no longer available")) status = 409;
+    else if (msg.includes("at most") || msg.includes("active rides")) status = 409;
     return res.status(status).json({ success: false, error: { code: "RIDE_ERROR", message: err.message } });
   }
 });
@@ -589,9 +599,10 @@ router.get("/my-active", roleRequired("driver"), requireApprovedDriver, async (r
       .limit(MAX_DRIVER_CONCURRENT_RIDES)
       .populate(ridePopulate)
       .populate(bookingPopulate);
+    const assignedCount = await countDriverAssignedRides(req.userId);
     return res.json({
       rides,
-      assignedCount: rides.length,
+      assignedCount,
       maxConcurrent: MAX_DRIVER_CONCURRENT_RIDES,
     });
   } catch (e) {
@@ -949,13 +960,13 @@ router.post("/end", roleRequired("driver"), requireApprovedDriver, ...rideIdVali
           const debit = await debitPassengerForRide(updated.passengerId, rideId, updated.fare);
           if (!debit) {
             console.error("wallet debitPassengerForRide failed — insufficient funds or already debited");
+          } else {
+            await creditDriverForRide(updated.driverId, rideId, updated.fare);
           }
         }
-
-        await creditDriverForRide(updated.driverId, rideId, updated.fare);
       }
     } catch (ledgerErr) {
-      console.error("wallet creditDriverForRide", ledgerErr);
+      console.error("wallet ledger error", ledgerErr);
     }
 
     const populated = await populatedRideById(rideId);

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'app_colors.dart';
 import 'weret_tokens.dart';
 
 class WeretTheme {
@@ -21,7 +22,7 @@ class WeretTheme {
       useMaterial3: true,
       brightness: brightness,
       colorScheme: scheme,
-      scaffoldBackgroundColor: isLight ? WeretTokens.bg : const Color(0xFF121212),
+      scaffoldBackgroundColor: isLight ? AppColors.secondary : const Color(0xFF121212),
       fontFamily: 'Roboto',
       appBarTheme: AppBarTheme(
         centerTitle: true,
@@ -42,7 +43,7 @@ class WeretTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: isLight ? WeretTokens.inputFill : const Color(0xFF2A2A2A),
+        fillColor: isLight ? AppColors.inputBackground : const Color(0xFF2A2A2A),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(WeretTokens.fieldRadius),
           borderSide: const BorderSide(color: WeretTokens.border, width: 1.5),
@@ -87,9 +88,23 @@ class WeretTheme {
         ),
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: isLight ? WeretTokens.surface : const Color(0xFF1A1A1A),
-        indicatorColor: WeretTokens.inputFill,
-        labelTextStyle: WidgetStateProperty.all(const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+        backgroundColor: Colors.transparent,
+        indicatorColor: Colors.transparent,
+        elevation: 0,
+        height: 68,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        labelTextStyle: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return const TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: AppColors.primary);
+          }
+          return const TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: AppColors.textMuted);
+        }),
+        iconTheme: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return const IconThemeData(color: AppColors.primary, size: 24);
+          }
+          return const IconThemeData(color: AppColors.textMuted, size: 24);
+        }),
       ),
       dividerTheme: DividerThemeData(color: WeretTokens.borderSubtle.withValues(alpha: 0.9)),
     );

@@ -6,19 +6,17 @@ import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers/ride_provider.dart';
-import '../../core/theme/weret_tokens.dart';
+import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_styles.dart';
 import '../../core/utils/geo_helpers.dart';
 import '../../core/utils/map_polyline_model.dart';
 import '../../core/utils/map_scene_builder.dart';
-import '../../core/utils/trip_fare.dart';
-import '../../shared/widgets/custom_button.dart';
 import '../../shared/widgets/passenger_map_picker_screen.dart';
-import '../../core/utils/logout_action.dart';
 import '../../shared/widgets/active_ride_panel.dart';
 import '../../shared/widgets/driver_offer_banner.dart';
+import '../../shared/widgets/nearby_ride_card.dart';
 import '../../shared/widgets/rate_driver_modal.dart';
 import '../../shared/widgets/service_type_gallery.dart';
-import '../../shared/widgets/weret_ambient_background.dart';
 import '../../shared/widgets/weret_logo.dart';
 import '../../shared/widgets/weret_ride_map.dart';
 
@@ -38,6 +36,8 @@ class _PassengerHomeScreenState extends ConsumerState<PassengerHomeScreen> {
   bool _offerLoading = false;
   Map<String, dynamic>? _routePreview;
   List<LatLng> _previewPoints = const [];
+  final _pickupCtrl = TextEditingController();
+  final _destCtrl = TextEditingController();
 
   bool get _canSearch => _pickup != null && _destination != null;
 
@@ -56,6 +56,8 @@ class _PassengerHomeScreenState extends ConsumerState<PassengerHomeScreen> {
 
   @override
   void dispose() {
+    _pickupCtrl.dispose();
+    _destCtrl.dispose();
     super.dispose();
   }
 
@@ -155,15 +157,32 @@ class _PassengerHomeScreenState extends ConsumerState<PassengerHomeScreen> {
     try {
       await ref.read(rideProvider.notifier).createRide({
         'vehicleType': _vehicleType,
-        'pickupLocation': {'lat': _pickup!.latitude, 'lng': _pickup!.longitude},
-        'destinationLocation': {'lat': _destination!.latitude, 'lng': _destination!.longitude},
+        'pickupLocation': {
+          'lat': _pickup!.latitude,
+          'lng': _pickup!.longitude,
+          if (_pickupCtrl.text.isNotEmpty) 'address': _pickupCtrl.text,
+        },
+        'destinationLocation': {
+          'lat': _destination!.latitude,
+          'lng': _destination!.longitude,
+          if (_destCtrl.text.isNotEmpty) 'address': _destCtrl.text,
+        },
       });
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('rideRequestSentTitle'.tr())));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('rideRequestSentTitle'.tr())));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     } finally {
       if (mounted) setState(() => _creating = false);
     }
+  }
+
+  void _onPickupTap() {
+    _openMapPicker(MapPickerMode.pickup);
+  }
+
+  void _onDestinationTap() {
+    _openMapPicker(MapPickerMode.destination);
   }
 
   @override
@@ -195,157 +214,206 @@ class _PassengerHomeScreenState extends ConsumerState<PassengerHomeScreen> {
       }
     });
     final active = ride.activeRide;
-    final pickup = _pickup ?? (active != null ? pickupFromRide(active) : null);
-    final destination = _destination ?? (active != null ? destinationFromRide(active) : null);
-    final center = pickup ?? destination ?? const LatLng(24.7136, 46.6753);
-    final drivers = ride.nearbyDrivers.length;
-    final driverOnMap = active != null ? driverLatLngFromRide(active) : null;
-    final mapScene = buildPassengerMapScene(
-      activeRide: active,
-      pickup: pickup,
-      destination: destination,
-      driver: driverOnMap,
-      nearbyDrivers: nearbyDriverPoints(ride.nearbyDrivers),
-      previewRoute: active == null ? _previewPoints : const [],
-    );
-    final fareHint = _fareHint(ride, pickup, destination);
+    final hasOffer = active != null && DriverOfferBanner.hasPendingOffer(active);
+    final nearbyPoints = nearbyDriverPoints(ride.nearbyDrivers);
 
     return Scaffold(
-      backgroundColor: WeretTokens.bg,
-      appBar: AppBar(
-        toolbarHeight: kWeretAppBarLogoHeight,
-        title: const WeretLogo.appBar(),
-        centerTitle: true,
-        actions: [
-          IconButton(icon: const Icon(Icons.history), onPressed: () => context.go('/passenger/history')),
-          IconButton(icon: const Icon(Icons.settings_outlined), onPressed: () => context.go('/passenger/settings')),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () => performLogout(ref, context),
-          ),
-          const SizedBox(width: 4),
-        ],
-      ),
-      body: WeretAmbientBackground(
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            WeretRideMapWithExpand(
-              center: center,
-              controller: _map,
-              height: active != null ? 260 : 200,
-              scene: mapScene,
-              expandLabel: 'passengerMapCompactTap'.tr(),
-              onExpand: () => _openMapPicker(destination == null && pickup != null ? MapPickerMode.destination : MapPickerMode.pickup),
-              onRecenter: _initLocation,
-              onFitRoute: () => _fitMapScene(mapScene),
-            ),
-            if (_routePreview != null && active == null && _canSearch) ...[
-              const SizedBox(height: 8),
-              Text(
-                'mapPreviewDistance'.tr(namedArgs: {
-                  'km': '${(_routePreview!['distanceKm'] ?? '—')}',
-                  'min': '${(_routePreview!['etaMinutes'] ?? '—')}',
-                }),
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: WeretTokens.textSecondary, fontSize: 12, fontWeight: FontWeight.w600),
+      backgroundColor: AppColors.secondary,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  const WeretLogo.wordmark(fontSize: 20),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.settings_outlined, color: AppColors.textSecondary, size: 24),
+                    onPressed: () => context.go('/passenger/settings'),
+                  ),
+                ],
               ),
-            ],
-            const SizedBox(height: 18),
-            Text('passengerWeretHeadline'.tr(), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 28)),
-            const SizedBox(height: 6),
-            Text('passengerWeretSub'.tr(), style: const TextStyle(color: WeretTokens.textSecondary, height: 1.4)),
-            const SizedBox(height: 12),
-            Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: WeretTokens.brand,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(width: 8, height: 8, decoration: const BoxDecoration(color: WeretTokens.success, shape: BoxShape.circle)),
-                    const SizedBox(width: 8),
-                    Text(
-                      'passengerDriversNearbyPill'.tr(namedArgs: {'count': '$drivers'}),
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 12),
+              const SizedBox(height: 24),
+              Text('Going the same way?', style: AppStyles.headlineMedium),
+              const SizedBox(height: 4),
+              Text('choose your trip.', style: AppStyles.bodyRegular),
+              const SizedBox(height: 20),
+              Text('YOUR LOCATION', style: AppStyles.sectionLabel),
+              const SizedBox(height: 6),
+              GestureDetector(
+                onTap: _onPickupTap,
+                child: AbsorbPointer(
+                  child: Container(
+                    height: 50,
+                    decoration: BoxDecoration(
+                      color: AppColors.inputBackground,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.borderLight),
                     ),
-                  ],
+                    child: TextField(
+                      controller: _pickupCtrl,
+                      decoration: InputDecoration(
+                        hintText: 'Current location',
+                        hintStyle: TextStyle(color: AppColors.textMuted, fontSize: 14),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      ),
+                    ),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 18),
-            ServiceTypeGallery(
-              selected: _vehicleType,
-              onSelected: (v) async {
-                setState(() => _vehicleType = v);
-                try {
-                  await _refreshNearby();
-                } catch (e) {
-                  debugPrint('Vehicle type change nearby fetch failed: $e');
-                }
-              },
-            ),
-            const SizedBox(height: 18),
-            if (active != null && DriverOfferBanner.hasPendingOffer(active))
-              DriverOfferBanner(
-                ride: active,
-                loading: _offerLoading,
-                onAccept: () async {
-                  setState(() => _offerLoading = true);
-                  try {
-                    await ref.read(rideProvider.notifier).respondProposal('${active['_id']}', true);
-                  } finally {
-                    if (mounted) setState(() => _offerLoading = false);
-                  }
-                },
-                onReject: () async {
-                  setState(() => _offerLoading = true);
-                  try {
-                    await ref.read(rideProvider.notifier).respondProposal('${active['_id']}', false);
-                  } finally {
-                    if (mounted) setState(() => _offerLoading = false);
-                  }
-                },
+              const SizedBox(height: 16),
+              Text('WHERE TO?', style: AppStyles.sectionLabel),
+              const SizedBox(height: 6),
+              GestureDetector(
+                onTap: _onDestinationTap,
+                child: AbsorbPointer(
+                  child: Container(
+                    height: 50,
+                    decoration: BoxDecoration(
+                      color: AppColors.inputBackground,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.borderLight),
+                    ),
+                    child: TextField(
+                      controller: _destCtrl,
+                      decoration: InputDecoration(
+                        hintText: 'Destination',
+                        hintStyle: TextStyle(color: AppColors.textMuted, fontSize: 14),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      ),
+                    ),
+                  ),
+                ),
               ),
-            if (ride.activeRide != null) ActiveRidePanel(ride: ride.activeRide!),
-            if (active == null)
-              CustomButton(
-                title: 'searchDriverCta'.tr(),
-                loading: _creating,
-                disabled: !_canSearch,
-                onPressed: _canSearch ? _book : null,
+              const SizedBox(height: 16),
+              if (active == null) ...[
+                ServiceTypeGallery(
+                  selected: _vehicleType,
+                  onSelected: (t) {
+                    setState(() => _vehicleType = t);
+                    _refreshNearby();
+                  },
+                ),
+                const SizedBox(height: 16),
+              ],
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: FilledButton(
+                  onPressed: _canSearch ? _onPickupTap : null,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                  ),
+                  child: Text(active == null ? 'searchDriverCta'.tr() : 'edit'.tr()),
+                ),
               ),
-            const SizedBox(height: 8),
-            Text(
-              fareHint,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: WeretTokens.textSecondary, fontSize: 12, height: 1.4),
-            ),
-          ],
+              const SizedBox(height: 16),
+              if (active != null) ...[
+                ActiveRidePanel(ride: active),
+                if (hasOffer)
+                  DriverOfferBanner(
+                    ride: active,
+                    onAccept: () async {
+                      setState(() => _offerLoading = true);
+                      try {
+                        await ref.read(rideProvider.notifier).respondProposal('${active['_id']}', true);
+                      } catch (e) {
+                        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+                      } finally {
+                        if (mounted) setState(() => _offerLoading = false);
+                      }
+                    },
+                    onReject: () async {
+                      setState(() => _offerLoading = true);
+                      try {
+                        await ref.read(rideProvider.notifier).respondProposal('${active['_id']}', false);
+                      } catch (e) {
+                        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+                      } finally {
+                        if (mounted) setState(() => _offerLoading = false);
+                      }
+                    },
+                    loading: _offerLoading,
+                  ),
+                const SizedBox(height: 8),
+              ],
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: WeretRideMap(
+                  center: _pickup ?? const LatLng(24.7136, 46.6753),
+                  controller: _map,
+                  height: 170,
+                  pickup: _pickup,
+                  destination: _destination,
+                  routePoints: _previewPoints,
+                  nearbyDrivers: active == null ? nearbyPoints : const [],
+                  assignedDriver: active != null ? driverLatLngFromRide(active) : null,
+                  scene: active != null
+                      ? buildPassengerMapScene(
+                          activeRide: active,
+                          pickup: pickupFromRide(active),
+                          destination: destinationFromRide(active),
+                          driver: driverLatLngFromRide(active),
+                        )
+                      : null,
+                  autoFit: _previewPoints.length >= 2,
+                  interactive: true,
+                ),
+              ),
+              if (active == null && _canSearch) ...[
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  height: 55,
+                  child: FilledButton(
+                    onPressed: _creating ? null : _book,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                    ),
+                    child: _creating
+                        ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : Text('requestRide'.tr()),
+                  ),
+                ),
+              ],
+              if (active == null && _canSearch) ...[
+                const SizedBox(height: 28),
+                const Text('Trips Nearby:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Colors.black)),
+                const SizedBox(height: 16),
+                if (ride.nearbyDrivers.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    child: Text('nearbyEmpty'.tr(), style: TextStyle(color: AppColors.textMuted, fontSize: 14)),
+                  )
+                else
+                  ...ride.nearbyDrivers.map((d) => NearbyRideCard(
+                        driverName: '${d['name'] ?? d['driverName'] ?? ''}',
+                        rating: (d['rating'] as num?)?.toDouble() ?? 0,
+                        rideCount: (d['rideCount'] as num?)?.toInt() ?? 0,
+                        price: (d['price'] as num?)?.toDouble() ?? 0,
+                        departureTime: '${d['departureTime'] ?? ''}',
+                        arrivalTime: '${d['arrivalTime'] ?? ''}',
+                        fromLocation: '${d['fromLocation'] ?? d['pickupAddress'] ?? ''}',
+                        toLocation: '${d['toLocation'] ?? d['dropoffAddress'] ?? ''}',
+                        seatsLeft: (d['seatsLeft'] as num?)?.toInt() ?? 1,
+                      )),
+              ],
+              const SizedBox(height: 24),
+            ],
+          ),
         ),
       ),
     );
-  }
-
-  String _fareHint(RideState ride, LatLng? pickup, LatLng? destination) {
-    if (pickup == null || destination == null) return 'requestRideHintPickup'.tr();
-    final km = _routePreview?['distanceKm'] as num? ?? haversineKm(pickup.latitude, pickup.longitude, destination.latitude, destination.longitude);
-    Map<String, dynamic>? vehicle;
-    for (final v in ride.vehicles) {
-      if (v is Map && '${v['typeKey'] ?? v['type']}' == _vehicleType) {
-        vehicle = Map<String, dynamic>.from(v);
-        break;
-      }
-    }
-    final amount = vehicle != null ? fareFromVehicle(vehicle, km.toDouble()).toStringAsFixed(0) : '—';
-    return 'estimatedTripPriceWithKm'.tr(namedArgs: {
-      'vehicle': 'vehicleType_$_vehicleType'.tr(),
-      'amount': amount,
-      'km': km.toStringAsFixed(1),
-    });
   }
 }

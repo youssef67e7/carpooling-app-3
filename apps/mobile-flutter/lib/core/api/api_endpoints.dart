@@ -32,12 +32,12 @@ class ApiEndpoints {
   static const vehicles = '/vehicles';
   static const ridesNearbyDrivers = '/rides/nearby-drivers';
   static const ridesRoutePreview = '/rides/route-preview';
-  static const ridesCreate = '/rides';
+  static const ridesCreate = '/rides/create';
   static String ride(String id) => '/rides/$id';
   static String rideStatus(String id) => '/rides/$id/status';
   static String rideMessages(String id) => '/rides/$id/messages';
   static const ridesHistory = '/rides/history';
-  static const ridesAvailable = '/rides/requested';
+  static const ridesAvailable = '/rides/available';
   static const ridesMyActive = '/rides/my-active';
   static String ridesAccept(String id) => '/rides/$id/accept';
   static const ridesRespondProposal = '/rides/respond-proposal';

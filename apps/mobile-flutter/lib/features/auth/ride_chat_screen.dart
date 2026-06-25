@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:easy_localization/easy_localization.dart';
+import '../../core/providers/auth_provider.dart';
 import '../../core/providers/ride_provider.dart';
 import '../../core/theme/weret_tokens.dart';
 import '../../shared/widgets/empty_state.dart';
@@ -17,34 +20,54 @@ class RideChatScreen extends ConsumerStatefulWidget {
 class _RideChatScreenState extends ConsumerState<RideChatScreen> {
   List<dynamic> _messages = [];
   final _input = TextEditingController();
+  Timer? _pollTimer;
 
   @override
   void initState() {
     super.initState();
     Future.microtask(_load);
+    _pollTimer = Timer.periodic(const Duration(seconds: 10), (_) => _load());
   }
 
   @override
   void dispose() {
+    _pollTimer?.cancel();
     _input.dispose();
     super.dispose();
   }
 
   Future<void> _load() async {
-    final m = await ref.read(rideProvider.notifier).fetchMessages(widget.rideId);
-    if (mounted) setState(() => _messages = m);
+    try {
+      final m = await ref.read(rideProvider.notifier).fetchMessages(widget.rideId);
+      if (mounted) setState(() => _messages = m);
+    } catch (_) {}
   }
 
   Future<void> _send() async {
     final text = _input.text.trim();
     if (text.isEmpty) return;
-    await ref.read(rideProvider.notifier).sendMessage(widget.rideId, text);
-    _input.clear();
-    await _load();
+    try {
+      await ref.read(rideProvider.notifier).sendMessage(widget.rideId, text);
+      _input.clear();
+      await _load();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    }
+  }
+
+  String _extractSenderId(dynamic msg) {
+    if (msg is! Map) return '';
+    final sid = msg['senderId'];
+    if (sid is Map) return '${sid['_id'] ?? ''}';
+    return '$sid';
   }
 
   @override
   Widget build(BuildContext context) {
+    final currentUserId = ref.read(authProvider).user?.id ?? '';
+
     return Scaffold(
       backgroundColor: WeretTokens.bg,
       appBar: AppBar(
@@ -63,23 +86,26 @@ class _RideChatScreenState extends ConsumerState<RideChatScreen> {
                       padding: const EdgeInsets.all(16),
                       itemCount: _messages.length,
                       itemBuilder: (c, i) {
-                        final m = _messages[i] as Map<String, dynamic>;
+                        final m = _messages[i];
+                        if (m is! Map) return const SizedBox.shrink();
+                        final text = '${m['text'] ?? ''}';
+                        final senderId = _extractSenderId(m);
+                        final isMine = senderId.isNotEmpty && senderId == currentUserId;
+
                         return Align(
-                          alignment: AlignmentDirectional.centerStart,
+                          alignment: isMine ? AlignmentDirectional.centerEnd : AlignmentDirectional.centerStart,
                           child: Container(
                             margin: const EdgeInsets.only(bottom: 8),
                             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                             decoration: BoxDecoration(
-                              color: WeretTokens.surface,
+                              color: isMine ? WeretTokens.brand.withValues(alpha: 0.15) : WeretTokens.surface,
                               borderRadius: BorderRadius.circular(16),
                               border: Border.all(color: WeretTokens.border.withValues(alpha: 0.7)),
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('${m['text']}', style: const TextStyle(fontWeight: FontWeight.w500)),
-                                const SizedBox(height: 4),
-                                Text('${m['senderId'] ?? ''}', style: const TextStyle(fontSize: 11, color: WeretTokens.textSecondary)),
+                                Text(text, style: const TextStyle(fontWeight: FontWeight.w500)),
                               ],
                             ),
                           ),

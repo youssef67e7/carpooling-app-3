@@ -31,29 +31,26 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
   @override
   void initState() {
     super.initState();
+    ref.listen(authProvider, (_, next) {
+      final online = next.user?.isOnline ?? false;
+      final tracker = ref.read(driverLocationTrackerProvider);
+      if (online) { tracker.start(); } else { tracker.stop(); }
+    });
     Future.microtask(() async {
-      await ref.read(rideProvider.notifier).fetchDriverActiveRides();
-      await ref.read(rideProvider.notifier).fetchAvailable();
-      await ref.read(driverProvider.notifier).refresh();
+      try {
+        await ref.read(rideProvider.notifier).fetchDriverActiveRides();
+        await ref.read(rideProvider.notifier).fetchAvailable();
+        await ref.read(driverProvider.notifier).refresh();
+      } catch (_) {}
+      if (!mounted) return;
       final stats = ref.read(driverProvider).stats;
-      if (stats != null && mounted) {
+      if (stats != null) {
         setState(() {
           _sessionEarnings = stats['sessionEarnings'] as num? ?? 0;
           _rating = stats['averageRating'] as num?;
         });
       }
-      _syncLocationTracker();
     });
-  }
-
-  void _syncLocationTracker() {
-    final online = ref.read(authProvider).user?.isOnline ?? false;
-    final tracker = ref.read(driverLocationTrackerProvider);
-    if (online) {
-      tracker.start();
-    } else {
-      tracker.stop();
-    }
   }
 
   bool _awaitingMyConfirm(Map<String, dynamic> m, String myId) {
@@ -82,12 +79,9 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
     final driverPos = ref.watch(driverGpsProvider);
     final activeRides = ride.activeRides;
     final online = user?.isOnline ?? false;
-    final vehicleType = user?.vehicleType ?? 'delivery';
     final myId = user?.id ?? '';
     final canTakeMore = ride.driverCanTakeMore;
     final maxC = ride.driverMaxConcurrent;
-
-    _syncLocationTracker();
 
     LatLng? mapPickup;
     LatLng? mapDest;
@@ -103,11 +97,14 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: () async {
-            await ref.read(rideProvider.notifier).fetchDriverActiveRides();
-            await ref.read(rideProvider.notifier).fetchAvailable();
-            await ref.read(driverProvider.notifier).refresh();
+            try {
+              await ref.read(rideProvider.notifier).fetchDriverActiveRides();
+              await ref.read(rideProvider.notifier).fetchAvailable();
+              await ref.read(driverProvider.notifier).refresh();
+            } catch (_) {}
+            if (!mounted) return;
             final stats = ref.read(driverProvider).stats;
-            if (stats != null && mounted) {
+            if (stats != null) {
               setState(() {
                 _sessionEarnings = stats['sessionEarnings'] as num? ?? 0;
                 _rating = stats['averageRating'] as num?;
@@ -118,7 +115,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
             padding: const EdgeInsets.all(16),
             children: [
               const DriverWordmark(),
-              if (user != null && !user.isDriverApproved) ...[
+              if (user != null && user.driverApplicationStatus != 'approved' && user.driverApplicationStatus != 'none') ...[
                 const SizedBox(height: 12),
                 GestureDetector(
                   onTap: () => context.push('/driver/verification-status'),
@@ -135,7 +132,9 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
                   ),
                   onPressed: () async {
                     await ref.read(rideProvider.notifier).toggleDriverOnline();
-                    _syncLocationTracker();
+                    final tracker = ref.read(driverLocationTrackerProvider);
+                    final currOnline = ref.read(authProvider).user?.isOnline ?? false;
+                    if (currOnline) { tracker.start(); } else { tracker.stop(); }
                   },
                   child: Text(online ? 'goOffline'.tr() : 'goOnline'.tr()),
                 ),
@@ -306,8 +305,10 @@ class _RequestCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fare = ride['estimatedFare'] ?? ride['preassignedFare'] ?? ride['fare'] ?? '—';
-    final pickup = ride['pickupAddress'] ?? ride['pickupLabel'] ?? '—';
-    final dropoff = ride['dropoffAddress'] ?? ride['destinationAddress'] ?? ride['dropoffLabel'] ?? '—';
+    final pu = ride['pickupLocation'];
+    final pickup = pu is Map ? '${pu['address'] ?? '—'}' : '—';
+    final de = ride['destinationLocation'];
+    final dropoff = de is Map ? '${de['address'] ?? '—'}' : '—';
 
     return GestureDetector(
       onTap: onTap,

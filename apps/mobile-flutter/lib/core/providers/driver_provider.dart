@@ -8,11 +8,13 @@ class DriverState {
     this.dashboard,
     this.cars = const [],
     this.loading = false,
+    this.error,
   });
   final Map<String, dynamic>? status;
   final Map<String, dynamic>? dashboard;
   final List<dynamic> cars;
   final bool loading;
+  final String? error;
 
   Map<String, dynamic>? get stats => dashboard?['stats'] as Map<String, dynamic>?;
   Map<String, dynamic>? get verification => dashboard?['verification'] as Map<String, dynamic>?;
@@ -22,12 +24,15 @@ class DriverState {
     Map<String, dynamic>? dashboard,
     List<dynamic>? cars,
     bool? loading,
+    String? error,
+    bool clearError = false,
   }) {
     return DriverState(
       status: status ?? this.status,
       dashboard: dashboard ?? this.dashboard,
       cars: cars ?? this.cars,
       loading: loading ?? this.loading,
+      error: clearError ? null : (error ?? this.error),
     );
   }
 }
@@ -38,7 +43,7 @@ class DriverNotifier extends StateNotifier<DriverState> {
   Future<ApiClient> get _api => _ref.read(apiClientProvider.future);
 
   Future<void> refresh() async {
-    state = state.copyWith(loading: true);
+    state = state.copyWith(loading: true, clearError: true);
     try {
       final api = await _api;
       final dashboard = Map<String, dynamic>.from(await api.getJson(ApiEndpoints.driverDashboard) as Map);
@@ -49,7 +54,7 @@ class DriverNotifier extends StateNotifier<DriverState> {
         cars: (status['cars'] as List?) ?? (dashboard['profile']?['cars'] as List?) ?? [],
         loading: false,
       );
-    } catch (_) {
+    } catch (e) {
       try {
         final api = await _api;
         final status = await api.getJson(ApiEndpoints.driverStatus);
@@ -58,8 +63,8 @@ class DriverNotifier extends StateNotifier<DriverState> {
           cars: status['cars'] as List<dynamic>? ?? [],
           loading: false,
         );
-      } catch (e) {
-        state = state.copyWith(loading: false);
+      } catch (e2) {
+        state = state.copyWith(loading: false, error: e2.toString());
       }
     }
   }

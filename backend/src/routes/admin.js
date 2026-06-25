@@ -149,15 +149,20 @@ router.patch(
       if (user.driver_application_status === "approved") {
         user.is_verified = true;
         await DriverProfile.updateOne({ userId: user._id }, { $set: { status: "approved", reviewNote: "" } }, { upsert: true });
-        notifyDriverVerified(user._id).catch(() => {});
       }
       if (user.driver_application_status === "rejected") {
         // Safety: rejected drivers should never remain online as drivers.
         if (user.isOnline) user.isOnline = false;
         await DriverProfile.updateOne({ userId: user._id }, { $set: { status: "rejected" } }, { upsert: true });
-        notifyDriverRejected(user._id, req.body.driver_review_note).catch(() => {});
       }
       await user.save();
+      // Notifications after save ensures DB consistency before informing user.
+      if (user.driver_application_status === "approved") {
+        notifyDriverVerified(user._id).catch(() => {});
+      }
+      if (user.driver_application_status === "rejected") {
+        notifyDriverRejected(user._id, req.body.driver_review_note).catch(() => {});
+      }
       const after = user.toJSON();
       await audit(req, {
         action: "user.patch",
@@ -190,7 +195,7 @@ router.delete("/users/:userId", docIdParam("userId"), validateRequest, async (re
 
     const uid = user._id;
 
-    // Cascade delete associated data
+      // Cascade delete associated data
     await Promise.all([
       DriverProfile.deleteMany({ userId: uid }),
       DriverDocuments.deleteMany({ userId: uid }),
@@ -210,6 +215,12 @@ router.delete("/users/:userId", docIdParam("userId"), validateRequest, async (re
       Ride.updateMany({ driverId: uid }, { $set: { driverId: null } }),
       Booking.deleteMany({ passengerId: uid }),
     ]);
+
+    // Re-check atomic guard before final delete to prevent race condition
+    if (user.role === "admin") {
+      const remaining = await User.countDocuments({ role: "admin" });
+      if (remaining <= 1) throw new AppError("Cannot delete last admin", 400);
+    }
 
     await User.deleteOne({ _id: uid });
     await audit(req, {

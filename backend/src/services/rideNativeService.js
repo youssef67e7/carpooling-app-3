@@ -55,6 +55,6 @@ export async function acceptRide(rideId, driverId) {
   if (ride.status !== "pending") {
     throw new Error("Ride is no longer available");
   }
-  await updateRideStatus(rideId, "accepted", { driver_id: driverId, accepted_at: new Date() });
+  await updateRideStatus(rideId, "accepted", { driver_id: driverId, driverId, accepted_at: new Date() });
   return findRideById(rideId);
 }

@@ -91,6 +91,13 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
               ),
               if (admin.statsLoading && stats.isEmpty)
                 const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator(strokeWidth: 2))))
+              else if (admin.statsError != null && stats.isEmpty)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(admin.statsError!, style: const TextStyle(color: WeretTokens.error)),
+                  ),
+                )
               else ...[
                 SliverToBoxAdapter(
                   child: AdminCommandBanner(
@@ -297,9 +304,16 @@ class _AdminReportsScreenState extends ConsumerState<AdminReportsScreen> {
   }
 }
 
-class _AdminReportCard extends ConsumerWidget {
+class _AdminReportCard extends ConsumerStatefulWidget {
   const _AdminReportCard({required this.report});
   final Map<String, dynamic> report;
+
+  @override
+  ConsumerState<_AdminReportCard> createState() => _AdminReportCardState();
+}
+
+class _AdminReportCardState extends ConsumerState<_AdminReportCard> {
+  bool _busy = false;
 
   String _person(dynamic v) {
     if (v is Map) return '${v['name'] ?? v['email'] ?? '—'}';
@@ -307,7 +321,8 @@ class _AdminReportCard extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
+    final report = widget.report;
     final id = '${report['_id'] ?? report['id'] ?? ''}';
     final status = '${report['status'] ?? 'open'}';
     const statuses = ['open', 'reviewing', 'resolved', 'dismissed'];
@@ -349,14 +364,18 @@ class _AdminReportCard extends ConsumerWidget {
             items: statuses
                 .map((s) => DropdownMenuItem(value: s, child: Text('reportStatus_$s'.tr())))
                 .toList(),
-            onChanged: (next) async {
-              if (next == null || next == status) return;
-              final err = await ref.read(adminProvider.notifier).updateReportStatus(id, next);
-              if (!context.mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(err ?? 'adminActionDone'.tr())),
-              );
-            },
+            onChanged: _busy
+                ? null
+                : (next) async {
+                    if (next == null || next == status) return;
+                    setState(() => _busy = true);
+                    final err = await ref.read(adminProvider.notifier).updateReportStatus(id, next);
+                    if (!context.mounted) return;
+                    setState(() => _busy = false);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(err ?? 'adminActionDone'.tr())),
+                    );
+                  },
           ),
         ],
       ),
@@ -434,6 +453,19 @@ class _AdminTransactionCard extends ConsumerWidget {
           const SizedBox(height: 10),
           FilledButton.tonal(
             onPressed: () async {
+              if (!flagged) {
+                final ok = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: Text('adminTxFlagConfirmTitle'.tr()),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text('cancel'.tr())),
+                      FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text('confirm'.tr())),
+                    ],
+                  ),
+                );
+                if (ok != true) return;
+              }
               final err = await ref.read(adminProvider.notifier).setTransactionFlag(
                     id,
                     flagged: !flagged,
@@ -492,7 +524,8 @@ class _AdminAuditCard extends StatelessWidget {
     final targetId = '${log['targetId'] ?? ''}';
     final shortId = targetId.length > 8 ? targetId.substring(targetId.length - 8) : targetId;
     final actor = log['actorAdminId'] is Map ? (log['actorAdminId'] as Map)['email'] : log['actorEmail'];
-    final when = log['createdAt'] ?? log['created_at'];
+    final whenRaw = log['createdAt'] ?? log['created_at'];
+    final when = whenRaw != null ? DateTime.tryParse('$whenRaw') : null;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -511,7 +544,8 @@ class _AdminAuditCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text('${'adminAuditActor'.tr()}: ${actor ?? '—'}', style: const TextStyle(fontSize: 12, color: WeretTokens.textSecondary)),
           Text('${'adminAuditTarget'.tr()}: ${log['targetType'] ?? '—'} · $shortId', style: const TextStyle(fontSize: 12, color: WeretTokens.textSecondary)),
-          if (when != null) Text('$when', style: const TextStyle(fontSize: 11, color: WeretTokens.textSecondary)),
+          if (when != null)
+            Text(DateFormat.yMd(context.locale.toString()).add_jm().format(when), style: const TextStyle(fontSize: 11, color: WeretTokens.textSecondary)),
         ],
       ),
     );

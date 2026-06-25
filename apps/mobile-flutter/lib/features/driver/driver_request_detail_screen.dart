@@ -121,9 +121,9 @@ class _DriverRequestDetailScreenState extends ConsumerState<DriverRequestDetailS
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _loc('pickup'.tr(), '${ride['pickupAddress'] ?? ride['pickupLabel'] ?? '—'}', 'driverPickupEta'.tr()),
+                      _loc('pickup'.tr(), _address(ride, 'pickupLocation'), 'driverPickupEta'.tr()),
                       const SizedBox(height: 16),
-                      _loc('destination'.tr(), '${ride['dropoffAddress'] ?? ride['destinationAddress'] ?? ride['dropoffLabel'] ?? '—'}', 'driverTripEta'.tr()),
+                      _loc('destination'.tr(), _address(ride, 'destinationLocation'), 'driverTripEta'.tr()),
                     ],
                   ),
                 ),
@@ -161,6 +161,12 @@ class _DriverRequestDetailScreenState extends ConsumerState<DriverRequestDetailS
         ],
       ),
     );
+  }
+
+  String _address(Map<String, dynamic> ride, String key) {
+    final loc = ride[key];
+    if (loc is Map) return '${loc['address'] ?? '—'}';
+    return '—';
   }
 
   Widget _metric(String label, String value, {String? surge}) {

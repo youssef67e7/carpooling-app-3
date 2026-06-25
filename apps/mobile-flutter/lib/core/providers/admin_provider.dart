@@ -16,11 +16,13 @@ class AdminPagination {
 
   factory AdminPagination.fromJson(Map<String, dynamic>? json) {
     if (json == null) return const AdminPagination(page: 1, limit: adminPageSize, total: 0, totalPages: 1);
+    final total = (json['total'] as num?)?.toInt() ?? 0;
+    final limit = (json['limit'] as num?)?.toInt() ?? adminPageSize;
     return AdminPagination(
       page: (json['page'] as num?)?.toInt() ?? 1,
-      limit: (json['limit'] as num?)?.toInt() ?? adminPageSize,
-      total: (json['total'] as num?)?.toInt() ?? 0,
-      totalPages: (json['totalPages'] as num?)?.toInt() ?? 1,
+      limit: limit,
+      total: total,
+      totalPages: limit > 0 ? (total + limit - 1) ~/ limit : 1,
     );
   }
 
@@ -70,6 +72,7 @@ class AdminState {
   const AdminState({
     this.stats,
     this.statsLoading = false,
+    this.statsError,
     this.users = const AdminListSlice(),
     this.rides = const AdminListSlice(),
     this.reports = const AdminListSlice(),
@@ -79,6 +82,7 @@ class AdminState {
 
   final Map<String, dynamic>? stats;
   final bool statsLoading;
+  final String? statsError;
   final AdminListSlice users;
   final AdminListSlice rides;
   final AdminListSlice reports;
@@ -88,6 +92,8 @@ class AdminState {
   AdminState copyWith({
     Map<String, dynamic>? stats,
     bool? statsLoading,
+    String? statsError,
+    bool clearStatsError = false,
     AdminListSlice? users,
     AdminListSlice? rides,
     AdminListSlice? reports,
@@ -97,6 +103,7 @@ class AdminState {
     return AdminState(
       stats: stats ?? this.stats,
       statsLoading: statsLoading ?? this.statsLoading,
+      statsError: clearStatsError ? null : (statsError ?? this.statsError),
       users: users ?? this.users,
       rides: rides ?? this.rides,
       reports: reports ?? this.reports,
@@ -123,14 +130,13 @@ class AdminNotifier extends StateNotifier<AdminState> {
   }
 
   Future<void> fetchStats() async {
-    state = state.copyWith(statsLoading: true);
+    state = state.copyWith(statsLoading: true, clearStatsError: true);
     try {
       final api = await _api;
       final data = await api.getJson(ApiEndpoints.adminStats);
       state = state.copyWith(stats: data['stats'] as Map<String, dynamic>?, statsLoading: false);
     } catch (e) {
-      state = state.copyWith(statsLoading: false);
-      rethrow;
+      state = state.copyWith(statsLoading: false, statsError: _messageFromError(e));
     }
   }
 
@@ -145,10 +151,11 @@ class AdminNotifier extends StateNotifier<AdminState> {
         'limit': adminPageSize,
         if (nextSearch.trim().isNotEmpty) 'search': nextSearch.trim(),
       });
+      final nested = data['data'] as Map<String, dynamic>? ?? {};
       state = state.copyWith(
         users: AdminListSlice(
-          items: _mapList(data['users']),
-          pagination: AdminPagination.fromJson(data['pagination'] as Map<String, dynamic>?),
+          items: _mapList(nested['items']),
+          pagination: AdminPagination.fromJson(nested),
           search: nextSearch,
           loading: false,
         ),
@@ -169,10 +176,11 @@ class AdminNotifier extends StateNotifier<AdminState> {
         'limit': adminPageSize,
         if (nextSearch.trim().isNotEmpty) 'search': nextSearch.trim(),
       });
+      final nested = data['data'] as Map<String, dynamic>? ?? {};
       state = state.copyWith(
         rides: AdminListSlice(
-          items: _mapList(data['rides']),
-          pagination: AdminPagination.fromJson(data['pagination'] as Map<String, dynamic>?),
+          items: _mapList(nested['items']),
+          pagination: AdminPagination.fromJson(nested),
           search: nextSearch,
           loading: false,
         ),
@@ -193,10 +201,11 @@ class AdminNotifier extends StateNotifier<AdminState> {
         'limit': adminPageSize,
         if (nextSearch.trim().isNotEmpty) 'search': nextSearch.trim(),
       });
+      final nested = data['data'] as Map<String, dynamic>? ?? {};
       state = state.copyWith(
         reports: AdminListSlice(
-          items: _mapList(data['reports']),
-          pagination: AdminPagination.fromJson(data['pagination'] as Map<String, dynamic>?),
+          items: _mapList(nested['items']),
+          pagination: AdminPagination.fromJson(nested),
           search: nextSearch,
           loading: false,
         ),
@@ -217,10 +226,11 @@ class AdminNotifier extends StateNotifier<AdminState> {
         'limit': adminPageSize,
         if (nextSearch.trim().isNotEmpty) 'search': nextSearch.trim(),
       });
+      final nested = data['data'] as Map<String, dynamic>? ?? {};
       state = state.copyWith(
         transactions: AdminListSlice(
-          items: _mapList(data['transactions']),
-          pagination: AdminPagination.fromJson(data['pagination'] as Map<String, dynamic>?),
+          items: _mapList(nested['items']),
+          pagination: AdminPagination.fromJson(nested),
           search: nextSearch,
           loading: false,
         ),
@@ -241,10 +251,11 @@ class AdminNotifier extends StateNotifier<AdminState> {
         'limit': adminPageSize,
         if (nextSearch.trim().isNotEmpty) 'search': nextSearch.trim(),
       });
+      final nested = data['data'] as Map<String, dynamic>? ?? {};
       state = state.copyWith(
         audit: AdminListSlice(
-          items: _mapList(data['logs']),
-          pagination: AdminPagination.fromJson(data['pagination'] as Map<String, dynamic>?),
+          items: _mapList(nested['items']),
+          pagination: AdminPagination.fromJson(nested),
           search: nextSearch,
           loading: false,
         ),

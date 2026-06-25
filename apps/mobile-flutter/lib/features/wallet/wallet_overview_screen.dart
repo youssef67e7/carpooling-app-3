@@ -1,13 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:easy_localization/easy_localization.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/providers/wallet_provider.dart';
-import '../../core/theme/weret_tokens.dart';
+import '../../core/theme/app_colors.dart';
+import '../../shared/widgets/wallet_activity_item.dart';
 import 'wallet_labels.dart';
-import '../../shared/widgets/custom_button.dart';
-import '../../shared/widgets/weret_page_scaffold.dart';
-import '../../shared/widgets/weret_section_card.dart';
 
 class WalletOverviewScreen extends ConsumerStatefulWidget {
   const WalletOverviewScreen({super.key});
@@ -25,49 +22,112 @@ class _WalletOverviewScreenState extends ConsumerState<WalletOverviewScreen> {
   @override
   Widget build(BuildContext context) {
     final w = ref.watch(walletProvider);
-    return WeretPageScaffold(
-      title: 'walletTitle'.tr(),
-      body: RefreshIndicator(
-        onRefresh: () => ref.read(walletProvider.notifier).refresh(),
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            WeretSectionCard(
-              title: 'walletTotalBalance'.tr(),
-              child: Text(
-                '${w.totalBalance}',
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 32),
+    return Scaffold(
+      backgroundColor: AppColors.secondary,
+      body: Column(
+        children: [
+          Container(
+            width: double.infinity,
+            height: 160,
+            decoration: const BoxDecoration(
+              color: AppColors.primary,
+              borderRadius: BorderRadius.only(
+                bottomLeft: Radius.circular(30),
+                bottomRight: Radius.circular(30),
               ),
             ),
-            CustomButton(title: 'walletAddMoney'.tr(), onPressed: () => context.push('deposit')),
-            const SizedBox(height: 10),
-            CustomButton(title: 'walletWithdraw'.tr(), variant: 'outline', onPressed: () => context.push('withdraw')),
-            const SizedBox(height: 10),
-            CustomButton(title: 'walletHistory'.tr(), variant: 'outline', onPressed: () => context.push('history')),
-            const SizedBox(height: 10),
-            CustomButton(title: 'walletAddMethod'.tr(), variant: 'outline', onPressed: () => context.push('add-account')),
-            const SizedBox(height: 16),
-            ...w.accounts.map((a) {
-              final m = a as Map<String, dynamic>;
-              return Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: WeretTokens.surface,
-                  borderRadius: BorderRadius.circular(WeretTokens.cardRadius),
-                  border: Border.all(color: WeretTokens.border.withValues(alpha: 0.7)),
-                ),
-                child: Row(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text('Wallet balance', style: TextStyle(color: Colors.white, fontSize: 14)),
+                const SizedBox(height: 4),
+                Text('EGP ${w.totalBalance.toStringAsFixed(2)}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 32)),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Expanded(child: Text(walletTypeLabel('${m['walletType']}'), style: const TextStyle(fontWeight: FontWeight.w700))),
-                    Text('${m['balance'] ?? 0}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+                    OutlinedButton.icon(
+                      onPressed: () => context.push('deposit'),
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Top up'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: const BorderSide(color: Colors.white, width: 1.5),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9999)),
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    FilledButton.icon(
+                      onPressed: () => context.push('withdraw'),
+                      icon: const Icon(Icons.send, size: 18),
+                      label: const Text('Transfer'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: Colors.black,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9999)),
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                      ),
+                    ),
                   ],
                 ),
-              );
-            }),
-          ],
-        ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () => ref.read(walletProvider.notifier).refresh(),
+              child: ListView(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                children: [
+                  const SizedBox(height: 24),
+                  const Text('Recent Activities', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.black)),
+                  const SizedBox(height: 8),
+                  if (w.error != null)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 32),
+                      child: Center(
+                        child: Column(
+                          children: [
+                            Text(w.error!, style: const TextStyle(color: Colors.red, fontSize: 13), textAlign: TextAlign.center),
+                            const SizedBox(height: 8),
+                            TextButton(onPressed: () => ref.read(walletProvider.notifier).refresh(), child: const Text('Retry')),
+                          ],
+                        ),
+                      ),
+                    )
+                  else if (w.loading && w.transactions.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 32),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  else if (w.transactions.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 32),
+                      child: Center(child: Text('No recent activity', style: TextStyle(color: AppColors.textMuted))),
+                    )
+                  else
+                    ...w.transactions.map((tx) {
+                      final m = Map<String, dynamic>.from(tx as Map);
+                      final type = '${m['type'] ?? ''}';
+                      final amt = m['amount'] ?? 0;
+                      final created = m['createdAt']?.toString() ?? '';
+                      final isCredit = type == 'deposit' || type == 'ride_payment';
+                      final icon = isCredit ? Icons.add : Icons.send;
+                      final date = created.length >= 10 ? created.substring(0, 10) : created;
+                      return WalletActivityItem(
+                        icon: icon,
+                        title: walletTxTypeLabel(type),
+                        subtitle: date,
+                        amount: '${isCredit ? '+' : '-'}EGP ${amt.toStringAsFixed(2)}',
+                        isCredit: isCredit,
+                      );
+                    }),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

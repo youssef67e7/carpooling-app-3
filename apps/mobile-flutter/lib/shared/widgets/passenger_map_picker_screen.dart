@@ -5,11 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import '../../core/providers/ride_provider.dart';
-import '../../core/theme/weret_tokens.dart';
+import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_styles.dart';
 import '../../core/utils/map_scene_builder.dart';
-import '../../shared/widgets/custom_button.dart';
-import '../../shared/widgets/weret_ambient_background.dart';
-import '../../shared/widgets/weret_pill_toggle.dart';
 import '../../shared/widgets/weret_ride_map.dart';
 
 enum MapPickerMode { pickup, destination }
@@ -115,14 +113,6 @@ class _PassengerMapPickerScreenState extends ConsumerState<PassengerMapPickerScr
     _applyCenter(p);
   }
 
-  String get _title => _mode == MapPickerMode.pickup
-      ? 'passengerMapPickerPickup'.tr()
-      : 'passengerMapPickerDestination'.tr();
-
-  String get _hint => _mode == MapPickerMode.pickup
-      ? 'passengerMapPickerHintPickup'.tr()
-      : 'passengerMapPickerHintDestination'.tr();
-
   @override
   Widget build(BuildContext context) {
     final scene = buildPassengerMapScene(
@@ -130,92 +120,240 @@ class _PassengerMapPickerScreenState extends ConsumerState<PassengerMapPickerScr
       destination: _destination,
       previewRoute: _routePoints,
     );
+    final bottomPad = MediaQuery.of(context).padding.bottom;
 
     return Scaffold(
-      backgroundColor: WeretTokens.bg,
-      appBar: AppBar(
-        leading: IconButton(icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20), onPressed: () => Navigator.pop(context)),
-        title: Text(_title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-        centerTitle: true,
-        backgroundColor: Colors.transparent,
-        surfaceTintColor: Colors.transparent,
-        actions: [
-          IconButton(
-            tooltip: 'mapFitRoute'.tr(),
-            icon: const Icon(Icons.fit_screen),
-            onPressed: () => fitMapToPoints(_map, scene.fitPoints),
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          // Full‑screen map
+          WeretRideMap(
+            center: _center,
+            controller: _map,
+            height: MediaQuery.of(context).size.height,
+            scene: scene,
+            interactive: true,
+            autoFit: false,
           ),
-        ],
-      ),
-      body: WeretAmbientBackground(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-              child: WeretMapModeToggle(
-                pickupSelected: _mode == MapPickerMode.pickup,
-                onPickup: () => setState(() => _mode = MapPickerMode.pickup),
-                onDestination: () => setState(() => _mode = MapPickerMode.destination),
-                pickupLabel: 'pickup'.tr(),
-                destinationLabel: 'destination'.tr(),
+
+          // Center pin (existing behavior preserved)
+          Center(
+            child: IgnorePointer(
+              child: Icon(Icons.location_pin, size: 44, color: Colors.red.shade700),
+            ),
+          ),
+
+          // Back button — top left
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 8,
+            left: 16,
+            child: Material(
+              color: Colors.white,
+              elevation: 0,
+              shape: const CircleBorder(),
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: () => Navigator.pop(context),
+                child: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.1),
+                        blurRadius: 4,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(Icons.arrow_back, color: Colors.black, size: 20),
+                ),
               ),
             ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    return Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        WeretRideMap(
-                          center: _center,
-                          controller: _map,
-                          height: constraints.maxHeight,
-                          scene: scene,
-                          interactive: true,
-                          autoFit: false,
+          ),
+
+          // Location input card — top area
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 64,
+            left: 16,
+            right: 16,
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 10,
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.circle, color: AppColors.textSecondary, size: 16),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          _pickup != null ? '${_pickup!.latitude.toStringAsFixed(4)}, ${_pickup!.longitude.toStringAsFixed(4)}' : 'passengerMapPickerPickup'.tr(),
+                          style: const TextStyle(fontSize: 14, color: Colors.black),
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        IgnorePointer(child: Icon(Icons.location_pin, size: 44, color: Colors.red.shade700)),
-                        Positioned(
-                          top: 10,
-                          right: 10,
-                          child: Material(
-                            color: WeretTokens.surface,
-                            shape: const CircleBorder(),
-                            elevation: 1,
-                            child: IconButton(
-                              tooltip: 'mapRecenter'.tr(),
-                              icon: const Icon(Icons.my_location, size: 20),
-                              onPressed: _goToMyLocation,
+                      ),
+                    ],
+                  ),
+                  SizedBox(
+                    height: 28,
+                    child: Row(
+                      children: [
+                        const SizedBox(width: 8),
+                        Column(
+                          children: List.generate(
+                            4,
+                            (i) => Container(
+                              margin: const EdgeInsets.symmetric(vertical: 2),
+                              width: 2,
+                              height: 3,
+                              decoration: BoxDecoration(
+                                color: AppColors.borderMedium,
+                                borderRadius: BorderRadius.circular(1),
+                              ),
                             ),
                           ),
                         ),
                       ],
-                    );
-                  },
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(_hint, textAlign: TextAlign.center, style: const TextStyle(color: WeretTokens.textSecondary, height: 1.4)),
-                  const SizedBox(height: 12),
-                  CustomButton(
-                    title: 'passengerMapPickerDone'.tr(),
-                    onPressed: () {
-                      _confirmCenter();
-                      Navigator.pop(context, {'pickup': _pickup, 'destination': _destination});
-                    },
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      const Icon(Icons.location_on, color: AppColors.textSecondary, size: 16),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          _destination != null ? '${_destination!.latitude.toStringAsFixed(4)}, ${_destination!.longitude.toStringAsFixed(4)}' : 'passengerMapPickerDestination'.tr(),
+                          style: const TextStyle(fontSize: 14, color: AppColors.textMuted),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
-          ],
-        ),
+          ),
+
+          // GPS button — bottom right (above bottom card)
+          Positioned(
+            right: 16,
+            bottom: 220 + bottomPad,
+            child: Material(
+              color: Colors.white,
+              elevation: 0,
+              shape: const CircleBorder(),
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: _goToMyLocation,
+                child: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.1),
+                        blurRadius: 4,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(Icons.my_location, color: Colors.black, size: 20),
+                ),
+              ),
+            ),
+          ),
+
+          // Bottom ride info card
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + bottomPad),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(24),
+                  topRight: Radius.circular(24),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, -2),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: Colors.black,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.drive_eta, color: Colors.white, size: 24),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Economy Ride', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16, color: Colors.black)),
+                            const SizedBox(height: 2),
+                            const Text('3 mins away', style: TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+                          ],
+                        ),
+                      ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          const Text('EGP 12.50', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.black)),
+                          Text('STANDARD', style: AppStyles.sectionLabel),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 55,
+                    child: FilledButton(
+                      onPressed: () {
+                        _confirmCenter();
+                        Navigator.pop(context, {'pickup': _pickup, 'destination': _destination});
+                      },
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                      ),
+                      child: Text(_mode == MapPickerMode.pickup ? 'passengerMapPickerPickup'.tr() : 'passengerMapPickerDestination'.tr()),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

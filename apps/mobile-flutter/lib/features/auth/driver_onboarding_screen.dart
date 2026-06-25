@@ -34,6 +34,8 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
   final _licenseNumber = TextEditingController();
   final _licenseExpiry = TextEditingController();
   final _makeModel = TextEditingController();
+  final _carColor = TextEditingController(text: 'White');
+  final _carSeats = TextEditingController(text: '4');
   final _plate = TextEditingController();
   final _bankName = TextEditingController();
   final _iban = TextEditingController();
@@ -82,6 +84,8 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
     _licenseNumber.dispose();
     _licenseExpiry.dispose();
     _makeModel.dispose();
+    _carColor.dispose();
+    _carSeats.dispose();
     _plate.dispose();
     _bankName.dispose();
     _iban.dispose();
@@ -130,8 +134,10 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
   void _back() {
     if (_step > 0) {
       setState(() => _step -= 1);
+    } else if (widget.fromSignup) {
+      context.go('/register');
     } else {
-      context.pop();
+      context.go('/passenger/home');
     }
   }
 
@@ -164,9 +170,9 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
           'imageUrl': _carImageUrl!,
           'brand': mm[0],
           'model': mm[1].isEmpty ? mm[0] : mm[1],
-          'color': 'White',
+          'color': _carColor.text.trim(),
           'plateNumber': _plate.text.trim(),
-          'seats': 4,
+          'seats': int.tryParse(_carSeats.text.trim()) ?? 4,
           'carCategory': _vehicleType,
           'year': _year,
           'registrationDocUrl': _registrationDocUrl,
@@ -442,6 +448,14 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
                 }),
                 onChanged: (v) => setState(() => _year = v ?? _year),
               ),
+              const SizedBox(height: 12),
+              AuthFormField(label: 'driverCarColor'.tr(), controller: _carColor, validator: (v) => validateRequired(v, messageKey: 'driverRegErrCarColor')),
+              const SizedBox(height: 12),
+              AuthFormField(label: 'driverCarSeats'.tr(), controller: _carSeats, keyboardType: TextInputType.number, validator: (v) {
+                final s = int.tryParse(v ?? '');
+                if (s == null || s < 2 || s > 20) return 'driverCarSeatsInvalid'.tr();
+                return null;
+              }),
               const SizedBox(height: 12),
               AuthFormField(label: 'driverCarPlate'.tr(), controller: _plate, validator: (v) => validateRequired(v, messageKey: 'authValidationCarPlateRequired')),
             ],

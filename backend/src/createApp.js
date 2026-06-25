@@ -82,6 +82,23 @@ export function createApp() {
   };
   app.get(["/health", "/api/health"], healthHandler);
 
+  const SENSITIVE_KEYS = ["SECRET", "KEY", "PASSWORD", "TOKEN", "PRIVATE", "URI"];
+  const isSensitive = (k) => SENSITIVE_KEYS.some((s) => k.toUpperCase().includes(s));
+  const maskVal = (v) => (v?.length > 8 ? v.slice(0, 4) + "…" + v.slice(-4) : v ? "****" : null);
+
+  app.get(["/debug/env", "/api/debug/env"], (_req, res) => {
+    const raw = { ...process.env };
+    const vars = Object.keys(raw)
+      .filter((k) => !k.startsWith("npm_") && k !== "Path" && !k.startsWith("_"))
+      .sort()
+      .map((k) => ({
+        key: k,
+        value: isSensitive(k) ? maskVal(raw[k]) : raw[k],
+        set: Boolean(raw[k]),
+      }));
+    res.json({ count: vars.length, vars, vercel: Boolean(process.env.VERCEL) });
+  });
+
   app.use(globalApiLimiter);
 
   app.use(["/auth", "/api/auth"], authRoutes);
