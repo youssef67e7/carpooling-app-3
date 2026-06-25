@@ -1,23 +1,10 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
-const _tokenKey = 'weret_token';
-
-typedef UnauthorizedHandler = void Function();
-
-UnauthorizedHandler? globalUnauthorizedHandler;
-
-class ApiConfig {
-  ApiConfig._();
-
-  static const String baseUrl = 'https://carpooling-app-3-virid.vercel.app/api';
-}
+import 'auth_interceptor.dart';
 
 class ApiClient {
-  ApiClient(this._prefs) {
-    print('🌐 APP IS CONNECTING TO: ${ApiConfig.baseUrl}');
+  ApiClient() {
     _dio = Dio(
       BaseOptions(
         baseUrl: ApiConfig.baseUrl,
@@ -26,6 +13,7 @@ class ApiClient {
         headers: {'Accept': 'application/json'},
       ),
     );
+    _dio.interceptors.insert(0, AuthInterceptor(_dio));
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) {
@@ -59,51 +47,11 @@ class ApiClient {
         },
       ),
     );
-    _dio.interceptors.add(
-      InterceptorsWrapper(
-        onRequest: (options, handler) async {
-          final token = _prefs.getString(_tokenKey);
-          if (token != null && token.isNotEmpty) {
-            options.headers['Authorization'] = 'Bearer $token';
-          }
-          handler.next(options);
-        },
-        onError: (err, handler) async {
-          if (err.response?.statusCode == 401 && globalUnauthorizedHandler != null) {
-            globalUnauthorizedHandler!();
-          }
-          if (err.requestOptions.method == 'GET' && _shouldRetry(err)) {
-            try {
-              final res = await _dio.fetch(err.requestOptions);
-              return handler.resolve(res);
-            } catch (_) {}
-          }
-          handler.next(err);
-        },
-      ),
-    );
   }
 
   late final Dio _dio;
-  final SharedPreferences _prefs;
 
   Dio get dio => _dio;
-
-  static bool _shouldRetry(DioException err) {
-    return err.type == DioExceptionType.connectionTimeout ||
-        err.type == DioExceptionType.receiveTimeout ||
-        (err.response?.statusCode ?? 0) >= 500;
-  }
-
-  Future<void> setToken(String? token) async {
-    if (token == null || token.isEmpty) {
-      await _prefs.remove(_tokenKey);
-    } else {
-      await _prefs.setString(_tokenKey, token);
-    }
-  }
-
-  String? get token => _prefs.getString(_tokenKey);
 
   Future<Map<String, dynamic>> getJson(String path, {Map<String, dynamic>? query}) async {
     final res = await _dio.get<Map<String, dynamic>>(path, queryParameters: query);
@@ -135,6 +83,5 @@ class ApiClient {
 }
 
 final apiClientProvider = FutureProvider<ApiClient>((ref) async {
-  final prefs = await SharedPreferences.getInstance();
-  return ApiClient(prefs);
+  return ApiClient();
 });

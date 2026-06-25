@@ -2,18 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../core/api/auth_interceptor.dart';
+import '../../core/constants/vehicle_types.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/providers/ui_provider.dart';
-import '../../core/constants/vehicle_types.dart';
-import '../../core/api/api_client.dart';
+import '../../core/theme/weret_tokens.dart';
+import '../../core/utils/logout_action.dart';
+import '../../shared/widgets/weret_ambient_background.dart';
 import '../../shared/widgets/weret_list_screen.dart';
 import '../../shared/widgets/weret_text_field.dart';
 import '../../shared/widgets/custom_button.dart';
 import '../../shared/widgets/weret_pill_toggle.dart';
 import '../../shared/widgets/weret_section_card.dart';
-import '../../shared/widgets/weret_ambient_background.dart';
-import '../../core/theme/weret_tokens.dart';
-import '../../core/utils/logout_action.dart';
 import '../../core/utils/show_alert.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {

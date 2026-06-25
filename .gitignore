@@ -77,3 +77,11 @@ backend/uploads/public/**
 coverage/
 .cache/
 *.pem
+
+# Logs
+flutter_logs.txt
+flutter_logs_err.txt
+# Generated docs
+/updated_docs/
+# Android build
+apps/mobile-flutter/android/build/

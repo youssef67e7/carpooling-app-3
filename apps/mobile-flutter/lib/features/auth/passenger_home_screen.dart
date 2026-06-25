@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers/ride_provider.dart';
-import '../../core/realtime/realtime_bridge.dart';
 import '../../core/theme/weret_tokens.dart';
 import '../../core/utils/geo_helpers.dart';
 import '../../core/utils/map_polyline_model.dart';
@@ -35,7 +34,6 @@ class _PassengerHomeScreenState extends ConsumerState<PassengerHomeScreen> {
   String _vehicleType = 'delivery';
   bool _creating = false;
   final _map = MapController();
-  String? _subscribedRideId;
   String? _ratingPromptRideId;
   bool _offerLoading = false;
   Map<String, dynamic>? _routePreview;
@@ -47,27 +45,17 @@ class _PassengerHomeScreenState extends ConsumerState<PassengerHomeScreen> {
   void initState() {
     super.initState();
     Future.microtask(() async {
-      await ref.read(rideProvider.notifier).fetchVehicles();
-      await ref.read(rideProvider.notifier).fetchHistory();
-      await ref.read(rideProvider.notifier).refreshActiveRide();
-      await _initLocation();
+      try {
+        await ref.read(rideProvider.notifier).fetchVehicles();
+        await ref.read(rideProvider.notifier).fetchHistory();
+        await ref.read(rideProvider.notifier).refreshActiveRide();
+        await _initLocation();
+      } catch (_) {}
     });
-  }
-
-  void _syncRideSubscription(Map<String, dynamic>? ride) {
-    final socket = ref.read(socketServiceProvider);
-    final rideId = ride != null ? '${ride['_id']}' : null;
-    if (_subscribedRideId == rideId) return;
-    if (_subscribedRideId != null) socket.unsubscribeRide(_subscribedRideId!);
-    _subscribedRideId = rideId;
-    if (rideId != null) socket.subscribeRide(rideId);
   }
 
   @override
   void dispose() {
-    if (_subscribedRideId != null) {
-      ref.read(socketServiceProvider).unsubscribeRide(_subscribedRideId!);
-    }
     super.dispose();
   }
 
@@ -87,11 +75,15 @@ class _PassengerHomeScreenState extends ConsumerState<PassengerHomeScreen> {
   }
 
   Future<void> _refreshNearby() async {
-    final p = _pickup;
-    if (p != null) {
-      await ref.read(rideProvider.notifier).fetchNearbyDrivers(_vehicleType, lat: p.latitude, lng: p.longitude);
-    } else {
-      await ref.read(rideProvider.notifier).fetchNearbyDrivers(_vehicleType);
+    try {
+      final p = _pickup;
+      if (p != null) {
+        await ref.read(rideProvider.notifier).fetchNearbyDrivers(_vehicleType, lat: p.latitude, lng: p.longitude);
+      } else {
+        await ref.read(rideProvider.notifier).fetchNearbyDrivers(_vehicleType);
+      }
+    } catch (e) {
+      debugPrint('Nearby drivers fetch failed: $e');
     }
   }
 
@@ -105,12 +97,17 @@ class _PassengerHomeScreenState extends ConsumerState<PassengerHomeScreen> {
       }
       return;
     }
-    final preview = await ref.read(rideProvider.notifier).fetchRoutePreview(
-          _pickup!.latitude,
-          _pickup!.longitude,
-          _destination!.latitude,
-          _destination!.longitude,
-        );
+    Map<String, dynamic>? preview;
+    try {
+      preview = await ref.read(rideProvider.notifier).fetchRoutePreview(
+            _pickup!.latitude,
+            _pickup!.longitude,
+            _destination!.latitude,
+            _destination!.longitude,
+          );
+    } catch (e) {
+      debugPrint('Route preview fetch failed: $e');
+    }
     if (!mounted) return;
     setState(() {
       _routePreview = preview;
@@ -140,8 +137,12 @@ class _PassengerHomeScreenState extends ConsumerState<PassengerHomeScreen> {
       _pickup = result['pickup'] ?? _pickup;
       _destination = result['destination'] ?? _destination;
     });
-    await _refreshRoutePreview();
-    await _refreshNearby();
+    try {
+      await _refreshRoutePreview();
+      await _refreshNearby();
+    } catch (e) {
+      debugPrint('Picker post-update fetch failed: $e');
+    }
   }
 
   void _fitMapScene(WeretMapScene scene) {
@@ -193,7 +194,6 @@ class _PassengerHomeScreenState extends ConsumerState<PassengerHomeScreen> {
         });
       }
     });
-    _syncRideSubscription(ride.activeRide);
     final active = ride.activeRide;
     final pickup = _pickup ?? (active != null ? pickupFromRide(active) : null);
     final destination = _destination ?? (active != null ? destinationFromRide(active) : null);
@@ -282,7 +282,11 @@ class _PassengerHomeScreenState extends ConsumerState<PassengerHomeScreen> {
               selected: _vehicleType,
               onSelected: (v) async {
                 setState(() => _vehicleType = v);
-                await _refreshNearby();
+                try {
+                  await _refreshNearby();
+                } catch (e) {
+                  debugPrint('Vehicle type change nearby fetch failed: $e');
+                }
               },
             ),
             const SizedBox(height: 18),

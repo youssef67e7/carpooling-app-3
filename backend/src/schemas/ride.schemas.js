@@ -54,21 +54,17 @@ export const poolMatchesSchema = z.object({
     .optional(),
 });
 
-export const routePreviewSchema = z.object({
-  origin: z.object({
-    lat: z.number().min(-90).max(90),
-    lng: z.number().min(-180).max(180),
-  }),
-  destination: z.object({
-    lat: z.number().min(-90).max(90),
-    lng: z.number().min(-180).max(180),
-  }),
+export const nearbyDriversSchema = z.object({
+  lat: z.coerce.number().min(-90).max(90),
+  lng: z.coerce.number().min(-180).max(180),
+  radiusKm: z.coerce.number().positive().max(50000).optional(),
 });
 
-export const nearbyDriversSchema = z.object({
-  lat: z.number().min(-90).max(90),
-  lng: z.number().min(-180).max(180),
-  radius: z.number().positive().max(50000).optional(),
+export const routePreviewSchema = z.object({
+  fromLat: z.coerce.number().min(-90).max(90),
+  fromLng: z.coerce.number().min(-180).max(180),
+  toLat: z.coerce.number().min(-90).max(90),
+  toLng: z.coerce.number().min(-180).max(180),
 });
 
 export const rideHistoryQuerySchema = z.object({

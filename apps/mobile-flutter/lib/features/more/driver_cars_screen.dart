@@ -5,6 +5,8 @@ import '../../core/providers/driver_provider.dart';
 import '../../core/theme/weret_tokens.dart';
 import '../../core/utils/api_error_message.dart';
 import '../../shared/widgets/custom_button.dart';
+import '../../shared/widgets/empty_state.dart';
+import '../../shared/widgets/shimmer_loading.dart';
 import '../../shared/widgets/weret_page_scaffold.dart';
 import '../../shared/widgets/weret_text_field.dart';
 
@@ -36,6 +38,36 @@ class _DriverCarsScreenState extends ConsumerState<DriverCarsScreen> {
     _color.dispose();
     _plate.dispose();
     super.dispose();
+  }
+
+  Widget _carShimmer() {
+    return ShimmerLoading(
+      isLoading: true,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: WeretTokens.surface,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          children: [
+            ShimmerBox(width: 48, height: 48, borderRadius: BorderRadius.circular(8)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ShimmerBox(height: 14, width: 160),
+                  const SizedBox(height: 8),
+                  ShimmerBox(height: 10, width: 100),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _addCar() async {
@@ -82,9 +114,15 @@ class _DriverCarsScreenState extends ConsumerState<DriverCarsScreen> {
           children: [
             Text('driverCarsHint'.tr(), style: const TextStyle(color: WeretTokens.textSecondary, height: 1.4)),
             const SizedBox(height: 16),
-            if (driver.loading) const Center(child: CircularProgressIndicator(strokeWidth: 2))
+            if (driver.loading && cars.isEmpty)
+              ...List.generate(3, (_) => _carShimmer())
             else if (cars.isEmpty)
-              Text('driverCarsEmpty'.tr())
+              EmptyState(
+                icon: Icons.directions_car_outlined,
+                title: 'noVehicles'.tr(),
+                subtitle: 'driverCarsEmpty'.tr(),
+                action: CustomButton(title: 'driverCarAdd'.tr(), onPressed: () => setState(() => _showForm = true)),
+              )
             else
               ...cars.map((c) {
                 final car = Map<String, dynamic>.from(c as Map);

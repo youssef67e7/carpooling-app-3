@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../shared/widgets/weret_screen_scaffold.dart';
+import '../../shared/widgets/empty_state.dart';
 
 /// Migrated from React Native: screens/wallet/WalletHistoryScreen.js
 /// Status: generated stub — wire business logic from mobile-legacy reference.
@@ -10,12 +10,14 @@ class WalletHistoryScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const WeretScreenScaffold(
-      title: 'WalletHistory',
-      rnSource: 'screens/wallet/WalletHistoryScreen.js',
-      child: Center(
-        child: Text('WalletHistoryScreen — migrated route preserved'),
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('WalletHistory'),
+        centerTitle: true,
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
       ),
+      body: const Center(child: EmptyState(icon: Icons.account_balance_wallet_outlined, title: 'walletHistory', subtitle: 'comingSoon')),
     );
   }
 }

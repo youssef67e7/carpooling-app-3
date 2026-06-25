@@ -2,10 +2,18 @@ import 'package:flutter/material.dart';
 import '../../core/theme/weret_tokens.dart';
 
 class EmptyState extends StatelessWidget {
-  const EmptyState({super.key, required this.title, this.subtitle, this.icon = Icons.inbox_outlined});
+  final IconData icon;
   final String title;
   final String? subtitle;
-  final IconData icon;
+  final Widget? action;
+
+  const EmptyState({
+    super.key,
+    required this.title,
+    this.subtitle,
+    this.icon = Icons.inbox_outlined,
+    this.action,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -21,6 +29,10 @@ class EmptyState extends StatelessWidget {
             if (subtitle != null) ...[
               const SizedBox(height: 8),
               Text(subtitle!, textAlign: TextAlign.center, style: const TextStyle(color: WeretTokens.textSecondary)),
+            ],
+            if (action != null) ...[
+              const SizedBox(height: 24),
+              action!,
             ],
           ],
         ),

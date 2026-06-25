@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../../shared/widgets/weret_screen_scaffold.dart';
+import '../../shared/widgets/empty_state.dart';
+import '../../shared/widgets/weret_screen_scaffold.dart';
 
-/// Migrated from React Native: screens/AdminRidesScreen.js
-/// Status: generated stub — wire business logic from mobile-legacy reference.
 class AdminRidesScreen extends StatelessWidget {
   const AdminRidesScreen({super.key});
 
@@ -10,12 +9,10 @@ class AdminRidesScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const WeretScreenScaffold(
+    return WeretScreenScaffold(
       title: 'AdminRides',
       rnSource: 'screens/AdminRidesScreen.js',
-      child: Center(
-        child: Text('AdminRidesScreen — migrated route preserved'),
-      ),
+      child: const EmptyState(icon: Icons.route_outlined, title: 'adminRides', subtitle: 'comingSoon'),
     );
   }
 }

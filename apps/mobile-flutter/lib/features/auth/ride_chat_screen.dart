@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:easy_localization/easy_localization.dart';
 import '../../core/providers/ride_provider.dart';
-import '../../core/realtime/realtime_bridge.dart';
 import '../../core/theme/weret_tokens.dart';
+import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/weret_ambient_background.dart';
 
 class RideChatScreen extends ConsumerStatefulWidget {
@@ -17,32 +17,15 @@ class RideChatScreen extends ConsumerStatefulWidget {
 class _RideChatScreenState extends ConsumerState<RideChatScreen> {
   List<dynamic> _messages = [];
   final _input = TextEditingController();
-  void Function(dynamic)? _messageHandler;
 
   @override
   void initState() {
     super.initState();
-    Future.microtask(_bootstrap);
-  }
-
-  Future<void> _bootstrap() async {
-    final socket = ref.read(socketServiceProvider);
-    socket.subscribeRide(widget.rideId);
-    _messageHandler = (data) {
-      if (data is! Map || '${data['rideId']}' != widget.rideId) return;
-      final message = data['message'];
-      if (message == null || !mounted) return;
-      setState(() => _messages = [..._messages, message]);
-    };
-    socket.on('ride:message', _messageHandler!);
-    await _load();
+    Future.microtask(_load);
   }
 
   @override
   void dispose() {
-    final socket = ref.read(socketServiceProvider);
-    if (_messageHandler != null) socket.off('ride:message', _messageHandler);
-    socket.unsubscribeRide(widget.rideId);
     _input.dispose();
     super.dispose();
   }
@@ -75,7 +58,7 @@ class _RideChatScreenState extends ConsumerState<RideChatScreen> {
           children: [
             Expanded(
               child: _messages.isEmpty
-                  ? Center(child: Text('rideChatEmpty'.tr(), style: const TextStyle(color: WeretTokens.textSecondary)))
+                  ? const EmptyState(icon: Icons.chat_outlined, title: 'noMessages', subtitle: 'startConversation')
                   : ListView.builder(
                       padding: const EdgeInsets.all(16),
                       itemCount: _messages.length,

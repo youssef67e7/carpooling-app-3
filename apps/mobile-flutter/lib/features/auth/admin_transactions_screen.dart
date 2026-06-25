@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../../shared/widgets/weret_screen_scaffold.dart';
+import '../../shared/widgets/empty_state.dart';
+import '../../shared/widgets/weret_screen_scaffold.dart';
 
-/// Migrated from React Native: screens/AdminTransactionsScreen.js
-/// Status: generated stub — wire business logic from mobile-legacy reference.
 class AdminTransactionsScreen extends StatelessWidget {
   const AdminTransactionsScreen({super.key});
 
@@ -10,12 +9,10 @@ class AdminTransactionsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const WeretScreenScaffold(
+    return WeretScreenScaffold(
       title: 'AdminTransactions',
       rnSource: 'screens/AdminTransactionsScreen.js',
-      child: Center(
-        child: Text('AdminTransactionsScreen — migrated route preserved'),
-      ),
+      child: const EmptyState(icon: Icons.receipt_outlined, title: 'adminTransactions', subtitle: 'comingSoon'),
     );
   }
 }

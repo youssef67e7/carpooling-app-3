@@ -16,9 +16,6 @@ class ApiEndpoints {
   static const authVerifyPassword = '/auth/verify-password';
   static const switchRole = '/switch-role';
 
-  static const aiFareSuggest = '/ai/fare/suggest';
-  static const aiPlacesRerank = '/ai/places/rerank';
-
   static const driverApplicationMe = '/driver-application/me';
   static const driverApplicationSubmit = '/driver-application/submit';
   static const driverDashboard = '/driver/dashboard';
@@ -35,14 +32,14 @@ class ApiEndpoints {
   static const vehicles = '/vehicles';
   static const ridesNearbyDrivers = '/rides/nearby-drivers';
   static const ridesRoutePreview = '/rides/route-preview';
-  static const ridesCreate = '/v2/rides';
+  static const ridesCreate = '/rides';
   static String ride(String id) => '/rides/$id';
-  static String rideStatus(String id) => '/v2/rides/$id/status';
+  static String rideStatus(String id) => '/rides/$id/status';
   static String rideMessages(String id) => '/rides/$id/messages';
   static const ridesHistory = '/rides/history';
-  static const ridesAvailable = '/v2/rides/requested';
+  static const ridesAvailable = '/rides/requested';
   static const ridesMyActive = '/rides/my-active';
-  static String ridesAccept(String id) => '/v2/rides/$id/accept';
+  static String ridesAccept(String id) => '/rides/$id/accept';
   static const ridesRespondProposal = '/rides/respond-proposal';
   static const ridesPassengerMinFare = '/rides/passenger-min-fare';
   static const ridesDriverConfirmBooking = '/rides/driver-confirm-booking';
@@ -73,5 +70,8 @@ class ApiEndpoints {
   static const reports = '/reports';
   static const upload = '/upload';
 
-  static const authVerifyFirebasePhone = '/v2/auth/verify-firebase-phone';
+  static const authRefresh = '/auth/refresh';
+  static const authLogout = '/auth/logout';
+  static const authVerifyFirebasePhone = '/auth/verify-firebase-phone';
+  static const authRegisterToken = '/auth/register-token';
 }

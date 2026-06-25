@@ -1,4 +1,4 @@
-import '../api/api_client.dart';
+import '../api/auth_interceptor.dart';
 
 /// Resolves API-relative upload paths to absolute URLs for display.
 class UploadUrl {

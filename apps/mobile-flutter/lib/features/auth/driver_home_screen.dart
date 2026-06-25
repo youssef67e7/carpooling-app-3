@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
 import '../../core/providers/ride_provider.dart';
 import '../../core/providers/auth_provider.dart';
-import '../../core/realtime/realtime_bridge.dart';
 import '../../core/services/driver_location_tracker.dart';
 import '../../core/theme/weret_tokens.dart';
 import '../../core/utils/geo_helpers.dart';
@@ -25,8 +24,6 @@ class DriverHomeScreen extends ConsumerStatefulWidget {
 }
 
 class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
-  String? _feedVehicleType;
-  final Set<String> _subscribedRideIds = {};
   final _map = MapController();
   num _sessionEarnings = 0;
   num? _rating;
@@ -35,8 +32,6 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
   void initState() {
     super.initState();
     Future.microtask(() async {
-      final vt = ref.read(authProvider).user?.vehicleType ?? 'delivery';
-      _subscribeFeed(vt);
       await ref.read(rideProvider.notifier).fetchDriverActiveRides();
       await ref.read(rideProvider.notifier).fetchAvailable();
       await ref.read(driverProvider.notifier).refresh();
@@ -49,28 +44,6 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
       }
       _syncLocationTracker();
     });
-  }
-
-  void _subscribeFeed(String vehicleType) {
-    if (_feedVehicleType == vehicleType) return;
-    final socket = ref.read(socketServiceProvider);
-    if (_feedVehicleType != null) socket.unsubscribeDriverFeed(_feedVehicleType!);
-    _feedVehicleType = vehicleType;
-    socket.subscribeDriverFeed(vehicleType);
-  }
-
-  void _syncRideSubscriptions(List<Map<String, dynamic>> activeRides) {
-    final socket = ref.read(socketServiceProvider);
-    final next = activeRides.map((r) => '${r['_id']}').where((id) => id.isNotEmpty && id != 'null').toSet();
-    for (final id in _subscribedRideIds.difference(next)) {
-      socket.unsubscribeRide(id);
-    }
-    for (final id in next.difference(_subscribedRideIds)) {
-      socket.subscribeRide(id);
-    }
-    _subscribedRideIds
-      ..clear()
-      ..addAll(next);
   }
 
   void _syncLocationTracker() {
@@ -99,13 +72,6 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
   @override
   void dispose() {
     ref.read(driverLocationTrackerProvider).stop();
-    if (_feedVehicleType != null) {
-      ref.read(socketServiceProvider).unsubscribeDriverFeed(_feedVehicleType!);
-    }
-    final socket = ref.read(socketServiceProvider);
-    for (final id in _subscribedRideIds) {
-      socket.unsubscribeRide(id);
-    }
     super.dispose();
   }
 
@@ -121,8 +87,6 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
     final canTakeMore = ride.driverCanTakeMore;
     final maxC = ride.driverMaxConcurrent;
 
-    _subscribeFeed(vehicleType);
-    _syncRideSubscriptions(activeRides);
     _syncLocationTracker();
 
     LatLng? mapPickup;

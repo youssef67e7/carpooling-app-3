@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../api/api_client.dart';
 import '../api/api_endpoints.dart';
 import '../services/session_reset.dart';
+import '../services/token_manager.dart';
 import '../utils/api_error_message.dart';
 import '../../shared/models/weret_user.dart';
 
@@ -65,9 +66,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> hydrate() async {
     await _loadGoogleConfig();
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('weret_token');
+    final token = await TokenManager.getAccessToken();
+    if (token == null || token.isEmpty) {
+      state = state.copyWith(hydrated: true);
+      return;
+    }
     WeretUser? user;
+    final prefs = await SharedPreferences.getInstance();
     final cached = prefs.getString(_userCacheKey);
     if (cached != null) {
       try {
@@ -75,8 +80,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
       } catch (_) {}
     }
     state = state.copyWith(token: token, user: user, hydrated: true);
-    if (token != null && token.isNotEmpty) {
-      await validateSession();
+    try {
+      final api = await _api;
+      final data = await api.getJson(ApiEndpoints.authMe);
+      final freshUser = WeretUser.fromJson(data['user'] as Map<String, dynamic>? ?? data);
+      await _cacheUser(freshUser);
+      state = state.copyWith(user: freshUser, clearError: true);
+    } catch (_) {
+      await clearLocalSession();
     }
   }
 
@@ -108,6 +119,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
     return null;
   }
 
+  Future<void> clearLocalSession() async {
+    await TokenManager.clearAll();
+    resetSessionProviders(_ref);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_userCacheKey);
+    state = AuthState(
+      hydrated: true,
+      googleWebClientId: state.googleWebClientId,
+      googleSignInEnabled: state.googleSignInEnabled,
+    );
+  }
+
   Future<void> validateSession() async {
     try {
       final api = await _api;
@@ -116,7 +139,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await _cacheUser(user);
       state = state.copyWith(user: user, clearError: true);
     } catch (_) {
-      await logout();
+      await clearLocalSession();
     }
   }
 
@@ -125,9 +148,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await prefs.setString(_userCacheKey, jsonEncode(user.toJson()));
   }
 
-  Future<void> applySession({required String token, required WeretUser user}) async {
-    final api = await _api;
-    await api.setToken(token);
+  Future<void> applySession({required String token, String? refreshToken, required WeretUser user}) async {
+    if (refreshToken != null && refreshToken.isNotEmpty) {
+      await TokenManager.saveTokens(accessToken: token, refreshToken: refreshToken);
+    } else {
+      await TokenManager.saveAccessToken(token);
+    }
     await _cacheUser(user);
     state = state.copyWith(token: token, user: user, clearError: true, loading: false);
   }
@@ -137,9 +163,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       final api = await _api;
       final data = await api.postJson(ApiEndpoints.authLogin, {'email': email, 'password': password});
-      final token = '${data['token']}';
+      final token = '${data['accessToken'] ?? data['token'] ?? ''}';
+      final refreshToken = '${data['refreshToken'] ?? ''}';
       final user = WeretUser.fromJson(data['user'] as Map<String, dynamic>);
-      await applySession(token: token, user: user);
+      await applySession(token: token, refreshToken: refreshToken, user: user);
     } catch (e) {
       state = state.copyWith(loading: false, error: localizedApiError(e, fallbackKey: 'error'));
       rethrow;
@@ -152,13 +179,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final api = await _api;
       final payload = Map<String, dynamic>.from(body)..remove('role');
       final data = await api.postJson(ApiEndpoints.authRegister, payload);
-      final token = '${data['token']}';
+      final token = '${data['accessToken'] ?? data['token'] ?? ''}';
+      final refreshToken = '${data['refreshToken'] ?? ''}';
       final user = WeretUser.fromJson(data['user'] as Map<String, dynamic>);
       if (driverOnboardingAfter) {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(_postRegisterDriverKey, '1');
       }
-      await applySession(token: token, user: user);
+      await applySession(token: token, refreshToken: refreshToken, user: user);
     } catch (e) {
       state = state.copyWith(loading: false, error: localizedApiError(e, fallbackKey: 'error'));
       rethrow;
@@ -189,7 +217,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       final api = await _api;
       final data = await api.postJson(ApiEndpoints.driverApplicationSubmit, body);
-      if (data['token'] != null) await api.setToken('${data['token']}');
+      if ((data['accessToken'] ?? data['token']) != null) {
+        await TokenManager.saveAccessToken('${data['accessToken'] ?? data['token'] ?? ''}');
+      }
+      if (data['refreshToken'] != null) {
+        final currentAccess = await TokenManager.getAccessToken();
+        await TokenManager.saveTokens(
+          accessToken: currentAccess ?? '${data['accessToken'] ?? data['token'] ?? ''}',
+          refreshToken: '${data['refreshToken']}',
+        );
+      }
       if (data['user'] is Map) {
         final user = WeretUser.fromJson(data['user'] as Map<String, dynamic>);
         await _cacheUser(user);
@@ -231,9 +268,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
         'otp': otp,
         if (name != null && name.isNotEmpty) 'name': name,
       });
-      final token = '${data['token']}';
+      final token = '${data['accessToken'] ?? data['token'] ?? ''}';
+      final refreshToken = '${data['refreshToken'] ?? ''}';
       final user = WeretUser.fromJson(data['user'] as Map<String, dynamic>);
-      await applySession(token: token, user: user);
+      await applySession(token: token, refreshToken: refreshToken, user: user);
     } catch (e) {
       state = state.copyWith(loading: false, error: localizedApiError(e, fallbackKey: 'error'));
       rethrow;
@@ -275,9 +313,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
         'firebaseIdToken': firebaseIdToken,
         if (name != null && name.isNotEmpty) 'name': name,
       });
-      final token = '${data['data']['token']}';
+      final token = '${data['data']['accessToken']}';
+      final refreshToken = '${data['data']['refreshToken'] ?? ''}';
       final user = WeretUser.fromJson(data['data']['user'] as Map<String, dynamic>);
-      await applySession(token: token, user: user);
+      await applySession(token: token, refreshToken: refreshToken, user: user);
     } catch (e) {
       state = state.copyWith(loading: false, error: localizedApiError(e, fallbackKey: 'error'));
       rethrow;
@@ -289,9 +328,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       final api = await _api;
       final data = await api.postJson(ApiEndpoints.authGoogle, {'idToken': idToken});
-      final token = '${data['token']}';
+      final token = '${data['accessToken'] ?? data['token'] ?? ''}';
+      final refreshToken = '${data['refreshToken'] ?? ''}';
       final user = WeretUser.fromJson(data['user'] as Map<String, dynamic>);
-      await applySession(token: token, user: user);
+      await applySession(token: token, refreshToken: refreshToken, user: user);
     } catch (e) {
       state = state.copyWith(loading: false, error: localizedApiError(e, fallbackKey: 'error'));
       rethrow;
@@ -301,10 +341,20 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> switchRole(String role) async {
     final api = await _api;
     final data = await api.postJson(ApiEndpoints.switchRole, {'role': role});
-    if (data['token'] != null) await api.setToken('${data['token']}');
+    if ((data['accessToken'] ?? data['token']) != null) {
+      final accessToken = '${data['accessToken'] ?? data['token'] ?? ''}';
+      await TokenManager.saveAccessToken(accessToken);
+      state = state.copyWith(token: accessToken);
+    }
+    if (data['refreshToken'] != null) {
+      await TokenManager.saveTokens(
+        accessToken: state.token ?? '',
+        refreshToken: '${data['refreshToken']}',
+      );
+    }
     final user = WeretUser.fromJson(data['user'] as Map<String, dynamic>);
     await _cacheUser(user);
-    state = state.copyWith(user: user, token: data['token'] != null ? '${data['token']}' : state.token);
+    state = state.copyWith(user: user, token: (data['accessToken'] ?? data['token']) != null ? '${data['accessToken'] ?? data['token'] ?? ''}' : state.token);
   }
 
   Future<void> updateProfile(Map<String, dynamic> patch) async {
@@ -316,17 +366,19 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> logout() async {
-    resetSessionProviders(_ref);
+    final hasToken = await TokenManager.hasAccessToken();
+    if (hasToken) {
+      try {
+        final api = await _api;
+        await api.postJson(ApiEndpoints.authLogout);
+      } catch (_) {}
+    }
     if (_googleSignInInstance != null) {
       try {
         await _googleSignInInstance!.signOut();
       } catch (_) {}
     }
-    final api = await _api;
-    await api.setToken(null);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_userCacheKey);
-    state = AuthState(hydrated: true, googleWebClientId: state.googleWebClientId, googleSignInEnabled: state.googleSignInEnabled);
+    await clearLocalSession();
   }
 
   void clearError() => state = state.copyWith(clearError: true);
