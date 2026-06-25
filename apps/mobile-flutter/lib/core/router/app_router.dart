@@ -28,6 +28,26 @@ class _ScreenLogObserver extends NavigatorObserver {
     DebugLogger.instance.navigation(prev, name);
     DebugLogger.instance.setCurrentScreen(name);
   }
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    final name = route.settings.name ?? route.settings.toString();
+    final prev = previousRoute?.settings.name ?? 'none';
+    DebugLogger.instance.log(LogLevel.navigation, 'POP', '$name ← $prev');
+    if (previousRoute != null) {
+      DebugLogger.instance.setCurrentScreen(previousRoute.settings.name ?? '?');
+    }
+  }
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    final newName = newRoute?.settings.name ?? '?';
+    final oldName = oldRoute?.settings.name ?? '?';
+    DebugLogger.instance.log(LogLevel.navigation, 'REPLACE', '$oldName → $newName');
+    if (newRoute != null) {
+      DebugLogger.instance.setCurrentScreen(newName);
+    }
+  }
 }
 
 final rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -39,7 +59,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     observers: [_ScreenLogObserver()],
     redirect: (context, state) {
       final auth = ref.read(authProvider);
-      if (!auth.hydrated) return null;
+      if (!auth.hydrated) {
+        DebugLogger.instance.log(LogLevel.navigation, 'REDIRECT', '${state.matchedLocation} → skip (not hydrated)');
+        return null;
+      }
       final loggedIn = auth.isAuthenticated;
       final loc = state.matchedLocation;
       final isAuthRoute = loc.startsWith('/onboarding') ||
@@ -50,24 +73,43 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           loc == '/driver/application-received' ||
           loc == '/driver/verification-status';
 
-      if (!loggedIn && !isAuthRoute) return '/login';
-      if (loggedIn && loc == '/register/driver') return '/passenger/more/driver-onboarding';
+      if (!loggedIn && !isAuthRoute) {
+        DebugLogger.instance.log(LogLevel.navigation, 'REDIRECT', '$loc → /login (unauthenticated)');
+        return '/login';
+      }
+      if (loggedIn && loc == '/register/driver') {
+        DebugLogger.instance.log(LogLevel.navigation, 'REDIRECT', '$loc → /passenger/more/driver-onboarding (already driver)');
+        return '/passenger/more/driver-onboarding';
+      }
       if (loggedIn && isAuthRoute && loc != '/driver/onboarding' && loc != '/driver/application-received' && loc != '/driver/verification-status') {
-        return AuthNavigation.homeForUser(auth.user);
+        final home = AuthNavigation.homeForUser(auth.user);
+        DebugLogger.instance.log(LogLevel.navigation, 'REDIRECT', '$loc → $home (already logged in)');
+        return home;
       }
 
       if (loggedIn) {
         final role = auth.user?.effectiveRole ?? 'passenger';
-        if (auth.user?.role == 'admin' && !loc.startsWith('/admin')) return '/admin/dashboard';
-        if (auth.user?.role != 'admin' && loc.startsWith('/admin')) return AuthNavigation.homeForUser(auth.user);
+        if (auth.user?.role == 'admin' && !loc.startsWith('/admin')) {
+          DebugLogger.instance.log(LogLevel.navigation, 'REDIRECT', '$loc → /admin/dashboard (admin role)');
+          return '/admin/dashboard';
+        }
+        if (auth.user?.role != 'admin' && loc.startsWith('/admin')) {
+          final home = AuthNavigation.homeForUser(auth.user);
+          DebugLogger.instance.log(LogLevel.navigation, 'REDIRECT', '$loc → $home (not admin)');
+          return home;
+        }
         if (role == 'passenger' &&
             loc.startsWith('/driver') &&
             loc != '/driver/onboarding' &&
             loc != '/driver/application-received' &&
             loc != '/driver/verification-status') {
+          DebugLogger.instance.log(LogLevel.navigation, 'REDIRECT', '$loc → /passenger/home (passenger role)');
           return '/passenger/home';
         }
-        if (role == 'driver' && loc.startsWith('/passenger')) return '/driver/home';
+        if (role == 'driver' && loc.startsWith('/passenger')) {
+          DebugLogger.instance.log(LogLevel.navigation, 'REDIRECT', '$loc → /driver/home (driver role)');
+          return '/driver/home';
+        }
       }
       return null;
     },

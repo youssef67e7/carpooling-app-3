@@ -1,50 +1,94 @@
 # Session Summary
 
 ## Goal
-Validate role-based authorization for the complete ride workflow (passenger, driver, admin) and document which endpoints lack role gates.
+Add navigation tracing to debug logs and review all MDs to identify project standards.
 
 ## Progress
 
 ### Done
-- Admin moderation audit: traced 7 actions UI→DB→back-to-UI, fixed 3 defects (P1 notification race, P2 last-admin delete race, P3 dead-code key mismatch)
-- Vercel catch-all route fix and debug env endpoint (`GET /api/debug/env`)
-- Pipeline validation: 5/5 steps PASS — documented in `RIDE_PIPELINE_VALIDATION.md`
-- Full authorization remediation (29/29 PASS) — documented in `RIDE_SECURITY_REMEDIATION.md`
-- Blocked user validation (7/7 PASS) — documented in `BLOCKED_USER_VALIDATION.md`
-- **Ride lifecycle validation (25/25 PASS)** — `test_lifecycle.mjs` validates `pending → accepted → ongoing → completed` state machine, authorization, ownership, and invalid transitions
-- Created `RIDE_LIFECYCLE_VALIDATION.md` with state transition matrix, auth matrix, ownership checks, runtime snapshots, and gap analysis
-- Cleaned up temp test files
+- **Navigation tracing enhanced** in `app_router.dart:23-50`:
+  - `_ScreenLogObserver` now overrides `didPush`, `didPop`, and `didReplace`
+  - `didPop`: logs `POP from → to`, updates current screen
+  - `didReplace`: logs `REPLACE old → new`, updates current screen
+  - `redirect` callback now logs every redirect with reason (not hydrated, unauthenticated, already logged in, admin/passenger/driver role redirect)
+- **Full MD standards review** — 40+ markdown files analyzed, all standards extracted into structured summary below
 
-### Key Findings
-1. **ODM `save()` does NOT persist `selectedCarId`** — Setting `prof.selectedCarId = newId` + `await prof.save()` works through the ODM pipeline (docToRow converts to `selected_car_id`, replacementOne writes to MongoDB), but re-reading shows the field missing. Root cause unclear — workaround: write directly via `getCollection("driver_profiles").updateOne({ user_id }, { $set: { selected_car_id } })`.
-2. **V2 rides use ObjectId `_id`, V1 ODM `findById` only matches string** — V2's `createRide` (native MongoDB `insertOne`) creates ObjectId IDs. V1's `Ride.findById` does `findOne({ _id: String(id) })` which doesn't match ObjectId. V2's `findRideById` handles both. Workaround: create rides via V1 `/create` endpoint (ODM uses string UUIDs).
-3. **Missing ride states**: `driver_arriving` and `passenger_onboard` endpoints do not exist — state machine jumps directly from `accepted` to `ongoing` to `completed`.
-4. **V2 endpoints secured** — `authRequired`, `blockCheck`, `roleRequired` added to all 4 V2 endpoints.
-5. **ODM bug**: `become-driver` creates `DriverProfile` without initializing `cars: []` — `POST /api/driver/cars` crashes with "Cannot read properties of undefined (reading 'push')".
+### Key Standards Found (from MD review)
+
+#### Architecture Rules
+| Rule | Description |
+|------|-------------|
+| Layer isolation | Routes → Services → Mongo (ODM). Routes MUST NOT call mongo/ directly |
+| Services | MUST NOT import HTTP modules (req, res, socket.io) |
+| Mongo layer | MUST NOT contain business logic — only queries/aggregations |
+| Utils | MUST be pure functions with no side effects |
+| Auth middleware chain | `authRequired` → `blockCheck` → `roleRequired(...)` → handler |
+| Error format | `{ error: { code: "ERROR_CODE", message: "...", details?: {} } }` |
+| No Socket.io | REST polling only (Vercel serverless incompatible) |
+| No Firestore | MongoDB only source of truth |
+| FCM only for push | No Firestore, no Realtime DB |
+| Cloudinary for images | Base64 JSON upload (no multer — Vercel incompatible) |
+
+#### Coding Conventions
+| Convention | Standard |
+|------------|----------|
+| Backend language | Vanilla JS (no TypeScript, no ESLint, no Prettier) |
+| Mobile framework | Flutter with Riverpod state management |
+| File naming | Lowercase with hyphens for backend, snake_case for Flutter? (verify) |
+| Priority order | correctness > maintainability > security > scalability > performance > cost > speed |
+| Input validation | Zod schemas in `middleware/validate.js` |
+| ID format | MongoDB ObjectId or UUID |
+| API versioning | Not implemented (noted as missing) |
+| Ride state machine | `pending → accepted → ongoing → completed` (missing: `driver_arriving`, `passenger_onboard`) |
+
+#### Security Standards
+| Standard | Detail |
+|----------|--------|
+| Auth | JWT Bearer token in `Authorization` header |
+| Role check | `roleRequired(['admin', 'driver', 'user'])` at route level |
+| Token expiry | 60d JWT, no refresh tokens |
+| Rate limiting | Global 100/min, Auth 5/min, Ride 10/min, OTP 3/min, Admin 30/min |
+| CORS | Whitelist from `CORS_ORIGINS` env var only (never `*`) |
+| Security headers | `helmet` middleware required |
+| No secrets in git | `.env` gitignored, Vercel env vars for production |
+| Upload security | Flutter → Cloudinary directly (not through Vercel) |
+| Ownership verification | Cloudinary `public_id` contains `userId` |
+
+#### Documentation Standards
+- 18 required docs listed in `PROJECT_MASTER_PLAN.md` (see below)
+- Validation reports use standardized tables (Test | Result | Verdict)
+- No `.env` or secrets in documentation (use `[REDACTED]`)
+- Completion reports mandatory after each task
+- Stop-for-approval before next task
+
+#### Required Documentation Files
+`WERET_FULL_AUDIT.md`, `AUDIT_VALIDATION.md`, `ARCHITECTURE_CURRENT.md`, `TARGET_ARCHITECTURE.md`, `ARCHITECTURE_RULES.md`, `INFRASTRUCTURE.md`, `ENVIRONMENT_SPEC.md`, `DATABASE_SPEC.md`, `API_SPEC.md`, `FREE_TIER_STRATEGY.md`, `REALTIME_STRATEGY.md`, `UPLOAD_STRATEGY.md`, `NOTIFICATION_STRATEGY.md`, `TEST_PLAN.md`, `MIGRATION_PLAN.md`, `DEPLOYMENT_GUIDE.md`, `PROJECT_MASTER_PLAN.md`, `MISSING_INFRASTRUCTURE.md`
+
+#### Testing Standards
+- Unit: Services + utils (Vitest)
+- Integration: API routes (Supertest + mongodb-memory-server)
+- E2E: Cypress (admin) + Flutter integration (mobile)
+- Coverage: Services 80%+, Middleware 90%+, Routes 60%+, Utils 100%, ODM 70%+, Overall 75%+
+- PR size limit: 400 lines max
+- Every PR must include tests, updated types, migration notes
+
+#### Free-Tier Constraints
+- Vercel Hobby: 10s timeout, 100GB/mo bandwidth, no Cron, 3 instances
+- MongoDB M0: 512MB, 100 connections
+- Cloudinary Free: 25GB storage, 25GB/mo bandwidth
+- No Redis (in-memory Map cache)
+- No Sentry (console logging only)
+- SMS_CONSOLE_MODE=1 (no Twilio)
 
 ### Relevant Files
-- `backend/src/routes/rides.js` — V2 endpoints (lines 65-145) with auth middleware; V1 protected routes (lines 200+)
-- `backend/src/services/rideNativeService.js` — V2 service layer (requestRide, acceptRide, getRideStatus, getRequestedRides)
-- `backend/src/middleware/auth.js` — authRequired, blockCheck, roleRequired
-- `backend/src/middleware/driverGate.js` — requireApprovedDriver
-- `backend/src/mongo/queries/rides.js` — native MongoDB ride queries (V2)
-- `backend/src/mongo/nativeClient.js` — V2 MongoDB connection (separate from ODM)
-- `backend/src/mongo/client.js` — ODM MongoDB connection (V1)
-- `backend/src/mongo/fieldMap.js` — docToRow, rowToDoc, syncFieldAliases
-- `backend/src/models/DriverProfile.js` — createModel("driverProfiles", ...) with beforeSave
-- `backend/src/models/Ride.js` — createModel("rides", ...) with refFields
-- `test_lifecycle.mjs` — ride lifecycle validation test (25 tests)
-- `RIDE_LIFECYCLE_VALIDATION.md` — full lifecycle report
-- `RIDE_SECURITY_REMEDIATION.md` — auth remediation report (29/29 PASS)
-- `BLOCKED_USER_VALIDATION.md` — blocked user test report (7/7 PASS)
-
-### Workarounds (for test_lifecycle.mjs)
-1. **Car initialization**: Write `cars` + `selected_car_id` directly via native `getCollection("driver_profiles").updateOne()` (bypass ODM field mapping bug)
-2. **Ride _id type**: Create rides via V1 `/create` endpoint (string UUID) instead of V2 (ObjectId) — ensures V1 `Ride.findById` can match the document
-3. **Vehicle selection**: Bypass broken `POST /api/driver/cars` entirely — pre-populate in MongoDB
+- `apps/mobile-flutter/lib/core/router/app_router.dart` — Enhanced `_ScreenLogObserver` with didPop, didReplace, redirect tracing
+- `apps/mobile-flutter/lib/core/services/debug_logger.dart` — Singleton logger (navigation, network, taps, errors to .txt file)
+- `apps/mobile-flutter/lib/shared/widgets/logged_button.dart` — LoggedButton, LoggedIconButton, LoggedListTile
+- `apps/mobile-flutter/lib/features/debug/debug_log_screen.dart` — In-app log viewer
 
 ### Next Steps
-- Fix the ODM `save()` for `selectedCarId` (field mapping or serialization issue in `docToRow` / `serializeForDb`)
-- Fix `POST /api/driver/cars` to initialize `prof.cars` before `.push()`
-- Make V1 `Ride.findById` handle ObjectId strings (match V2 `findRideById` behavior)
-- Add `driver_arriving` and `passenger_onboard` endpoints and states
+- Verify navigation tracing works: `flutter run` → check `/debug/log` for `📱 POP`, `📱 REPLACE`, `📱 REDIRECT` entries
+- Apply identified standards rules to new code going forward
+- Fix missing ride states (`driver_arriving`, `passenger_onboard`)
+- Fix ODM `save()` for `selectedCarId`
+- Fix `POST /api/driver/cars` to initialize `prof.cars`
