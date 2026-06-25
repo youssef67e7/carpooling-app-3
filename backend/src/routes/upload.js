@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { authRequired } from "../middleware/auth.js";
 import { validate } from "../middleware/validate.js";
 import { saveProfileImageSchema } from "../schemas/misc.schemas.js";
 import { updateById } from "../mongo/queries/users.js";
@@ -47,7 +48,7 @@ router.post("/", async (req, res) => {
   }
 });
 
-router.post("/profile-image", validate(saveProfileImageSchema), async (req, res) => {
+router.post("/profile-image", authRequired, validate(saveProfileImageSchema), async (req, res) => {
   try {
     const { imageUrl } = req.body;
     if (!imageUrl || !imageUrl.startsWith("https://res.cloudinary.com")) {

@@ -109,7 +109,7 @@ export function createApp() {
   app.use(["/vehicles", "/api/vehicles"], vehicleRoutes);
   app.use(["/reports", "/api/reports"], reportRoutes);
   app.use(["/wallet", "/api/wallet"], walletRoutes);
-  app.use(["/upload", "/api/upload"], authRequired, uploadV2Router);
+  app.use(["/upload", "/api/upload"], uploadV2Router);
 
   const uploadRoot = getUploadRoot();
   app.use(
