@@ -9,6 +9,6 @@ export function signUserToken(user) {
   return jwt.sign(
     { sub: user._id.toString(), role },
     process.env.JWT_SECRET,
-    { expiresIn: "7d" }
+    { expiresIn: "15m" }
   );
 }

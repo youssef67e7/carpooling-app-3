@@ -5,9 +5,10 @@ import { Ride } from "../models/Ride.js";
 import { DriverProfile } from "../models/DriverProfile.js";
 import { authRequired, blockCheck } from "../middleware/auth.js";
 import { validateRequest } from "../middleware/validateRequest.js";
+import { validate } from "../middleware/validate.js";
 import { AppError } from "../errors/AppError.js";
 import { requireApprovedDriver } from "../middleware/driverGate.js";
-import { emitTo, roomRide } from "../realtime/io.js";
+import { driverLocationSchema } from "../schemas/driver.schemas.js";
 import { getDriverDashboard } from "../services/driverDashboard.js";
 
 const router = Router();
@@ -248,6 +249,7 @@ router.patch("/cars/:carId/set-active", async (req, res, next) => {
 router.post(
   "/location-update",
   requireApprovedDriver,
+  validate(driverLocationSchema),
   body("lat").isFloat({ min: -90, max: 90 }),
   body("lng").isFloat({ min: -180, max: 180 }),
   validateRequest,
@@ -259,17 +261,6 @@ router.post(
       assertNotAdmin(user);
       user.location = { lat: Number(lat), lng: Number(lng) };
       await user.save();
-      const activeRides = await Ride.find({
-        driverId: req.userId,
-        status: { $in: ["accepted", "ongoing"] },
-      }).select("_id");
-      for (const r of activeRides) {
-        emitTo(roomRide(r._id), "driver:location", {
-          driverId: String(req.userId),
-          rideId: String(r._id),
-          location: user.location,
-        });
-      }
       return res.json({ location: user.location });
     } catch (e) {
       next(e);

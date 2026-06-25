@@ -11,6 +11,7 @@ import { ensureFixedAdminAccounts } from "./services/ensureFixedAdmins.js";
 import { seedMockDrivers } from "./seed/seedMockDrivers.js";
 import { seedVehicles } from "./seed/seedVehicles.js";
 import { seedDemoPlatform } from "./seed/seedDemoPlatform.js";
+import { migrateFcmTokens } from "./migrations/migrateFcmTokens.js";
 
 let initPromise = null;
 let seeded = false;
@@ -62,6 +63,8 @@ async function runSeeds() {
   }
   await ensureFixedAdminAccounts();
   await seedVehicles();
+  // One-time migration: move fcmToken from users -> fcmTokens collection
+  await migrateFcmTokens().catch((err) => console.error("[migration] fcmToken migration error:", err?.message));
   if (!process.env.VERCEL) {
     await seedMockDrivers();
     await seedDemoPlatform();

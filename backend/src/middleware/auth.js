@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken";
+const { TokenExpiredError } = jwt;
 import { User } from "../models/User.js";
 
 /**
@@ -16,8 +17,19 @@ export async function resolveAuth(req, res, next) {
     req.userId = String(payload.sub);
     req.authVia = "jwt";
     return next();
-  } catch {
-    return res.status(401).json({ message: "Invalid token" });
+  } catch (err) {
+    if (err instanceof TokenExpiredError) {
+      return res.status(401).json({
+        success: false,
+        error: "Access token expired",
+        code: "TOKEN_EXPIRED",
+      });
+    }
+    return res.status(401).json({
+      success: false,
+      error: "Invalid access token",
+      code: "TOKEN_INVALID",
+    });
   }
 }
 

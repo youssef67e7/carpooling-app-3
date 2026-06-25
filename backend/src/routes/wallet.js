@@ -7,8 +7,10 @@ import { WithdrawalRequest } from "../models/WithdrawalRequest.js";
 import { User } from "../models/User.js";
 import { authRequired, blockCheck, roleRequired } from "../middleware/auth.js";
 import { validateRequest } from "../middleware/validateRequest.js";
+import { validate } from "../middleware/validate.js";
 import { docIdBody, docIdParam } from "../middleware/docId.js";
 import { AppError } from "../errors/AppError.js";
+import { depositSchema } from "../schemas/wallet.schemas.js";
 
 const router = Router();
 
@@ -75,6 +77,7 @@ router.delete("/accounts/:id", docIdParam("id"), validateRequest, async (req, re
 /** Mock top-up — credits balance (no real PSP). */
 router.post(
   "/deposit",
+  validate(depositSchema),
   docIdBody("walletAccountId"),
   body("amount").isFloat({ gt: 0, max: 50000 }),
   validateRequest,
@@ -198,18 +201,36 @@ router.post(
   }
 );
 
-router.get("/transactions", query("limit").optional().isInt({ min: 1, max: 100 }), validateRequest, async (req, res, next) => {
-  try {
-    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 40));
-    const txs = await Transaction.find({ userId: req.userId })
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .populate("walletAccountId", "walletType phoneNumber label")
-      .lean();
-    return res.json({ transactions: txs });
-  } catch (e) {
-    next(e);
+router.get(
+  "/transactions",
+  query("page").optional().isInt({ min: 1 }),
+  query("limit").optional().isInt({ min: 1, max: 100 }),
+  query("type").optional().isIn(["deposit", "withdraw", "ride_payment", "ride_debit", "ride_refund"]),
+  validateRequest,
+  async (req, res, next) => {
+    try {
+      const filter = { userId: req.userId };
+      if (req.query.type) filter.type = String(req.query.type);
+      const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 40));
+      const page = Math.max(1, Number(req.query.page) || 1);
+      const skip = (page - 1) * limit;
+      const [txs, total] = await Promise.all([
+        Transaction.find(filter)
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .populate("walletAccountId", "walletType phoneNumber label")
+          .lean(),
+        Transaction.countDocuments(filter),
+      ]);
+      return res.json({
+        success: true,
+        data: { items: txs, total, page, limit },
+      });
+    } catch (e) {
+      next(e);
+    }
   }
-});
+);
 
 export default router;

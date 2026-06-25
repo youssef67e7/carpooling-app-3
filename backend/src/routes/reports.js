@@ -4,8 +4,10 @@ import { Report } from "../models/Report.js";
 import { User } from "../models/User.js";
 import { authRequired, blockCheck } from "../middleware/auth.js";
 import { validateRequest } from "../middleware/validateRequest.js";
+import { validate } from "../middleware/validate.js";
 import { docIdBody, docIdOptionalBody } from "../middleware/docId.js";
 import { AppError } from "../errors/AppError.js";
+import { reportUserSchema } from "../schemas/misc.schemas.js";
 
 const router = Router();
 
@@ -13,6 +15,7 @@ router.use(authRequired, blockCheck);
 
 router.post(
   "/",
+  validate(reportUserSchema),
   docIdBody("reportedUserId"),
   body("reason").trim().notEmpty().isLength({ max: 120 }),
   body("description").trim().notEmpty().isLength({ max: 2000 }),

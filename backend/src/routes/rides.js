@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { body, param } from "express-validator";
+import { body, param, query } from "express-validator";
 import { Ride } from "../models/Ride.js";
 import { Booking } from "../models/Booking.js";
 import { User } from "../models/User.js";
@@ -9,24 +9,108 @@ import { DriverProfile } from "../models/DriverProfile.js";
 import { authRequired, blockCheck, roleRequired } from "../middleware/auth.js";
 import { requireApprovedDriver } from "../middleware/driverGate.js";
 import { validateRequest } from "../middleware/validateRequest.js";
+import { validate } from "../middleware/validate.js";
 import { docIdBody, docIdParam } from "../middleware/docId.js";
 import { AppError } from "../errors/AppError.js";
+import {
+  createRideSchema,
+  nearbyDriversSchema,
+  routePreviewSchema,
+  respondOfferSchema,
+  chatMessageSchema,
+  rateRideSchema,
+  acceptRideSchema,
+} from "../schemas/ride.schemas.js";
 import { applyDriverRatingFromRide } from "../services/driverRating.js";
 import { haversineKm, fareFromVehiclePricing } from "../utils/geo.js";
 import { buildRoutePath } from "../utils/directions.js";
 import { computeSeatUnits, roundSeatUnits } from "../utils/seatUnits.js";
-import { creditDriverForRide } from "../services/walletLedger.js";
-import { enrichRidesWithPassengerStats, getPassengerPublicStats } from "../services/passengerStats.js";
+import { creditDriverForRide, debitPassengerForRide, refundPassengerForRide } from "../services/walletLedger.js";
 import {
   MAX_DRIVER_CONCURRENT_RIDES,
   assertDriverCanTakeAnotherRide,
   countDriverAssignedRides,
 } from "../services/driverRideCapacity.js";
-import { emitTo, roomRide, roomDrivers } from "../realtime/io.js";
+import {
+  notifyRideAccepted,
+  notifyTripStarted,
+  notifyTripCompleted,
+  notifyRideCancelled,
+  notifyNewMessage,
+  notifyPaymentReceived,
+} from "../services/notificationHelpers.js";
+import {
+  requestRide,
+  getRideStatus,
+  getRequestedRides,
+  acceptRide,
+} from "../services/rideNativeService.js";
 
 const router = Router();
 
+/* ── Backward-compat V2 endpoints (simple flow, no auth) ── */
+
+router.post("/", validate(createRideSchema), async (req, res) => {
+  try {
+    const { passengerId, pickup, dropoff, vehicleType } = req.body;
+    if (!passengerId || !pickup || !dropoff || !vehicleType) {
+      return res.status(400).json({ success: false, error: { code: "RIDE_ERROR", message: "passengerId, pickup, dropoff, and vehicleType are required" } });
+    }
+    const result = await requestRide(passengerId, pickup, dropoff, vehicleType);
+    return res.status(201).json({ success: true, data: { ride: result.ride, nearbyDrivers: result.nearbyDrivers.length } });
+  } catch (err) {
+    const status = err.message === "User already has an active ride" ? 400 : 500;
+    return res.status(status).json({ success: false, error: { code: "RIDE_ERROR", message: err.message } });
+  }
+});
+
+router.get("/requested", async (req, res) => {
+  try {
+    const vehicleType = req.query.vehicleType;
+    const result = await getRequestedRides(vehicleType);
+    return res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: { code: "RIDE_ERROR", message: err.message } });
+  }
+});
+
+router.post("/:id/accept", validate(acceptRideSchema), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { driverId } = req.body;
+    if (!driverId) {
+      return res.status(400).json({ success: false, error: { code: "RIDE_ERROR", message: "driverId is required" } });
+    }
+    const result = await acceptRide(id, driverId);
+    return res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    const msg = err.message.toLowerCase();
+    let status = 500;
+    if (msg.includes("not found")) status = 404;
+    else if (msg.includes("no longer available")) status = 409;
+    return res.status(status).json({ success: false, error: { code: "RIDE_ERROR", message: err.message } });
+  }
+});
+
+router.get("/:id/status", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await getRideStatus(id);
+    return res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    const status = err.message.toLowerCase().includes("not found") ? 404 : 500;
+    return res.status(status).json({ success: false, error: { code: "RIDE_ERROR", message: err.message } });
+  }
+});
+
 router.use(authRequired, blockCheck);
+
+function parsePagination(req, { defaultLimit = 20, maxLimit = 100 } = {}) {
+  const limit = Math.min(maxLimit, Math.max(1, Number(req.query.limit) || defaultLimit));
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const skip = (page - 1) * limit;
+  return { limit, page, skip };
+}
 
 const OFFER_TTL_MS = Number(process.env.OFFER_TTL_MS) || 10 * 60 * 1000; // 10 minutes
 
@@ -103,7 +187,7 @@ const rideIdValidators = [
 ];
 
 /** Passenger: nearby online drivers (optionally filtered by vehicleType + radius from lat/lng) */
-router.get("/nearby-drivers", roleRequired("passenger", "admin"), async (req, res, next) => {
+router.get("/nearby-drivers", roleRequired("passenger", "admin"), validate(nearbyDriversSchema, "query"), async (req, res, next) => {
   try {
     const raw = req.query.vehicleType;
     const vt = typeof raw === "string" && raw.trim() ? String(raw).toLowerCase().trim() : null;
@@ -130,7 +214,7 @@ router.get("/nearby-drivers", roleRequired("passenger", "admin"), async (req, re
 });
 
 /** Route preview for map (pickup → destination) before or during booking */
-router.get("/route-preview", roleRequired("passenger", "driver", "admin"), async (req, res, next) => {
+router.get("/route-preview", roleRequired("passenger", "driver", "admin"), validate(routePreviewSchema, "query"), async (req, res, next) => {
   try {
     const fromLat = Number(req.query.fromLat);
     const fromLng = Number(req.query.fromLng);
@@ -166,8 +250,8 @@ router.post(
   body("parcel.receiverPhone").optional().isString().isLength({ max: 32 }),
   body("parcel.notes").optional().isString().isLength({ max: 500 }),
   body("parcel.deliverBy").optional().isISO8601(),
+  body("paymentMethod").optional().isIn(["cash", "wallet"]),
   body("passengerMinFare").optional().isFloat({ min: 0 }).toFloat(),
-  body("passengerMaxFare").optional().isFloat({ min: 0 }).toFloat(),
   body("passengerCount").optional().isInt({ min: 1, max: 8 }).toInt(),
   body("passengerSize").optional().isIn(["SMALL", "MEDIUM", "LARGE", "XL"]),
   body("passengerGender").optional().isIn(["male", "female", "unspecified"]),
@@ -241,11 +325,16 @@ router.post(
           req.body?.parcel?.deliverBy != null && String(req.body.parcel.deliverBy).trim()
             ? new Date(String(req.body.parcel.deliverBy))
             : new Date(Date.now() + etaSeconds * 1000);
+        const paymentMethod =
+          req.body.paymentMethod != null && String(req.body.paymentMethod).trim()
+            ? String(req.body.paymentMethod).toLowerCase().trim()
+            : "cash";
         createdRide = await Ride.create({
           passengerId: req.userId,
           pickupLocation: pickup,
           destinationLocation: dest,
           status: "pending",
+          paymentMethod,
           vehicleType: vt,
           parcel: isParcel
             ? {
@@ -286,7 +375,6 @@ router.post(
       }
 
       const populated = await populatedRideById(createdRide._id);
-      emitTo(roomDrivers(vt), "ride:update", { type: "ride.created", rideId: createdRide._id, ride: populated });
       return res.status(201).json({ ride: populated });
     } catch (e) {
       next(e);
@@ -442,7 +530,7 @@ router.post(
       }
 
       const populated = await populatedRideById(rideId);
-      emitTo(roomRide(rideId), "ride:update", { type: "ride.joined", rideId, ride: populated });
+
       return res.status(201).json({ ride: populated });
     } catch (e) {
       next(e);
@@ -581,7 +669,6 @@ router.post(
       };
       await ride.save();
       const populated = await populatedRideById(ride._id);
-      emitTo(roomRide(ride._id), "ride:update", { type: "ride.offer", rideId: ride._id, ride: populated });
       return res.json({ ride: populated });
     } catch (e) {
       next(e);
@@ -610,8 +697,6 @@ router.post(
       ride.driverProposal = null;
       await ride.save();
       const populated = await populatedRideById(ride._id);
-      emitTo(roomRide(ride._id), "ride:update", { type: "ride.offerWithdrawn", rideId: ride._id, ride: populated });
-      emitTo(roomDrivers(ride.vehicleType), "ride:update", { type: "ride.offerWithdrawn", rideId: ride._id, ride: populated });
       return res.json({ ride: populated });
     } catch (e) {
       next(e);
@@ -623,6 +708,7 @@ router.post(
 router.post(
   "/respond-proposal",
   roleRequired("passenger"),
+  validate(respondOfferSchema),
   docIdBody("rideId"),
   body("accept").isBoolean(),
   validateRequest,
@@ -648,8 +734,6 @@ router.post(
       if (isOfferExpired(ride)) {
         await clearExpiredOfferIfNeeded(ride);
         const populated = await populatedRideById(ride._id);
-        emitTo(roomRide(ride._id), "ride:update", { type: "ride.offerExpired", rideId: ride._id, ride: populated });
-        emitTo(roomDrivers(ride.vehicleType), "ride:update", { type: "ride.offerExpired", rideId: ride._id, ride: populated });
         throw new AppError("Offer expired. Ask the driver for a new price.", 409);
       }
       const prop = ride.driverProposal;
@@ -660,8 +744,6 @@ router.post(
         ride.driverProposal = null;
         await ride.save();
         const populated = await populatedRideById(ride._id);
-        emitTo(roomRide(ride._id), "ride:update", { type: "ride.offerRejected", rideId: ride._id, ride: populated });
-        emitTo(roomDrivers(ride.vehicleType), "ride:update", { type: "ride.offerRejected", rideId: ride._id, ride: populated });
         return res.json({ ride: populated });
       }
       const proposed = Number(prop.proposedFare) || 0;
@@ -671,8 +753,6 @@ router.post(
       ride.driverProposal = null;
       await ride.save();
       const populated = await populatedRideById(ride._id);
-      emitTo(roomRide(ride._id), "ride:update", { type: "ride.offerAccepted", rideId: ride._id, ride: populated });
-      emitTo(roomDrivers(ride.vehicleType), "ride:update", { type: "ride.offerAccepted", rideId: ride._id, ride: populated });
       return res.json({ ride: populated });
     } catch (e) {
       next(e);
@@ -708,12 +788,6 @@ router.post(
       ride.passengerMinFare = nextMin;
       await ride.save();
       const populated = await populatedRideById(ride._id);
-      emitTo(roomRide(ride._id), "ride:update", { type: "ride.passengerMinFare", rideId: ride._id, ride: populated });
-      emitTo(roomDrivers(ride.vehicleType), "ride:update", {
-        type: "ride.passengerMinFare",
-        rideId: ride._id,
-        ride: populated,
-      });
       return res.json({ ride: populated });
     } catch (e) {
       next(e);
@@ -750,12 +824,6 @@ router.post(
         ride.preassignedFare = null;
         await ride.save();
         const populated = await populatedRideById(ride._id);
-        emitTo(roomRide(ride._id), "ride:update", { type: "ride.driverConfirmRejected", rideId: ride._id, ride: populated });
-        emitTo(roomDrivers(ride.vehicleType), "ride:update", {
-          type: "ride.driverConfirmRejected",
-          rideId: ride._id,
-          ride: populated,
-        });
         return res.json({ ride: populated });
       }
       await assertDriverCanTakeAnotherRide(req.userId, { excludeRideId: ride._id });
@@ -769,12 +837,7 @@ router.post(
       ride.acceptedAt = new Date();
       await ride.save();
       const populated = await populatedRideById(ride._id);
-      emitTo(roomRide(ride._id), "ride:update", { type: "ride.driverConfirmed", rideId: ride._id, ride: populated });
-      emitTo(roomDrivers(ride.vehicleType), "ride:update", {
-        type: "ride.driverConfirmed",
-        rideId: ride._id,
-        ride: populated,
-      });
+      notifyRideAccepted(ride).catch(() => {});
       return res.json({ ride: populated });
     } catch (e) {
       next(e);
@@ -811,9 +874,9 @@ router.post(
       ride.cancelledBy = "driver";
       ride.cancelReason = reason;
       await ride.save();
+      refundPassengerForRide(ride.passengerId, ride._id, ride.agreedFare || ride.estimatedFare).catch(() => {});
       const populated = await populatedRideById(ride._id);
-      emitTo(roomRide(ride._id), "ride:update", { type: "ride.cancelled", rideId: ride._id, ride: populated });
-      emitTo(roomDrivers(ride.vehicleType), "ride:update", { type: "ride.cancelled", rideId: ride._id, ride: populated });
+      notifyRideCancelled(ride, ride.driverId, reason).catch(() => {});
       return res.json({ ride: populated });
     } catch (e) {
       next(e);
@@ -840,8 +903,7 @@ router.post("/start", roleRequired("driver"), requireApprovedDriver, ...rideIdVa
     ride.startedAt = new Date();
     await ride.save();
     const populated = await populatedRideById(ride._id);
-    emitTo(roomRide(ride._id), "ride:update", { type: "ride.started", rideId: ride._id, ride: populated });
-    emitTo(roomDrivers(ride.vehicleType), "ride:update", { type: "ride.started", rideId: ride._id, ride: populated });
+    notifyTripStarted(ride).catch(() => {});
     return res.json({ ride: populated });
   } catch (e) {
     next(e);
@@ -851,36 +913,56 @@ router.post("/start", roleRequired("driver"), requireApprovedDriver, ...rideIdVa
 router.post("/end", roleRequired("driver"), requireApprovedDriver, ...rideIdValidators, async (req, res, next) => {
   try {
     const { rideId } = req.body;
-    const ride = await Ride.findById(rideId);
-    if (!ride || ride.driverId?.toString() !== req.userId) {
-      throw new AppError("Not your ride", 403);
-    }
-    // Idempotent: if already completed, return current ride.
-    if (ride.status === "completed") {
-      const populated = await populatedRideById(ride._id);
-      return res.json({ ride: populated });
-    }
-    if (ride.status !== "ongoing") {
+
+    // Atomic guard: only one request wins the status transition.
+    const updated = await Ride.findOneAndUpdate(
+      { _id: rideId, driverId: req.userId, status: "ongoing" },
+      { $set: { status: "completed", completedAt: new Date() } },
+      { new: true }
+    );
+
+    if (!updated) {
+      // Idempotent: if already completed, return current ride.
+      const existing = await Ride.findById(rideId);
+      if (!existing || existing.driverId?.toString() !== req.userId) {
+        throw new AppError("Not your ride", 403);
+      }
+      if (existing.status === "completed") {
+        const populated = await populatedRideById(rideId);
+        return res.json({ ride: populated });
+      }
       throw new AppError("Ride must be ongoing", 400);
     }
-    ride.status = "completed";
-    ride.completedAt = new Date();
-    const agreed = ride.agreedFare != null ? Number(ride.agreedFare) : null;
-    ride.fare =
+
+    const agreed = updated.agreedFare != null ? Number(updated.agreedFare) : null;
+    updated.fare =
       agreed != null && !Number.isNaN(agreed)
         ? agreed
-        : Number(ride.passengerMinFare ?? ride.estimatedFare) || 0;
-    await ride.save();
+        : Number(updated.passengerMinFare ?? updated.estimatedFare) || 0;
+    await updated.save();
+
     try {
-      if (ride.driverId) {
-        await creditDriverForRide(ride.driverId, ride._id, ride.fare);
+      if (updated.driverId) {
+        const paymentMethod = String(updated.paymentMethod || "cash").toLowerCase();
+
+        if (paymentMethod === "wallet" && updated.passengerId) {
+          const debit = await debitPassengerForRide(updated.passengerId, rideId, updated.fare);
+          if (!debit) {
+            console.error("wallet debitPassengerForRide failed — insufficient funds or already debited");
+          }
+        }
+
+        await creditDriverForRide(updated.driverId, rideId, updated.fare);
       }
     } catch (ledgerErr) {
       console.error("wallet creditDriverForRide", ledgerErr);
     }
-    const populated = await populatedRideById(ride._id);
-    emitTo(roomRide(ride._id), "ride:update", { type: "ride.completed", rideId: ride._id, ride: populated });
-    emitTo(roomDrivers(ride.vehicleType), "ride:update", { type: "ride.completed", rideId: ride._id, ride: populated });
+
+    const populated = await populatedRideById(rideId);
+    notifyTripCompleted(populated).catch(() => {});
+    if (updated.driverId) {
+      notifyPaymentReceived(updated.driverId, rideId, updated.fare).catch(() => {});
+    }
     return res.json({ ride: populated });
   } catch (e) {
     next(e);
@@ -925,9 +1007,9 @@ router.post(
       ride.preassignedDriverId = null;
       ride.preassignedFare = null;
       await ride.save();
+      refundPassengerForRide(req.userId, ride._id, ride.agreedFare || ride.estimatedFare).catch(() => {});
       const populated = await populatedRideById(ride._id);
-      emitTo(roomRide(ride._id), "ride:update", { type: "ride.cancelled", rideId: ride._id, ride: populated });
-      emitTo(roomDrivers(ride.vehicleType), "ride:update", { type: "ride.cancelled", rideId: ride._id, ride: populated });
+      notifyRideCancelled(ride, req.userId, reason).catch(() => {});
       return res.json({ ride: populated });
     } catch (e) {
       next(e);
@@ -939,6 +1021,7 @@ router.post(
 router.post(
   "/rate",
   roleRequired("passenger"),
+  validate(rateRideSchema),
   docIdBody("rideId"),
   body("rating").isInt({ min: 1, max: 5 }).withMessage("Rating 1–5"),
   body("review").optional().isString().isLength({ max: 300 }),
@@ -1000,28 +1083,42 @@ router.get("/ratings/received", roleRequired("driver"), async (req, res, next) =
   }
 });
 
-router.get("/history", async (req, res, next) => {
-  try {
-    const user = await User.findById(req.userId);
-    if (!user) throw new AppError("User not found", 401);
-    let query = {};
-    const mode = user.role === "admin" ? "admin" : (user.active_role || user.role || "passenger");
-    if (mode === "passenger") query = { passengerId: req.userId };
-    else if (mode === "driver") query = { driverId: req.userId };
-    else if (mode === "admin") query = {};
-    else throw new AppError("Forbidden", 403);
-
-    const rides = await Ride.find(query)
-      .sort({ createdAt: -1 })
-      .limit(100)
-      .populate("passengerId", "name email profileImageUrl location phone")
-      .populate("driverId", "name email profileImageUrl phone vehicleType location")
-      .populate(bookingPopulate);
-    return res.json({ rides });
-  } catch (e) {
-    next(e);
+router.get(
+  "/history",
+  query("page").optional().isInt({ min: 1 }),
+  query("limit").optional().isInt({ min: 1, max: 100 }),
+  query("status").optional().isIn(["pending", "accepted", "ongoing", "completed", "cancelled"]),
+  validateRequest,
+  async (req, res, next) => {
+    try {
+      const user = await User.findById(req.userId);
+      if (!user) throw new AppError("User not found", 401);
+      const filter = {};
+      const mode = user.role === "admin" ? "admin" : (user.active_role || user.role || "passenger");
+      if (mode === "passenger") filter.passengerId = req.userId;
+      else if (mode === "driver") filter.driverId = req.userId;
+      else if (mode !== "admin") throw new AppError("Forbidden", 403);
+      if (req.query.status) filter.status = String(req.query.status);
+      const { limit, page, skip } = parsePagination(req);
+      const [rides, total] = await Promise.all([
+        Ride.find(filter)
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .populate("passengerId", "name email profileImageUrl location phone")
+          .populate("driverId", "name email profileImageUrl phone vehicleType location")
+          .populate(bookingPopulate),
+        Ride.countDocuments(filter),
+      ]);
+      return res.json({
+        success: true,
+        data: { items: rides, total, page, limit },
+      });
+    } catch (e) {
+      next(e);
+    }
   }
-});
+);
 
 router.get(
   "/:rideId/messages",
@@ -1044,6 +1141,7 @@ router.get(
 router.post(
   "/:rideId/messages",
   docIdParam("rideId"),
+  validate(chatMessageSchema),
   body("text").trim().notEmpty().isLength({ max: 2000 }),
   validateRequest,
   async (req, res, next) => {
@@ -1058,7 +1156,12 @@ router.post(
         text: String(req.body.text).trim(),
       });
       const populated = await Message.findById(msg._id).populate("senderId", "name role");
-      emitTo(roomRide(ride._id), "ride:message", { rideId: String(ride._id), message: populated });
+      const recipientId =
+        String(req.userId) === String(ride.passengerId) ? ride.driverId : ride.passengerId;
+      if (recipientId) {
+        const senderName = populated?.senderId?.name || "";
+        notifyNewMessage(ride._id, req.userId, senderName, String(req.body.text).trim(), recipientId).catch(() => {});
+      }
       return res.status(201).json({ message: populated });
     } catch (e) {
       next(e);

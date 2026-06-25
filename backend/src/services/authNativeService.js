@@ -2,6 +2,7 @@ import { findByPhone, findByGoogleSub, create, findById } from "../mongo/queries
 import { createOtp, findOtp, incrementAttempts } from "../mongo/queries/otps.js";
 import { randomPhoneOtp6, hashPhoneOtp } from "../utils/phoneOtp.js";
 import { signUserToken } from "../utils/signUserToken.js";
+import { generateRefreshToken, storeRefreshToken } from "./refreshTokenService.js";
 
 /**
  * Generates and stores a phone OTP.
@@ -53,6 +54,8 @@ export async function verifyPhoneOtp(phone, codeInput) {
     isNewUser = true;
   }
 
-  const token = signUserToken(user);
-  return { token, user, isNewUser };
+  const accessToken = signUserToken(user);
+  const rawRefreshToken = generateRefreshToken();
+  await storeRefreshToken(user._id, rawRefreshToken);
+  return { accessToken, refreshToken: rawRefreshToken, user, isNewUser };
 }

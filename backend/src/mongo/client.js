@@ -36,7 +36,6 @@ export function getMongoConnectionInfo() {
     localUriConfigured: Boolean(resolveMongoLocalUri()),
     persistsInAtlasUi: connectionMode === "atlas",
     persistsOnDisk: connectionMode === "atlas" || connectionMode === "local",
-    tlsInsecure: String(process.env.MONGODB_TLS_INSECURE || "").trim() === "1",
     note:
       connectionMode === "memory"
         ? "In-memory dev DB — changes are real in MongoDB but reset on server restart and do NOT appear in Atlas UI."
@@ -122,9 +121,6 @@ function atlasClientOptions() {
       deprecationErrors: true,
     },
   };
-  if (String(process.env.MONGODB_TLS_INSECURE || "").trim() === "1") {
-    opts.tlsAllowInvalidCertificates = true;
-  }
   return opts;
 }
 

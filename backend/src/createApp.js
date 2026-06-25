@@ -16,13 +16,9 @@ import adminRoutes from "./routes/admin.js";
 import vehicleRoutes from "./routes/vehicles.js";
 import reportRoutes from "./routes/reports.js";
 import walletRoutes from "./routes/wallet.js";
-import uploadsRoutes from "./routes/uploads.js";
 import driverApplicationRoutes from "./routes/driverApplication.js";
 import roleSwitchRoutes from "./routes/roleSwitch.js";
-import aiSearchRoutes from "./routes/aiSearch.js";
-import authV2Router from "./routes/authV2.js";
-import ridesV2Router from "./routes/ridesV2.js";
-import uploadV2Router from "./routes/uploadV2.js";
+import uploadV2Router from "./routes/upload.js";
 import { authRequired, blockCheck } from "./middleware/auth.js";
 import { AppError } from "./errors/AppError.js";
 import { User } from "./models/User.js";
@@ -89,9 +85,6 @@ export function createApp() {
   app.use(globalApiLimiter);
 
   app.use(["/auth", "/api/auth"], authRoutes);
-  app.use("/api/v2/auth", authV2Router);
-  app.use("/api/v2/rides", authRequired, blockCheck, ridesV2Router);
-  app.use("/api/v2/upload", authRequired, uploadV2Router);
   app.use(["/rides", "/api/rides"], rideRoutes);
   app.use(["/driver", "/api/driver"], driverRoutes);
   app.use(["/passenger", "/api/passenger"], passengerRoutes);
@@ -99,6 +92,7 @@ export function createApp() {
   app.use(["/vehicles", "/api/vehicles"], vehicleRoutes);
   app.use(["/reports", "/api/reports"], reportRoutes);
   app.use(["/wallet", "/api/wallet"], walletRoutes);
+  app.use(["/upload", "/api/upload"], authRequired, uploadV2Router);
 
   const uploadRoot = getUploadRoot();
   app.use(
@@ -124,8 +118,6 @@ export function createApp() {
     }
   });
 
-  app.use(["/upload", "/api/upload"], uploadsRoutes);
-  app.use(["/ai", "/api/ai"], aiSearchRoutes);
   app.use(["/driver-application", "/api/driver-application"], driverApplicationRoutes);
 
   app.get("/admin-ui/", (_req, res) => {

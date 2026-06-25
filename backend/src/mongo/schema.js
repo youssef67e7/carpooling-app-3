@@ -64,4 +64,116 @@ export async function ensureMongoIndexes(getDb) {
   await db.collection("rides").createIndex({ driver_id: 1 });
   await db.collection("wallet_accounts").createIndex({ user_id: 1 });
   await db.collection("transactions").createIndex({ user_id: 1, created_at: -1 });
+
+  // 2dsphere geo indexes
+  await db
+    .collection("driverProfiles")
+    .createIndex({ currentLocation: "2dsphere" }, { name: "driverLocation_2dsphere", background: true })
+    .catch((err) => console.error("[indexes] driverProfiles.2dsphere:", err.message));
+
+  await db
+    .collection("rides")
+    .createIndex(
+      { status: 1, "pickup.coordinates": "2dsphere", poolSeats: 1 },
+      { name: "rides_poolMatching_compound", background: true }
+    )
+    .catch((err) => console.error("[indexes] rides.poolMatching:", err.message));
+
+  // New collection indexes
+  await db
+    .collection("refreshTokens")
+    .createIndex({ userId: 1 })
+    .catch((err) => console.error("[indexes] refreshTokens.userId:", err.message));
+  await db
+    .collection("refreshTokens")
+    .createIndex({ expiresAt: 1 }, { expireAfterSeconds: 604800 })
+    .catch((err) => console.error("[indexes] refreshTokens.expiresAt:", err.message));
+
+  await db
+    .collection("fcmTokens")
+    .createIndex({ userId: 1 })
+    .catch((err) => console.error("[indexes] fcmTokens.userId:", err.message));
+  await db
+    .collection("fcmTokens")
+    .createIndex({ token: 1 }, { unique: true })
+    .catch((err) => console.error("[indexes] fcmTokens.token:", err.message));
+  await db
+    .collection("fcmTokens")
+    .createIndex({ createdAt: 1 })
+    .catch((err) => console.error("[indexes] fcmTokens.createdAt:", err.message));
+
+  await db
+    .collection("notifications")
+    .createIndex({ userId: 1, createdAt: -1 })
+    .catch((err) => console.error("[indexes] notifications.userId+createdAt:", err.message));
+  await db
+    .collection("notifications")
+    .createIndex({ userId: 1, read: 1 })
+    .catch((err) => console.error("[indexes] notifications.userId+read:", err.message));
+
+  // Additional indexes for query performance & data integrity
+  await db
+    .collection("users")
+    .createIndex({ firebaseUid: 1 }, { unique: true, sparse: true })
+    .catch((err) => console.error("[indexes] users.firebaseUid:", err.message));
+  await db
+    .collection("users")
+    .createIndex({ role: 1 })
+    .catch((err) => console.error("[indexes] users.role:", err.message));
+
+  await db
+    .collection("driverProfiles")
+    .createIndex({ userId: 1 }, { unique: true })
+    .catch((err) => console.error("[indexes] driverProfiles.userId:", err.message));
+  await db
+    .collection("driverProfiles")
+    .createIndex({ isOnline: 1, isAvailable: 1 })
+    .catch((err) => console.error("[indexes] driverProfiles.isOnline+isAvailable:", err.message));
+
+  await db
+    .collection("rides")
+    .createIndex({ passenger_id: 1, status: 1 })
+    .catch((err) => console.error("[indexes] rides.passenger_id+status:", err.message));
+  await db
+    .collection("rides")
+    .createIndex({ driver_id: 1, status: 1 })
+    .catch((err) => console.error("[indexes] rides.driver_id+status:", err.message));
+
+  await db
+    .collection("refreshTokens")
+    .createIndex({ tokenHash: 1 }, { unique: true })
+    .catch((err) => console.error("[indexes] refreshTokens.tokenHash:", err.message));
+
+  await db
+    .collection("phoneLoginOtps")
+    .createIndex({ phone: 1 })
+    .catch((err) => console.error("[indexes] phoneLoginOtps.phone:", err.message));
+  await db
+    .collection("phoneLoginOtps")
+    .createIndex({ expiresAt: 1 }, { expireAfterSeconds: 300 })
+    .catch((err) => console.error("[indexes] phoneLoginOtps.expiresAt TTL:", err.message));
+
+  await db
+    .collection("emailPasswordResetOtps")
+    .createIndex({ email: 1 })
+    .catch((err) => console.error("[indexes] emailPasswordResetOtps.email:", err.message));
+  await db
+    .collection("emailPasswordResetOtps")
+    .createIndex({ expiresAt: 1 }, { expireAfterSeconds: 300 })
+    .catch((err) => console.error("[indexes] emailPasswordResetOtps.expiresAt TTL:", err.message));
+
+  await db
+    .collection("adminAuditLogs")
+    .createIndex({ createdAt: 1 }, { expireAfterSeconds: 2592000 })
+    .catch((err) => console.error("[indexes] adminAuditLogs.createdAt TTL:", err.message));
+
+  await db
+    .collection("messages")
+    .createIndex({ rideId: 1, createdAt: 1 })
+    .catch((err) => console.error("[indexes] messages.rideId+createdAt:", err.message));
+
+  await db
+    .collection("bookings")
+    .createIndex({ rideId: 1 })
+    .catch((err) => console.error("[indexes] bookings.rideId:", err.message));
 }

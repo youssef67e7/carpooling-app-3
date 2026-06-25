@@ -7,33 +7,36 @@ import { countMongoCollections } from "../mongo/schema.js";
 import { getMongoConnectionInfo, getDb } from "../mongo/client.js";
 import { Report } from "../models/Report.js";
 import { Transaction } from "../models/Transaction.js";
+import { WalletAccount } from "../models/WalletAccount.js";
 import { authRequired, blockCheck, roleRequired } from "../middleware/auth.js";
 import { fixedAdminOnly } from "../middleware/fixedAdmin.js";
 import { validateRequest } from "../middleware/validateRequest.js";
+import { validate } from "../middleware/validate.js";
 import { docIdParam } from "../middleware/docId.js";
 import { AppError } from "../errors/AppError.js";
 import { isFixedAdminEmail } from "../config/fixedAdmins.js";
+import { paginatedQuerySchema, flagTransactionSchema, adminRefundSchema } from "../schemas/admin.schemas.js";
+import { adminCreditUser } from "../services/walletLedger.js";
 import { DriverProfile } from "../models/DriverProfile.js";
+import { DriverDocuments } from "../models/DriverDocuments.js";
+import { PassengerProfile } from "../models/PassengerProfile.js";
+import { Booking } from "../models/Booking.js";
+import { Message } from "../models/Message.js";
+import { Notification } from "../models/Notification.js";
+import { FcmToken } from "../models/FcmToken.js";
+import { WithdrawalRequest } from "../models/WithdrawalRequest.js";
 import { AdminAuditLog } from "../models/AdminAuditLog.js";
+import { notifyDriverVerified, notifyDriverRejected } from "../services/notificationHelpers.js";
 
 const router = Router();
 
 router.use(authRequired, blockCheck, roleRequired("admin"), fixedAdminOnly);
-
-function wantsPaginatedList(req) {
-  return req.query.page != null || req.query.limit != null;
-}
 
 function parsePagination(req, { defaultLimit = 7, maxLimit = 100 } = {}) {
   const limit = Math.min(maxLimit, Math.max(1, Number(req.query.limit) || defaultLimit));
   const page = Math.max(1, Number(req.query.page) || 1);
   const skip = (page - 1) * limit;
   return { limit, page, skip };
-}
-
-function paginationMeta(total, page, limit) {
-  const totalPages = Math.max(1, Math.ceil(total / limit) || 1);
-  return { page, limit, total, totalPages };
 }
 
 function escapeRegex(s) {
@@ -64,9 +67,9 @@ async function audit(req, { action, targetType, targetId, summary = "", detail =
 
 router.get(
   "/users",
-  query("page").optional().isInt({ min: 1 }),
-  query("limit").optional().isInt({ min: 1, max: 100 }),
+  validate(paginatedQuerySchema, "query"),
   query("search").optional().trim().isLength({ max: 120 }),
+  query("role").optional().isIn(["passenger", "driver", "admin"]),
   validateRequest,
   async (req, res, next) => {
     try {
@@ -76,18 +79,20 @@ router.get(
         const rx = new RegExp(escapeRegex(search), "i");
         filter.$or = [{ name: rx }, { email: rx }, { phone: rx }];
       }
-      if (!wantsPaginatedList(req)) {
-        const users = await User.find(filter).sort({ createdAt: -1 }).limit(500);
-        return res.json({ users: users.map((u) => u.toJSON()) });
-      }
+      if (req.query.role) filter.role = String(req.query.role);
       const { limit, page, skip } = parsePagination(req);
       const [users, total] = await Promise.all([
         User.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
         User.countDocuments(filter),
       ]);
       return res.json({
-        users: users.map((u) => u.toJSON()),
-        pagination: paginationMeta(total, page, limit),
+        success: true,
+        data: {
+          items: users.map((u) => u.toJSON()),
+          total,
+          page,
+          limit,
+        },
       });
     } catch (e) {
       next(e);
@@ -144,11 +149,13 @@ router.patch(
       if (user.driver_application_status === "approved") {
         user.is_verified = true;
         await DriverProfile.updateOne({ userId: user._id }, { $set: { status: "approved", reviewNote: "" } }, { upsert: true });
+        notifyDriverVerified(user._id).catch(() => {});
       }
       if (user.driver_application_status === "rejected") {
         // Safety: rejected drivers should never remain online as drivers.
         if (user.isOnline) user.isOnline = false;
         await DriverProfile.updateOne({ userId: user._id }, { $set: { status: "rejected" } }, { upsert: true });
+        notifyDriverRejected(user._id, req.body.driver_review_note).catch(() => {});
       }
       await user.save();
       const after = user.toJSON();
@@ -180,11 +187,35 @@ router.delete("/users/:userId", docIdParam("userId"), validateRequest, async (re
       const admins = await User.countDocuments({ role: "admin" });
       if (admins <= 1) throw new AppError("Cannot delete last admin", 400);
     }
-    await User.deleteOne({ _id: user._id });
+
+    const uid = user._id;
+
+    // Cascade delete associated data
+    await Promise.all([
+      DriverProfile.deleteMany({ userId: uid }),
+      DriverDocuments.deleteMany({ userId: uid }),
+      PassengerProfile.deleteMany({ userId: uid }),
+      WalletAccount.deleteMany({ userId: uid }),
+      Transaction.deleteMany({ userId: uid }),
+      FcmToken.deleteMany({ userId: uid }),
+      Notification.deleteMany({ userId: uid }),
+      WithdrawalRequest.deleteMany({ userId: uid }),
+      AdminAuditLog.deleteMany({ actorAdminId: uid }),
+      AdminAuditLog.deleteMany({ targetId: uid }),
+      Report.deleteMany({ reporterId: uid }),
+      Report.deleteMany({ reportedUserId: uid }),
+      Message.deleteMany({ senderId: uid }),
+      // Orphan rides (keep for data integrity, nullify driver reference)
+      Ride.updateMany({ passengerId: uid }, { $set: { passengerId: null } }),
+      Ride.updateMany({ driverId: uid }, { $set: { driverId: null } }),
+      Booking.deleteMany({ passengerId: uid }),
+    ]);
+
+    await User.deleteOne({ _id: uid });
     await audit(req, {
       action: "user.delete",
       targetType: "user",
-      targetId: user._id,
+      targetId: uid,
       summary: `DELETE user ${user.email}`,
       detail: { email: user.email, role: user.role },
     });
@@ -196,9 +227,9 @@ router.delete("/users/:userId", docIdParam("userId"), validateRequest, async (re
 
 router.get(
   "/reports",
-  query("page").optional().isInt({ min: 1 }),
-  query("limit").optional().isInt({ min: 1, max: 100 }),
+  validate(paginatedQuerySchema, "query"),
   query("search").optional().trim().isLength({ max: 120 }),
+  query("status").optional().isIn(["open", "reviewing", "resolved", "dismissed"]),
   validateRequest,
   async (req, res, next) => {
     try {
@@ -208,15 +239,7 @@ router.get(
         const rx = new RegExp(escapeRegex(search), "i");
         filter.$or = [{ reason: rx }, { description: rx }, { status: rx }];
       }
-      if (!wantsPaginatedList(req)) {
-        const reports = await Report.find(filter)
-          .sort({ createdAt: -1 })
-          .limit(400)
-          .populate("reporterId", "name email role")
-          .populate("reportedUserId", "name email role")
-          .lean();
-        return res.json({ reports });
-      }
+      if (req.query.status) filter.status = String(req.query.status);
       const { limit, page, skip } = parsePagination(req);
       const [reports, total] = await Promise.all([
         Report.find(filter)
@@ -228,7 +251,10 @@ router.get(
           .lean(),
         Report.countDocuments(filter),
       ]);
-      return res.json({ reports, pagination: paginationMeta(total, page, limit) });
+      return res.json({
+        success: true,
+        data: { items: reports, total, page, limit },
+      });
     } catch (e) {
       next(e);
     }
@@ -269,29 +295,20 @@ router.patch(
 
 router.get(
   "/transactions",
-  query("page").optional().isInt({ min: 1 }),
-  query("limit").optional().isInt({ min: 1, max: 100 }),
+  validate(paginatedQuerySchema, "query"),
   query("flagged").optional().isIn(["0", "1", "true", "false"]),
   query("search").optional().trim().isLength({ max: 120 }),
+  query("status").optional().isIn(["success", "failed", "pending"]),
   validateRequest,
   async (req, res, next) => {
     try {
       const q = {};
       if (req.query.flagged === "1" || req.query.flagged === "true") q.flagged = true;
+      if (req.query.status) q.status = String(req.query.status);
       const search = String(req.query.search || "").trim();
       if (search) {
         const rx = new RegExp(escapeRegex(search), "i");
         q.$or = [{ type: rx }, { status: rx }, { flaggedReason: rx }];
-      }
-      if (!wantsPaginatedList(req)) {
-        const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 80));
-        const txs = await Transaction.find(q)
-          .sort({ createdAt: -1 })
-          .limit(limit)
-          .populate("userId", "name email role")
-          .populate("walletAccountId", "walletType phoneNumber label balance")
-          .lean();
-        return res.json({ transactions: txs });
       }
       const { limit, page, skip } = parsePagination(req);
       const [txs, total] = await Promise.all([
@@ -304,7 +321,10 @@ router.get(
           .lean(),
         Transaction.countDocuments(q),
       ]);
-      return res.json({ transactions: txs, pagination: paginationMeta(total, page, limit) });
+      return res.json({
+        success: true,
+        data: { items: txs, total, page, limit },
+      });
     } catch (e) {
       next(e);
     }
@@ -314,6 +334,7 @@ router.get(
 router.patch(
   "/transactions/:id/flag",
   docIdParam("id"),
+  validate(flagTransactionSchema),
   body("flagged").isBoolean(),
   body("flaggedReason").optional().trim().isLength({ max: 500 }),
   validateRequest,
@@ -341,8 +362,7 @@ router.patch(
 
 router.get(
   "/audit",
-  query("page").optional().isInt({ min: 1 }),
-  query("limit").optional().isInt({ min: 1, max: 100 }),
+  validate(paginatedQuerySchema, "query"),
   query("search").optional().trim().isLength({ max: 120 }),
   validateRequest,
   async (req, res, next) => {
@@ -352,15 +372,6 @@ router.get(
       if (search) {
         const rx = new RegExp(escapeRegex(search), "i");
         filter.$or = [{ action: rx }, { targetType: rx }, { summary: rx }];
-      }
-      if (!wantsPaginatedList(req)) {
-        const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 80));
-        const logs = await AdminAuditLog.find(filter)
-          .sort({ createdAt: -1 })
-          .limit(limit)
-          .populate("actorAdminId", "name email")
-          .lean();
-        return res.json({ logs });
       }
       const { limit, page, skip } = parsePagination(req);
       const [logs, total] = await Promise.all([
@@ -372,7 +383,10 @@ router.get(
           .lean(),
         AdminAuditLog.countDocuments(filter),
       ]);
-      return res.json({ logs, pagination: paginationMeta(total, page, limit) });
+      return res.json({
+        success: true,
+        data: { items: logs, total, page, limit },
+      });
     } catch (e) {
       next(e);
     }
@@ -381,25 +395,18 @@ router.get(
 
 router.get(
   "/rides",
-  query("page").optional().isInt({ min: 1 }),
-  query("limit").optional().isInt({ min: 1, max: 100 }),
+  validate(paginatedQuerySchema, "query"),
   query("search").optional().trim().isLength({ max: 120 }),
+  query("status").optional().isIn(["pending", "accepted", "ongoing", "completed", "cancelled"]),
   validateRequest,
   async (req, res, next) => {
     try {
       const filter = {};
+      if (req.query.status) filter.status = String(req.query.status);
       const search = String(req.query.search || "").trim();
       if (search) {
         const rx = new RegExp(escapeRegex(search), "i");
         filter.$or = [{ status: rx }];
-      }
-      if (!wantsPaginatedList(req)) {
-        const rides = await Ride.find(filter)
-          .sort({ createdAt: -1 })
-          .limit(200)
-          .populate("passengerId", "name email role profileImageUrl")
-          .populate("driverId", "name email role profileImageUrl");
-        return res.json({ rides });
       }
       const { limit, page, skip } = parsePagination(req);
       const [rides, total] = await Promise.all([
@@ -411,7 +418,10 @@ router.get(
           .populate("driverId", "name email role profileImageUrl"),
         Ride.countDocuments(filter),
       ]);
-      return res.json({ rides, pagination: paginationMeta(total, page, limit) });
+      return res.json({
+        success: true,
+        data: { items: rides, total, page, limit },
+      });
     } catch (e) {
       next(e);
     }
@@ -500,5 +510,37 @@ router.get("/stats", async (req, res, next) => {
     next(e);
   }
 });
+
+router.post(
+  "/refund",
+  validate(adminRefundSchema),
+  body("userId").trim().notEmpty().isLength({ min: 1 }),
+  body("amount").isFloat({ gt: 0, max: 50000 }).toFloat(),
+  body("rideId").optional().trim(),
+  body("note").optional().trim().isLength({ max: 500 }),
+  validateRequest,
+  async (req, res, next) => {
+    try {
+      const { userId, amount, rideId, note } = req.body;
+      const user = await User.findById(userId);
+      if (!user) throw new AppError("User not found", 404);
+
+      const tx = await adminCreditUser(userId, rideId, amount, note || "Admin manual refund");
+      if (!tx) throw new AppError("Refund failed", 500);
+
+      await audit(req, {
+        action: "wallet.refund",
+        targetType: "user",
+        targetId: userId,
+        summary: `Manual refund ${amount} to user ${user.email}`,
+        detail: { userId, amount, rideId: rideId || null, note: note || "" },
+      });
+
+      return res.json({ transaction: tx.toJSON ? tx.toJSON() : tx });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
 
 export default router;

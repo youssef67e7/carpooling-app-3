@@ -2,15 +2,35 @@ import { randomBytes } from "crypto";
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { body } from "express-validator";
+import { getDb } from "../mongo/client.js";
 import { User } from "../models/User.js";
 import { AdminAccount } from "../models/AdminAccount.js";
 import { WalletAccount } from "../models/WalletAccount.js";
 import { PassengerProfile } from "../models/PassengerProfile.js";
 import { authRequired, blockCheck } from "../middleware/auth.js";
 import { validateRequest } from "../middleware/validateRequest.js";
+import { validate } from "../middleware/validate.js";
 import { AppError } from "../errors/AppError.js";
 import { authWriteLimiter } from "../middleware/rateLimiters.js";
 import { isFixedAdminEmail, normalizeAdminEmail } from "../config/fixedAdmins.js";
+import {
+  googleAuthSchema,
+  registerSchema,
+  loginSchema,
+  requestResetOtpSchema,
+  resetPasswordSchema,
+  sendOtpSchema,
+  verifyOtpSchema,
+  verifyFirebasePhoneSchema,
+} from "../schemas/auth.schemas.js";
+import {
+  generateRefreshToken,
+  hashToken,
+  storeRefreshToken,
+  rotateRefreshToken,
+  revokeAllRefreshTokens,
+} from "../services/refreshTokenService.js";
+import { refreshTokenSchema } from "../schemas/auth.schemas.js";
 import { signUserToken } from "../utils/signUserToken.js";
 import {
   isGoogleOrFirebaseSignInConfigured,
@@ -22,6 +42,9 @@ import { EmailPasswordResetOtp } from "../models/EmailPasswordResetOtp.js";
 import { normalizePhone, hashPhoneOtp, randomPhoneOtp6, syntheticEmailForPhone } from "../utils/phoneOtp.js";
 import { hashEmailOtp, randomEmailOtp6 } from "../utils/emailOtp.js";
 import { sendSms, buildLoginOtpMessage } from "../services/sendSms.js";
+import { sendPhoneOtp, verifyPhoneOtp } from "../services/authNativeService.js";
+import { verifyFirebasePhoneToken } from "../services/firebasePhoneService.js";
+import { registerFcmTokenSchema } from "../schemas/misc.schemas.js";
 
 const router = Router();
 const PHONE_OTP_TTL_MS = 10 * 60 * 1000;
@@ -70,6 +93,7 @@ router.get("/google-config", (_req, res) => {
 router.post(
   "/google",
   authWriteLimiter,
+  validate(googleAuthSchema),
   body("idToken").isString().notEmpty().isLength({ max: 12000 }),
   validateRequest,
   async (req, res, next) => {
@@ -98,8 +122,10 @@ router.post(
       });
       await finalizeUserForSession(user);
       const fresh = await User.findById(user._id);
-      const token = signUserToken(fresh);
-      return res.json({ token, user: fresh.toJSON() });
+      const accessToken = signUserToken(fresh);
+      const rawRefreshToken = generateRefreshToken();
+      await storeRefreshToken(fresh._id, rawRefreshToken);
+      return res.json({ accessToken, refreshToken: rawRefreshToken, user: fresh.toJSON() });
     } catch (e) {
       next(e);
     }
@@ -109,6 +135,7 @@ router.post(
 router.post(
   "/register",
   authWriteLimiter,
+  validate(registerSchema),
   body("name").trim().notEmpty().isLength({ max: 80 }),
   body("email").isEmail().normalizeEmail(),
   body("password").isLength({ min: 6, max: 128 }),
@@ -149,8 +176,10 @@ router.post(
         balance: 0,
         isDefault: true,
       });
-      const token = signUserToken(user);
-      return res.status(201).json({ token, user: user.toJSON() });
+      const accessToken = signUserToken(user);
+      const rawRefreshToken = generateRefreshToken();
+      await storeRefreshToken(user._id, rawRefreshToken);
+      return res.status(201).json({ accessToken, refreshToken: rawRefreshToken, user: user.toJSON() });
     } catch (e) {
       next(e);
     }
@@ -316,8 +345,10 @@ router.post(
 
       await finalizeUserForSession(user);
       const fresh = await User.findById(user._id);
-      const token = signUserToken(fresh);
-      return res.json({ token, user: fresh.toJSON() });
+      const accessToken = signUserToken(fresh);
+      const rawRefreshToken = generateRefreshToken();
+      await storeRefreshToken(fresh._id, rawRefreshToken);
+      return res.json({ accessToken, refreshToken: rawRefreshToken, user: fresh.toJSON() });
     } catch (e) {
       next(e);
     }
@@ -327,6 +358,7 @@ router.post(
 router.post(
   "/login",
   authWriteLimiter,
+  validate(loginSchema),
   body("email").isEmail().normalizeEmail(),
   body("password").notEmpty(),
   validateRequest,
@@ -374,8 +406,10 @@ router.post(
           user.is_verified = true;
           await user.save();
         }
-        const token = signUserToken(user);
-        return res.json({ token, user: user.toJSON() });
+        const accessToken = signUserToken(user);
+        const rawRefreshToken = generateRefreshToken();
+        await storeRefreshToken(user._id, rawRefreshToken);
+        return res.json({ accessToken, refreshToken: rawRefreshToken, user: user.toJSON() });
       }
 
       const user = await User.findOne({ email: emailNorm });
@@ -403,8 +437,10 @@ router.post(
       if (user.is_verified === false) {
         throw new AppError("Account pending admin approval.", 403);
       }
-      const token = signUserToken(user);
-      return res.json({ token, user: user.toJSON() });
+      const accessToken = signUserToken(user);
+      const rawRefreshToken = generateRefreshToken();
+      await storeRefreshToken(user._id, rawRefreshToken);
+      return res.json({ accessToken, refreshToken: rawRefreshToken, user: user.toJSON() });
     } catch (e) {
       next(e);
     }
@@ -437,6 +473,7 @@ router.post(
 router.post(
   "/forgot-password",
   authWriteLimiter,
+  validate(requestResetOtpSchema),
   body("email").isEmail().normalizeEmail(),
   validateRequest,
   async (req, res, next) => {
@@ -479,6 +516,7 @@ router.post(
 router.post(
   "/reset-password",
   authWriteLimiter,
+  validate(resetPasswordSchema),
   body("email").isEmail().normalizeEmail(),
   body("otp").trim().isLength({ min: 4, max: 8 }),
   body("password").isLength({ min: 6, max: 128 }),
@@ -512,6 +550,142 @@ router.post(
       return res.json({ ok: true, message: "Password updated" });
     } catch (e) {
       next(e);
+    }
+  }
+);
+
+// --- V2 auth endpoints (native SMS OTP) ---
+
+router.post("/send-otp", validate(sendOtpSchema), async (req, res) => {
+  try {
+    const { phone } = req.body;
+    if (!phone) {
+      return res.status(400).json({ success: false, error: { code: "VALIDATION_ERROR", message: "Phone is required" } });
+    }
+    const result = await sendPhoneOtp(phone);
+    return res.status(200).json({ success: true, data: { message: "OTP sent", code: result.code } });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: { code: "INTERNAL_ERROR", message: err.message } });
+  }
+});
+
+router.post("/verify-otp", validate(verifyOtpSchema), async (req, res) => {
+  try {
+    const { phone, code } = req.body;
+    if (!phone || !code) {
+      return res.status(400).json({ success: false, error: { code: "VALIDATION_ERROR", message: "Phone and code are required" } });
+    }
+    const result = await verifyPhoneOtp(phone, code);
+    return res.status(200).json({
+      success: true,
+      data: { token: result.token, accessToken: result.accessToken, refreshToken: result.refreshToken, user: result.user, isNewUser: result.isNewUser },
+    });
+  } catch (err) {
+    const msg = err.message;
+    if (msg.toLowerCase().includes("expired") || msg.toLowerCase().includes("not found")) {
+      return res.status(400).json({ success: false, error: { code: "AUTH_ERROR", message: msg } });
+    }
+    if (msg.toLowerCase().includes("attempts") || msg.toLowerCase().includes("invalid")) {
+      return res.status(401).json({ success: false, error: { code: "AUTH_ERROR", message: msg } });
+    }
+    return res.status(500).json({ success: false, error: { code: "INTERNAL_ERROR", message: msg } });
+  }
+});
+
+router.post("/verify-firebase-phone", validate(verifyFirebasePhoneSchema), async (req, res) => {
+  const { firebaseIdToken, name } = req.body;
+  if (!firebaseIdToken) {
+    return res.status(400).type("json").send(JSON.stringify({ success: false, error: { code: "VALIDATION_ERROR", message: "firebaseIdToken is required" } }));
+  }
+  try {
+    const result = await verifyFirebasePhoneToken(firebaseIdToken, name);
+    return res.status(200).type("json").send(JSON.stringify({ success: true, data: result }));
+  } catch (err) {
+    const msg = err.message || String(err);
+    if (msg.includes("Invalid Firebase token")) {
+      return res.status(401).type("json").send(JSON.stringify({ success: false, error: { code: "AUTH_ERROR", message: msg } }));
+    }
+    return res.status(500).type("json").send(JSON.stringify({ success: false, error: { code: "INTERNAL_ERROR", message: msg } }));
+  }
+});
+
+// --- Refresh token rotation & logout ---
+
+router.post("/refresh", validate(refreshTokenSchema), async (req, res, next) => {
+  try {
+    const { refreshToken } = req.body;
+
+    const tokenHash = hashToken(refreshToken);
+    const db = getDb();
+    const tokenDoc = await db.collection("refreshTokens").findOne({ tokenHash });
+
+    if (!tokenDoc) {
+      return res.status(401).json({
+        success: false,
+        error: "Invalid refresh token",
+      });
+    }
+
+    if (tokenDoc.expiresAt < new Date()) {
+      await db.collection("refreshTokens").deleteOne({ _id: tokenDoc._id });
+      return res.status(401).json({
+        success: false,
+        error: "Refresh token expired",
+      });
+    }
+
+    const tokens = await rotateRefreshToken(tokenDoc.userId, refreshToken);
+
+    res.json({
+      success: true,
+      data: tokens,
+    });
+  } catch (err) {
+    if (err.code === "TOKEN_REVOKED") {
+      return res.status(401).json({
+        success: false,
+        error: err.message,
+        code: "TOKEN_REVOKED",
+      });
+    }
+    next(err);
+  }
+});
+
+router.post("/logout", authRequired, async (req, res, next) => {
+  try {
+    const count = await revokeAllRefreshTokens(req.userId);
+    res.json({
+      success: true,
+      data: { revokedSessions: count },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post(
+  "/register-token",
+  authRequired,
+  validate(registerFcmTokenSchema),
+  async (req, res, next) => {
+    try {
+      const db = getDb();
+      const { token, platform } = req.body;
+      await db.collection("fcmTokens").updateOne(
+        { token },
+        {
+          $set: {
+            userId: req.userId,
+            platform,
+            createdAt: new Date(),
+          },
+        },
+        { upsert: true }
+      );
+      res.json({ success: true });
+    } catch (err) {
+      next(err);
     }
   }
 );

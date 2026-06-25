@@ -1,9 +1,11 @@
 import { Router } from "express";
+import { validate } from "../middleware/validate.js";
+import { saveProfileImageSchema } from "../schemas/misc.schemas.js";
 import { updateById } from "../mongo/queries/users.js";
 
 const router = Router();
 
-router.post("/profile-image", async (req, res) => {
+router.post("/profile-image", validate(saveProfileImageSchema), async (req, res) => {
   try {
     const { url } = req.body;
     if (!url || !url.startsWith("https://res.cloudinary.com")) {

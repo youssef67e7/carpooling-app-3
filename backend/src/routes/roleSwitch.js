@@ -2,8 +2,10 @@ import { Router } from "express";
 import { body } from "express-validator";
 import { authRequired, blockCheck } from "../middleware/auth.js";
 import { validateRequest } from "../middleware/validateRequest.js";
+import { validate } from "../middleware/validate.js";
 import { AppError } from "../errors/AppError.js";
 import { User } from "../models/User.js";
+import { switchRoleSchema } from "../schemas/misc.schemas.js";
 import { DriverProfile } from "../models/DriverProfile.js";
 import { DriverDocuments } from "../models/DriverDocuments.js";
 import { signUserToken } from "../utils/signUserToken.js";
@@ -19,6 +21,7 @@ function normRole(raw) {
 
 router.post(
   "/switch-role",
+  validate(switchRoleSchema),
   body("role").isIn(["passenger", "driver"]),
   validateRequest,
   async (req, res, next) => {

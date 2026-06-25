@@ -1,5 +1,6 @@
 import { findByPhone, create } from "../mongo/queries/users.js";
 import { signUserToken } from "../utils/signUserToken.js";
+import { generateRefreshToken, storeRefreshToken } from "./refreshTokenService.js";
 
 const FIREBASE_WEB_API_KEY = process.env.FIREBASE_WEB_API_KEY;
 
@@ -34,6 +35,8 @@ export async function verifyFirebasePhoneToken(firebaseIdToken, name) {
     isNewUser = true;
   }
 
-  const token = signUserToken(user);
-  return { token, user, isNewUser };
+  const accessToken = signUserToken(user);
+  const rawRefreshToken = generateRefreshToken();
+  await storeRefreshToken(user._id, rawRefreshToken);
+  return { accessToken, refreshToken: rawRefreshToken, user, isNewUser };
 }

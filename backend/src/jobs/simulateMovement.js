@@ -1,7 +1,5 @@
 import { User } from "../models/User.js";
 import { Ride } from "../models/Ride.js";
-import { emitTo, roomRide } from "../realtime/io.js";
-
 function stepToward(fromLat, fromLng, toLat, toLng, t = 0.12) {
   return {
     lat: fromLat + (toLat - fromLat) * t,
@@ -41,12 +39,5 @@ export async function simulateDriverMovement() {
       };
     }
     await User.updateOne({ _id: driver._id }, { $set: { location: next } });
-    for (const r of rides) {
-      emitTo(roomRide(r._id), "driver:location", {
-        driverId: String(driver._id),
-        rideId: String(r._id),
-        location: next,
-      });
-    }
   }
 }
