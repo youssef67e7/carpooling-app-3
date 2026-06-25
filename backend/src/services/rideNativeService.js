@@ -48,13 +48,17 @@ export async function getRequestedRides(vehicleType) {
 }
 
 export async function acceptRide(rideId, driverId) {
-  const ride = await findRideById(rideId);
-  if (!ride) {
-    throw new Error("Ride not found");
-  }
-  if (ride.status !== "pending") {
+  const { matched } = await updateRideStatus(rideId, "accepted",
+    { driver_id: driverId, driverId, accepted_at: new Date() },
+    { currentStatus: "pending" }
+  );
+  if (!matched) {
+    const ride = await findRideById(rideId);
+    if (!ride) throw new Error("Ride not found");
+    if (ride.driverId && String(ride.driverId) === String(driverId)) {
+      return ride;
+    }
     throw new Error("Ride is no longer available");
   }
-  await updateRideStatus(rideId, "accepted", { driver_id: driverId, driverId, accepted_at: new Date() });
   return findRideById(rideId);
 }

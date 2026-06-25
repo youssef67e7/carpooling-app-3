@@ -170,14 +170,43 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
                   final idx = entry.key + 1;
                   final active = entry.value;
                   final status = '${active['status']}';
+                  final rideId = '${active['_id']}';
                   return _ActiveRideCard(
                     idx: idx,
                     status: status,
                     fare: '${active['agreedFare'] ?? active['estimatedFare'] ?? '—'}',
                     passenger: _passengerName(active),
-                    onChat: () => context.push('/ride-chat/${active['_id']}'),
-                    onStart: status == 'accepted' ? () => ref.read(rideProvider.notifier).startRide('${active['_id']}') : null,
-                    onEnd: status == 'ongoing' ? () => ref.read(rideProvider.notifier).endRide('${active['_id']}') : null,
+                    onChat: () => context.push('/ride-chat/$rideId'),
+                    onArriving: status == 'accepted'
+                        ? () => ref.read(rideProvider.notifier).driverArriving(rideId)
+                        : null,
+                    onOnboard: status == 'driver_arriving'
+                        ? () => ref.read(rideProvider.notifier).passengerOnboard(rideId)
+                        : null,
+                    onStart: status == 'passenger_onboard'
+                        ? () => ref.read(rideProvider.notifier).startRide(rideId)
+                        : null,
+                    onEnd: status == 'ongoing'
+                        ? () => ref.read(rideProvider.notifier).endRide(rideId)
+                        : null,
+                    onCancel: const {'accepted', 'driver_arriving', 'passenger_onboard'}.contains(status)
+                        ? () async {
+                            final confirm = await showDialog<bool>(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                title: Text('cancelRideTitle'.tr()),
+                                content: Text('cancelRideConfirm'.tr()),
+                                actions: [
+                                  TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text('no'.tr())),
+                                  FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: Text('yesCancel'.tr())),
+                                ],
+                              ),
+                            );
+                            if (confirm == true) {
+                              await ref.read(rideProvider.notifier).driverCancelRide(rideId);
+                            }
+                          }
+                        : null,
                   );
                 }),
               ],
@@ -236,8 +265,11 @@ class _ActiveRideCard extends StatelessWidget {
     required this.fare,
     required this.passenger,
     required this.onChat,
+    this.onArriving,
+    this.onOnboard,
     this.onStart,
     this.onEnd,
+    this.onCancel,
   });
 
   final int idx;
@@ -245,11 +277,46 @@ class _ActiveRideCard extends StatelessWidget {
   final String fare;
   final String passenger;
   final VoidCallback onChat;
+  final VoidCallback? onArriving;
+  final VoidCallback? onOnboard;
   final VoidCallback? onStart;
   final VoidCallback? onEnd;
+  final VoidCallback? onCancel;
+
+  String _actionLabel(String status) {
+    switch (status) {
+      case 'accepted':
+        return 'I\'ve arrived';
+      case 'driver_arriving':
+        return 'Passenger onboard';
+      case 'passenger_onboard':
+        return 'Start trip';
+      case 'ongoing':
+        return 'End trip';
+      default:
+        return '';
+    }
+  }
+
+  VoidCallback? _action(String status) {
+    switch (status) {
+      case 'accepted':
+        return onArriving;
+      case 'driver_arriving':
+        return onOnboard;
+      case 'passenger_onboard':
+        return onStart;
+      case 'ongoing':
+        return onEnd;
+      default:
+        return null;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final action = _action(status);
+    final actionLabel = _actionLabel(status);
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
@@ -267,8 +334,9 @@ class _ActiveRideCard extends StatelessWidget {
           Text('${'passenger'.tr()}: $passenger', style: const TextStyle(fontSize: 13)),
           const SizedBox(height: 10),
           OutlinedButton.icon(onPressed: onChat, icon: const Icon(Icons.chat_bubble_outline, size: 18), label: Text('rideChatTitle'.tr())),
-          if (onStart != null) ...[const SizedBox(height: 8), CustomButton(title: 'startTrip'.tr(), onPressed: onStart)],
-          if (onEnd != null) ...[const SizedBox(height: 8), CustomButton(title: 'endTrip'.tr(), onPressed: onEnd)],
+          if (action != null && actionLabel.isNotEmpty) ...[const SizedBox(height: 8), CustomButton(title: actionLabel, onPressed: action)],
+          if (onCancel != null) ...[const SizedBox(height: 8), OutlinedButton.icon(onPressed: onCancel, icon: const Icon(Icons.cancel_outlined, size: 18), label: Text('cancelRide'.tr()), style: OutlinedButton.styleFrom(foregroundColor: WeretTokens.error, side: const BorderSide(color: WeretTokens.error)))],
+
         ],
       ),
     );

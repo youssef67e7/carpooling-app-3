@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { getCollection } from "./client.js";
-import { collectionToTable, docToRow, rowToDoc, readField, snakeToCamel, syncFieldAliases } from "./fieldMap.js";
+import { camelToSnake, collectionToTable, docToRow, rowToDoc, readField, snakeToCamel, syncFieldAliases } from "./fieldMap.js";
 
 /** @type {Map<string, object>} */
 const MODEL_REGISTRY = new Map();
@@ -98,7 +98,8 @@ export class MongoDoc {
       await this._model.beforeSave(this);
     }
 
-    const plain = syncFieldAliases({ ...this.toObject(), _id: this._id });
+    const toObj = this.toObject();
+    const plain = syncFieldAliases({ ...toObj, _id: this._id });
     const payload = serializeForDb(plain);
     const id = String(payload.id || this._id);
     delete payload.id;
@@ -480,6 +481,30 @@ export function createModel(collectionName, options = {}) {
   };
 
   model.updateOne = async (filter, update, opts = {}) => {
+    const id = filter._id ? String(filter._id) : null;
+
+    if (id) {
+      const toSnakeKeys = (obj) => {
+        const out = {};
+        for (const [k, v] of Object.entries(obj)) {
+          out[camelToSnake(k)] = v;
+        }
+        return out;
+      };
+      const nativeFilter = toSnakeKeys(filter);
+      nativeFilter._id = id;
+      const nativeUpdate = {};
+      for (const [op, fields] of Object.entries(update)) {
+        if (op === "$set" || op === "$inc" || op === "$unset") {
+          nativeUpdate[op] = toSnakeKeys(fields);
+        } else {
+          nativeUpdate[op] = fields;
+        }
+      }
+      const result = await getCollection(model.tableName).updateOne(nativeFilter, nativeUpdate, opts);
+      return { acknowledged: result.acknowledged, modifiedCount: result.modifiedCount, upsertedCount: result.upsertedCount ?? 0 };
+    }
+
     const docs = await loadCollectionDocs(model);
     const matches = docs.filter((d) => matchesFilter(d.toObject(), filter));
     if (!matches.length) {
@@ -531,27 +556,50 @@ export function createModel(collectionName, options = {}) {
   model.findOneAndUpdate = async (filter, update, opts = {}) => {
     const id = filter._id ? String(filter._id) : null;
 
-    if (id && update.$inc) {
-      const row = await getCollection(model.tableName).findOne({ _id: id });
-      const data = rowFromDoc(row);
-      if (!data) {
-        if (opts.upsert) {
-          const now = new Date();
-          const base = { ...filter, _id: id, createdAt: now, updatedAt: now };
-          delete base._id;
-          applyUpdate(base, update);
-          return model.create({ ...base, _id: id });
-        }
-        return null;
+    const toSnakeKeys = (obj) => {
+      const out = {};
+      for (const [k, v] of Object.entries(obj)) {
+        out[camelToSnake(k)] = v;
       }
-      const before = hydrateData(data);
-      if (!matchesFilter(before, filter)) return null;
-      const after = { ...before };
-      applyUpdate(after, update);
-      after.updatedAt = new Date();
-      const doc = new MongoDoc(model, after);
-      await doc.save();
-      return opts.new === false ? new MongoDoc(model, before) : doc;
+      return out;
+    };
+
+    const nativeUpdate = {};
+    for (const [op, fields] of Object.entries(update)) {
+      if (op === "$set" || op === "$inc" || op === "$unset") {
+        nativeUpdate[op] = toSnakeKeys(fields);
+      } else {
+        nativeUpdate[op] = fields;
+      }
+    }
+    if (id) {
+      const nativeFilter = toSnakeKeys(filter);
+      nativeFilter._id = id;
+
+      const row = await getCollection(model.tableName).findOneAndUpdate(
+        nativeFilter,
+        nativeUpdate,
+        { returnDocument: opts.new === false ? "before" : "after" }
+      );
+
+      if (row) {
+        const data = rowFromDoc(row);
+        return new MongoDoc(model, data);
+      }
+
+      if (!opts.upsert) return null;
+
+      const existing = await getCollection(model.tableName).findOne({ _id: id });
+      if (existing) return null;
+
+      const now = new Date();
+      const base = { ...filter, _id: id, createdAt: now, updatedAt: now };
+      delete base._id;
+      syncFieldAliases(base);
+      const payload = serializeForDb(base);
+      await getCollection(model.tableName).replaceOne({ _id: id }, { _id: id, ...payload }, { upsert: true });
+      const created = await getCollection(model.tableName).findOne({ _id: id });
+      return new MongoDoc(model, rowFromDoc(created));
     }
 
     const docs = await loadCollectionDocs(model);
@@ -559,6 +607,7 @@ export function createModel(collectionName, options = {}) {
     if (!match) {
       if (opts.upsert) {
         const base = { ...filter };
+        syncFieldAliases(base);
         applyUpdate(base, update);
         return model.create(base);
       }

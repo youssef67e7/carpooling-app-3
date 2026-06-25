@@ -163,6 +163,7 @@ router.post(
         carCategory: String(req.body.carCategory || "sedan").toLowerCase(),
       };
       if (!isOwnedUploadUrl(req.userId, car.imageUrl)) throw new AppError("Invalid image URL", 400);
+      if (!Array.isArray(prof.cars)) prof.cars = [];
       prof.cars.push(car);
       if (!prof.selectedCarId && prof.cars[0]?._id) prof.selectedCarId = prof.cars[0]._id;
       await prof.save();

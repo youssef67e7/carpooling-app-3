@@ -27,6 +27,7 @@ import { FcmToken } from "../models/FcmToken.js";
 import { WithdrawalRequest } from "../models/WithdrawalRequest.js";
 import { AdminAuditLog } from "../models/AdminAuditLog.js";
 import { notifyDriverVerified, notifyDriverRejected } from "../services/notificationHelpers.js";
+import { getMessagesByRideId } from "../mongo/queries/messages.js";
 
 const router = Router();
 
@@ -548,6 +549,56 @@ router.post(
       });
 
       return res.json({ transaction: tx.toJSON ? tx.toJSON() : tx });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+router.get(
+  "/rides/:rideId/messages",
+  docIdParam("rideId"),
+  query("before").optional().trim(),
+  query("limit").optional().isInt({ min: 1, max: 300 }),
+  validateRequest,
+  async (req, res, next) => {
+    try {
+      const ride = await Ride.findById(req.params.rideId);
+      if (!ride) throw new AppError("Ride not found", 404);
+      const messages = await getMessagesByRideId(req.params.rideId, {
+        before: req.query.before,
+        limit: Number(req.query.limit) || 50,
+      });
+      return res.json({ messages });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+router.delete(
+  "/messages/:messageId",
+  docIdParam("messageId"),
+  validateRequest,
+  async (req, res, next) => {
+    try {
+      const { ObjectId } = await import("mongodb");
+      const db = getDb();
+      const mid = String(req.params.messageId);
+      let filter = { _id: mid };
+      let result = await db.collection("messages").deleteOne(filter);
+      if (!result.deletedCount) {
+        try { filter = { _id: new ObjectId(mid) }; result = await db.collection("messages").deleteOne(filter); }
+        catch { /* not a valid ObjectId hex string */ }
+      }
+      if (!result.deletedCount) throw new AppError("Message not found", 404);
+      await audit(req, {
+        action: "message.delete",
+        targetType: "message",
+        targetId: req.params.messageId,
+        summary: `Deleted message ${req.params.messageId}`,
+      });
+      return res.json({ ok: true });
     } catch (e) {
       next(e);
     }

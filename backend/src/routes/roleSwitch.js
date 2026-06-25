@@ -109,7 +109,7 @@ router.post(
 
       await DriverProfile.updateOne(
         { userId: user._id },
-        { $set: { userId: user._id, status: "pending" } },
+        { $set: { userId: user._id, status: "pending", cars: [] } },
         { upsert: true }
       );
 

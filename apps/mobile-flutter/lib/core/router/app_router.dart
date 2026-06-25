@@ -25,11 +25,11 @@ class _ScreenLogObserver extends NavigatorObserver {
   }
 }
 
-final _rootKey = GlobalKey<NavigatorState>();
+final rootNavigatorKey = GlobalKey<NavigatorState>();
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   final router = GoRouter(
-    navigatorKey: _rootKey,
+    navigatorKey: rootNavigatorKey,
     initialLocation: '/onboarding',
     observers: [_ScreenLogObserver()],
     redirect: (context, state) {

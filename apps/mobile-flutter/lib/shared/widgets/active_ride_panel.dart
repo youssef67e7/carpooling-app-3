@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/providers/ride_provider.dart';
 import '../../core/theme/weret_tokens.dart';
 import 'report_user_modal.dart';
 
@@ -16,6 +17,25 @@ class ActiveRidePanel extends ConsumerWidget {
     return t == key ? status : t;
   }
 
+  IconData _statusIcon(String status) {
+    switch (status) {
+      case 'pending':
+        return Icons.hourglass_empty;
+      case 'accepted':
+        return Icons.person_pin_circle;
+      case 'driver_arriving':
+        return Icons.directions_car;
+      case 'passenger_onboard':
+        return Icons.person;
+      case 'ongoing':
+        return Icons.navigation;
+      case 'completed':
+        return Icons.check_circle;
+      default:
+        return Icons.local_taxi;
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final rideId = '${ride['_id']}';
@@ -28,6 +48,16 @@ class ActiveRidePanel extends ConsumerWidget {
             : ride['driverName'];
     final driverId = ride['driverId'] is Map ? (ride['driverId'] as Map)['_id'] : ride['driverId'];
     final awaitingConfirm = ride['awaitingDriverConfirm'] == true;
+
+    final statusLine = status == 'driver_arriving'
+        ? 'Your driver is on the way'
+        : status == 'passenger_onboard'
+            ? 'You\'re in the car — heading to destination'
+            : status == 'ongoing'
+                ? 'Trip in progress'
+                : status == 'completed'
+                    ? 'Trip completed'
+                    : null;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -44,7 +74,7 @@ class ActiveRidePanel extends ConsumerWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.local_taxi, color: Colors.white70, size: 18),
+              Icon(_statusIcon(status), color: Colors.white70, size: 18),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -55,6 +85,10 @@ class ActiveRidePanel extends ConsumerWidget {
               Text('$fare', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 18)),
             ],
           ),
+          if (statusLine != null) ...[
+            const SizedBox(height: 6),
+            Text(statusLine, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+          ],
           if (driver != null) ...[
             const SizedBox(height: 8),
             Text('${'driver'.tr()}: $driver', style: const TextStyle(color: Colors.white70, fontSize: 13)),
@@ -71,6 +105,32 @@ class ActiveRidePanel extends ConsumerWidget {
                     style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: Colors.white54)),
                   ),
                 ),
+                if (const {'pending', 'accepted', 'driver_arriving', 'passenger_onboard'}.contains(status)) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        final confirm = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            title: Text('cancelRideTitle'.tr()),
+                            content: Text('cancelRideConfirm'.tr()),
+                            actions: [
+                              TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text('no'.tr())),
+                              FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: Text('yesCancel'.tr())),
+                            ],
+                          ),
+                        );
+                        if (confirm == true) {
+                          await ref.read(rideProvider.notifier).cancelRide(rideId);
+                        }
+                      },
+                      icon: const Icon(Icons.cancel_outlined, size: 18),
+                      label: Text('cancelRide'.tr()),
+                      style: OutlinedButton.styleFrom(foregroundColor: Colors.white70, side: const BorderSide(color: Colors.white38)),
+                    ),
+                  ),
+                ],
               ],
             ),
             if (driverId != null && '$driverId'.isNotEmpty) ...[

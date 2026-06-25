@@ -25,14 +25,16 @@ export function snakeToCamel(key) {
 /** Keep snake_case + camelCase in sync (backend routes use both styles). */
 export function syncFieldAliases(obj) {
   if (!obj || typeof obj !== "object") return obj;
-  for (const [key, val] of Object.entries(obj)) {
-    if (key === "_id" || val === undefined) continue;
+  for (const key of Object.keys(obj)) {
+    if (key === "_id") continue;
+    const val = obj[key];
+    if (val === undefined) continue;
     if (key.includes("_")) {
       const camel = snakeToCamel(key);
-      if (obj[camel] === undefined) obj[camel] = val;
+      obj[camel] = val;
     } else if (/[A-Z]/.test(key)) {
       const snake = camelToSnake(key);
-      if (obj[snake] === undefined) obj[snake] = val;
+      obj[snake] = val;
     }
   }
   return obj;

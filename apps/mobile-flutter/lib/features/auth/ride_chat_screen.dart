@@ -19,7 +19,10 @@ class RideChatScreen extends ConsumerStatefulWidget {
 
 class _RideChatScreenState extends ConsumerState<RideChatScreen> {
   List<dynamic> _messages = [];
+  bool _loadingMore = false;
+  bool _hasMore = true;
   final _input = TextEditingController();
+  final _scrollController = ScrollController();
   Timer? _pollTimer;
 
   @override
@@ -27,13 +30,21 @@ class _RideChatScreenState extends ConsumerState<RideChatScreen> {
     super.initState();
     Future.microtask(_load);
     _pollTimer = Timer.periodic(const Duration(seconds: 10), (_) => _load());
+    _scrollController.addListener(_onScroll);
   }
 
   @override
   void dispose() {
     _pollTimer?.cancel();
     _input.dispose();
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels > 100) return;
+    if (_loadingMore || !_hasMore) return;
+    _loadMore();
   }
 
   Future<void> _load() async {
@@ -43,12 +54,33 @@ class _RideChatScreenState extends ConsumerState<RideChatScreen> {
     } catch (_) {}
   }
 
+  Future<void> _loadMore() async {
+    if (_messages.isEmpty) return;
+    _loadingMore = true;
+    try {
+      final first = _messages.first;
+      final createdAt = first is Map ? '${first['createdAt'] ?? first['created_at']}' : '';
+      if (createdAt.isEmpty) { _loadingMore = false; return; }
+      final older = await ref.read(rideProvider.notifier).fetchMessages(widget.rideId, before: createdAt);
+      if (mounted) {
+        setState(() {
+          _messages = [...older, ..._messages];
+          _hasMore = older.length >= 30;
+        });
+      }
+    } catch (_) {
+      _hasMore = false;
+    } finally {
+      _loadingMore = false;
+    }
+  }
+
   Future<void> _send() async {
     final text = _input.text.trim();
     if (text.isEmpty) return;
+    _input.clear();
     try {
       await ref.read(rideProvider.notifier).sendMessage(widget.rideId, text);
-      _input.clear();
       await _load();
     } catch (e) {
       if (mounted) {
@@ -83,10 +115,18 @@ class _RideChatScreenState extends ConsumerState<RideChatScreen> {
               child: _messages.isEmpty
                   ? const EmptyState(icon: Icons.chat_outlined, title: 'noMessages', subtitle: 'startConversation')
                   : ListView.builder(
+                      controller: _scrollController,
                       padding: const EdgeInsets.all(16),
-                      itemCount: _messages.length,
+                      itemCount: _messages.length + (_hasMore ? 1 : 0),
                       itemBuilder: (c, i) {
-                        final m = _messages[i];
+                        if (i == 0 && _hasMore) {
+                          return const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 8),
+                            child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
+                          );
+                        }
+                        final idx = _hasMore ? i - 1 : i;
+                        final m = _messages[idx];
                         if (m is! Map) return const SizedBox.shrink();
                         final text = '${m['text'] ?? ''}';
                         final senderId = _extractSenderId(m);

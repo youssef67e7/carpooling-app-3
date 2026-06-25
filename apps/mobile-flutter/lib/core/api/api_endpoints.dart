@@ -44,9 +44,12 @@ class ApiEndpoints {
   static const ridesPassengerMinFare = '/rides/passenger-min-fare';
   static const ridesDriverConfirmBooking = '/rides/driver-confirm-booking';
   static const ridesWithdrawOffer = '/rides/withdraw-offer';
-  static const ridesDriverCancel = '/rides/driver-cancel';
   static const ridesStart = '/rides/start';
   static const ridesEnd = '/rides/end';
+  static String ridesArriving(String id) => '/rides/$id/arriving';
+  static String ridesOnboard(String id) => '/rides/$id/onboard';
+  static String ridesCancel(String id) => '/rides/$id/cancel';
+  static String ridesDriverCancel(String id) => '/rides/$id/driver-cancel';
   static const ridesRate = '/rides/rate';
   static const ridesRatingsReceived = '/rides/ratings/received';
 

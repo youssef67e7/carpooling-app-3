@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 export const createRideSchema = z.object({
-  passengerId: z.string().min(1, "Passenger ID is required"),
   pickup: z.object({
     lat: z.number().min(-90).max(90),
     lng: z.number().min(-180).max(180),
@@ -15,9 +14,7 @@ export const createRideSchema = z.object({
   vehicleType: z.string().min(1, "Vehicle type is required"),
 });
 
-export const acceptRideSchema = z.object({
-  driverId: z.string().min(1, "Driver ID is required"),
-});
+export const acceptRideSchema = z.object({});
 
 export const offerFareSchema = z.object({
   fare: z.number().positive("Fare must be positive"),
@@ -74,7 +71,7 @@ export const rideHistoryQuerySchema = z.object({
 });
 
 export const chatMessageSchema = z.object({
-  content: z.string().min(1, "Message content is required").max(2000),
+  text: z.string().min(1, "Message text is required").max(2000),
   type: z.enum(["text", "image", "system"]).optional().default("text"),
 });
 

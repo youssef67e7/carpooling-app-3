@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { getDb } from "../nativeClient.js";
 import { ObjectId } from "mongodb";
 
@@ -33,8 +34,9 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
  */
 export async function createRide(rideData) {
   const db = await getDb();
-  const result = await db.collection(RIDES).insertOne(rideData);
-  return result.insertedId;
+  const doc = { _id: crypto.randomUUID(), ...rideData };
+  const result = await db.collection(RIDES).insertOne(doc);
+  return doc._id;
 }
 
 /**
@@ -73,9 +75,11 @@ export async function findActiveRideByPassenger(passengerId) {
  * @param {string} rideId
  * @param {string} newStatus
  * @param {object} [extraFields={}]
- * @returns {Promise<void>}
+ * @param {object} [options={}]
+ * @param {string|string[]} [options.currentStatus] - Only update if current status matches (atomic guard)
+ * @returns {Promise<{matched: boolean, modified: boolean}>}
  */
-export async function updateRideStatus(rideId, newStatus, extraFields = {}) {
+export async function updateRideStatus(rideId, newStatus, extraFields = {}, { currentStatus } = {}) {
   const db = await getDb();
   let filter = { _id: rideId };
   try {
@@ -86,7 +90,15 @@ export async function updateRideStatus(rideId, newStatus, extraFields = {}) {
   } catch {
     filter = { _id: new ObjectId(rideId) };
   }
-  await db.collection(RIDES).updateOne(filter, { $set: { status: newStatus, ...extraFields } });
+  if (currentStatus) {
+    if (Array.isArray(currentStatus)) {
+      filter.status = { $in: currentStatus };
+    } else {
+      filter.status = currentStatus;
+    }
+  }
+  const result = await db.collection(RIDES).updateOne(filter, { $set: { status: newStatus, ...extraFields } });
+  return { matched: result.matchedCount > 0, modified: result.modifiedCount > 0 };
 }
 
 /**

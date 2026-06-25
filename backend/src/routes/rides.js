@@ -10,7 +10,7 @@ import { authRequired, blockCheck, roleRequired } from "../middleware/auth.js";
 import { requireApprovedDriver } from "../middleware/driverGate.js";
 import { validateRequest } from "../middleware/validateRequest.js";
 import { validate } from "../middleware/validate.js";
-import { docIdBody, docIdParam } from "../middleware/docId.js";
+import { docIdBody, docIdParam, docIdOptionalBody } from "../middleware/docId.js";
 import { AppError } from "../errors/AppError.js";
 import {
   createRideSchema,
@@ -18,6 +18,7 @@ import {
   routePreviewSchema,
   respondOfferSchema,
   chatMessageSchema,
+  chatQuerySchema,
   rateRideSchema,
   acceptRideSchema,
 } from "../schemas/ride.schemas.js";
@@ -33,6 +34,8 @@ import {
 } from "../services/driverRideCapacity.js";
 import {
   notifyRideAccepted,
+  notifyDriverArrived,
+  notifyPassengerOnboard,
   notifyTripStarted,
   notifyTripCompleted,
   notifyRideCancelled,
@@ -45,18 +48,31 @@ import {
   getRequestedRides,
   acceptRide,
 } from "../services/rideNativeService.js";
+import { getMessagesByRideId, createMessage } from "../mongo/queries/messages.js";
 
 const router = Router();
 
-/* ── Backward-compat V2 endpoints (simple flow, no auth) ── */
-
-router.post("/", validate(createRideSchema), async (req, res) => {
+/* ── Conditional driver gate: admins bypass vehicle check ── */
+async function requireApprovedDriverUnlessAdmin(req, res, next) {
   try {
-    const { passengerId, pickup, dropoff, vehicleType } = req.body;
-    if (!passengerId || !pickup || !dropoff || !vehicleType) {
-      return res.status(400).json({ success: false, error: { code: "RIDE_ERROR", message: "passengerId, pickup, dropoff, and vehicleType are required" } });
+    const user = await User.findById(req.userId).lean();
+    if (!user) return res.status(401).json({ message: "User not found" });
+    if (user.role === "admin") return next();
+    const mode = user.active_role || user.role || "passenger";
+    if (mode !== "driver") return res.status(403).json({ message: "Forbidden" });
+    return requireApprovedDriver(req, res, next);
+  } catch (e) { next(e); }
+}
+
+/* ── V2 endpoints (authenticated, role-gated) ── */
+
+router.post("/", authRequired, blockCheck, roleRequired("passenger", "admin"), validate(createRideSchema), async (req, res) => {
+  try {
+    const { pickup, dropoff, vehicleType } = req.body;
+    if (!pickup || !dropoff || !vehicleType) {
+      return res.status(400).json({ success: false, error: { code: "RIDE_ERROR", message: "pickup, dropoff, and vehicleType are required" } });
     }
-    const result = await requestRide(passengerId, {
+    const result = await requestRide(req.userId, {
       latitude: pickup.lat,
       longitude: pickup.lng,
       address: pickup.address || '',
@@ -72,7 +88,7 @@ router.post("/", validate(createRideSchema), async (req, res) => {
   }
 });
 
-router.get("/requested", async (req, res) => {
+router.get("/requested", authRequired, blockCheck, roleRequired("driver", "admin"), requireApprovedDriverUnlessAdmin, async (req, res) => {
   try {
     const vehicleType = req.query.vehicleType;
     const result = await getRequestedRides(vehicleType);
@@ -82,13 +98,10 @@ router.get("/requested", async (req, res) => {
   }
 });
 
-router.post("/:id/accept", validate(acceptRideSchema), async (req, res) => {
+router.post("/:id/accept", authRequired, blockCheck, roleRequired("driver", "admin"), requireApprovedDriverUnlessAdmin, validate(acceptRideSchema), async (req, res) => {
   try {
     const { id } = req.params;
-    const { driverId } = req.body;
-    if (!driverId) {
-      return res.status(400).json({ success: false, error: { code: "RIDE_ERROR", message: "driverId is required" } });
-    }
+    const driverId = req.userId;
     await assertDriverCanTakeAnotherRide(driverId);
     const result = await acceptRide(id, driverId);
     return res.status(200).json({ success: true, data: result });
@@ -102,14 +115,212 @@ router.post("/:id/accept", validate(acceptRideSchema), async (req, res) => {
   }
 });
 
-router.get("/:id/status", async (req, res) => {
+router.get("/:id/status", authRequired, blockCheck, async (req, res) => {
   try {
     const { id } = req.params;
     const result = await getRideStatus(id);
+    const caller = await User.findById(req.userId).select("role").lean();
+    const isAdmin = caller?.role === "admin";
+    const isPassenger = String(result.passenger_id) === String(req.userId);
+    const isDriver = String(result.driverId || result.driver_id || "") === String(req.userId);
+    if (!isPassenger && !isDriver && !isAdmin) {
+      return res.status(403).json({ success: false, error: { code: "FORBIDDEN", message: "Forbidden" } });
+    }
     return res.status(200).json({ success: true, data: result });
   } catch (err) {
     const status = err.message.toLowerCase().includes("not found") ? 404 : 500;
     return res.status(status).json({ success: false, error: { code: "RIDE_ERROR", message: err.message } });
+  }
+});
+
+router.post("/:id/arriving", authRequired, blockCheck, roleRequired("driver", "admin"), requireApprovedDriverUnlessAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updated = await Ride.findOneAndUpdate(
+      { _id: id, status: "accepted", $or: [{ driverId: req.userId }, { driver_id: req.userId }] },
+      { $set: { status: "driver_arriving", arrivingAt: new Date() } },
+      { new: true }
+    );
+    if (!updated) {
+      const ride = await Ride.findById(id);
+      if (!ride) return res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "Ride not found" } });
+      const isDriver = String(ride.driverId || ride.driver_id || "") === String(req.userId);
+      const caller = await User.findById(req.userId).select("role").lean();
+      if (!isDriver && caller?.role !== "admin") {
+        return res.status(403).json({ success: false, error: { code: "FORBIDDEN", message: "Not your ride" } });
+      }
+      if (ride.status === "driver_arriving") {
+        return res.status(200).json({ success: true, data: ride });
+      }
+      return res.status(400).json({ success: false, error: { code: "STATE_ERROR", message: "Ride must be accepted first" } });
+    }
+    notifyDriverArrived(updated).catch(() => {});
+    console.log(`[AUDIT] ride ${id} status → driver_arriving by ${req.userId}`);
+    return res.status(200).json({ success: true, data: updated });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: { code: "SERVER_ERROR", message: err.message } });
+  }
+});
+
+router.post("/:id/onboard", authRequired, blockCheck, roleRequired("driver", "admin"), requireApprovedDriverUnlessAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updated = await Ride.findOneAndUpdate(
+      { _id: id, status: "driver_arriving", $or: [{ driverId: req.userId }, { driver_id: req.userId }] },
+      { $set: { status: "passenger_onboard", onboardAt: new Date() } },
+      { new: true }
+    );
+    if (!updated) {
+      const ride = await Ride.findById(id);
+      if (!ride) return res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "Ride not found" } });
+      const isDriver = String(ride.driverId || ride.driver_id || "") === String(req.userId);
+      const caller = await User.findById(req.userId).select("role").lean();
+      if (!isDriver && caller?.role !== "admin") {
+        return res.status(403).json({ success: false, error: { code: "FORBIDDEN", message: "Not your ride" } });
+      }
+      if (ride.status === "passenger_onboard") {
+        return res.status(200).json({ success: true, data: ride });
+      }
+      return res.status(400).json({ success: false, error: { code: "STATE_ERROR", message: "Driver must arrive first" } });
+    }
+    notifyPassengerOnboard(updated).catch(() => {});
+    console.log(`[AUDIT] ride ${id} status → passenger_onboard by ${req.userId}`);
+    return res.status(200).json({ success: true, data: updated });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: { code: "SERVER_ERROR", message: err.message } });
+  }
+});
+
+/* ── V2 Cancel endpoints (/:id style matching other V2 patterns) ── */
+
+/** Passenger: cancel own ride */
+router.post("/:id/cancel", authRequired, blockCheck, roleRequired("passenger"), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const reason = String(req.body.reason || "").trim().slice(0, 300);
+    const updated = await Ride.findOneAndUpdate(
+      {
+        _id: id,
+        passengerId: req.userId,
+        status: { $in: ["pending", "accepted", "driver_arriving", "passenger_onboard"] },
+      },
+      {
+        $set: {
+          status: "cancelled",
+          cancelledAt: new Date(),
+          cancelledBy: "passenger",
+          cancelReason: reason,
+          driverProposal: null,
+          awaitingDriverConfirm: false,
+          preassignedDriverId: null,
+          preassignedFare: null,
+        },
+      },
+      { new: true }
+    );
+    if (!updated) {
+      const ride = await Ride.findById(id);
+      if (!ride) return res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "Ride not found" } });
+      if (String(ride.passengerId) !== String(req.userId)) {
+        return res.status(403).json({ success: false, error: { code: "FORBIDDEN", message: "Not your ride" } });
+      }
+      if (ride.status === "cancelled") {
+        return res.status(200).json({ success: true, data: ride });
+      }
+      return res.status(400).json({ success: false, error: { code: "STATE_ERROR", message: "Ride cannot be cancelled at this stage" } });
+    }
+    refundPassengerForRide(req.userId, updated._id, updated.agreedFare || updated.estimatedFare).catch(() => {});
+    notifyRideCancelled(updated, req.userId, reason).catch(() => {});
+    console.log(`[AUDIT] ride ${id} cancelled by passenger ${req.userId}`);
+    return res.status(200).json({ success: true, data: updated });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: { code: "SERVER_ERROR", message: err.message } });
+  }
+});
+
+/** Driver: cancel own ride (accepted, arriving, onboard) */
+router.post("/:id/driver-cancel", authRequired, blockCheck, roleRequired("driver"), requireApprovedDriver, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const reason = String(req.body.reason || "").trim().slice(0, 300);
+    const updated = await Ride.findOneAndUpdate(
+      {
+        _id: id,
+        driverId: req.userId,
+        status: { $in: ["accepted", "driver_arriving", "passenger_onboard"] },
+      },
+      {
+        $set: {
+          status: "cancelled",
+          cancelledAt: new Date(),
+          cancelledBy: "driver",
+          cancelReason: reason,
+          driverProposal: null,
+          awaitingDriverConfirm: false,
+          preassignedDriverId: null,
+          preassignedFare: null,
+        },
+      },
+      { new: true }
+    );
+    if (!updated) {
+      const ride = await Ride.findById(id);
+      if (!ride) return res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "Ride not found" } });
+      if (String(ride.driverId || "") !== String(req.userId)) {
+        return res.status(403).json({ success: false, error: { code: "FORBIDDEN", message: "Not your ride" } });
+      }
+      if (ride.status === "cancelled") {
+        return res.status(200).json({ success: true, data: ride });
+      }
+      return res.status(400).json({ success: false, error: { code: "STATE_ERROR", message: "Ride cannot be cancelled at this stage" } });
+    }
+    refundPassengerForRide(updated.passengerId, updated._id, updated.agreedFare || updated.estimatedFare).catch(() => {});
+    notifyRideCancelled(updated, updated.driverId, reason).catch(() => {});
+    console.log(`[AUDIT] ride ${id} cancelled by driver ${req.userId}`);
+    return res.status(200).json({ success: true, data: updated });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: { code: "SERVER_ERROR", message: err.message } });
+  }
+});
+
+/** Admin: cancel any ride */
+router.post("/:id/admin-cancel", authRequired, blockCheck, roleRequired("admin"), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const reason = String(req.body.reason || "Admin action").trim().slice(0, 300);
+    const updated = await Ride.findOneAndUpdate(
+      {
+        _id: id,
+        status: { $nin: ["completed", "cancelled"] },
+      },
+      {
+        $set: {
+          status: "cancelled",
+          cancelledAt: new Date(),
+          cancelledBy: "admin",
+          cancelReason: reason,
+          driverProposal: null,
+          awaitingDriverConfirm: false,
+          preassignedDriverId: null,
+          preassignedFare: null,
+        },
+      },
+      { new: true }
+    );
+    if (!updated) {
+      const ride = await Ride.findById(id);
+      if (!ride) return res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "Ride not found" } });
+      if (ride.status === "cancelled") {
+        return res.status(200).json({ success: true, data: ride });
+      }
+      return res.status(400).json({ success: false, error: { code: "STATE_ERROR", message: "Ride already finished" } });
+    }
+    refundPassengerForRide(updated.passengerId, updated._id, updated.agreedFare || updated.estimatedFare).catch(() => {});
+    notifyRideCancelled(updated, updated.driverId, reason).catch(() => {});
+    console.log(`[AUDIT] ride ${id} cancelled by admin ${req.userId}`);
+    return res.status(200).json({ success: true, data: updated });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: { code: "SERVER_ERROR", message: err.message } });
   }
 });
 
@@ -868,26 +1079,39 @@ router.post(
     try {
       const { rideId } = req.body;
       const reason = String(req.body.reason || "").trim().slice(0, 300);
-      const ride = await Ride.findById(rideId);
-      if (!ride) throw new AppError("Not found", 404);
-      if (String(ride.driverId || "") !== String(req.userId)) throw new AppError("Not your ride", 403);
-      if (ride.status !== "accepted") throw new AppError("Ride cannot be cancelled at this stage", 400);
-      // Pooling: prevent cancelling if other passengers joined
-      const others = await Booking.countDocuments({
-        rideId,
-        status: "confirmed",
-        passengerId: { $ne: ride.passengerId },
-      });
-      if (others > 0) throw new AppError("Cannot cancel a pooled ride with other passengers", 409);
-
-      ride.status = "cancelled";
-      ride.cancelledAt = new Date();
-      ride.cancelledBy = "driver";
-      ride.cancelReason = reason;
-      await ride.save();
-      refundPassengerForRide(ride.passengerId, ride._id, ride.agreedFare || ride.estimatedFare).catch(() => {});
-      const populated = await populatedRideById(ride._id);
-      notifyRideCancelled(ride, ride.driverId, reason).catch(() => {});
+      const updated = await Ride.findOneAndUpdate(
+        {
+          _id: rideId,
+          driverId: req.userId,
+          status: { $in: ["accepted", "driver_arriving", "passenger_onboard"] },
+        },
+        {
+          $set: {
+            status: "cancelled",
+            cancelledAt: new Date(),
+            cancelledBy: "driver",
+            cancelReason: reason,
+            driverProposal: null,
+            awaitingDriverConfirm: false,
+            preassignedDriverId: null,
+            preassignedFare: null,
+          },
+        },
+        { new: true }
+      );
+      if (!updated) {
+        const ride = await Ride.findById(rideId);
+        if (!ride) throw new AppError("Not found", 404);
+        if (String(ride.driverId || "") !== String(req.userId)) throw new AppError("Not your ride", 403);
+        if (ride.status === "cancelled") {
+          const populated = await populatedRideById(ride._id);
+          return res.json({ ride: populated });
+        }
+        throw new AppError("Ride cannot be cancelled at this stage", 400);
+      }
+      refundPassengerForRide(updated.passengerId, updated._id, updated.agreedFare || updated.estimatedFare).catch(() => {});
+      const populated = await populatedRideById(updated._id);
+      notifyRideCancelled(populated, updated.driverId, reason).catch(() => {});
       return res.json({ ride: populated });
     } catch (e) {
       next(e);
@@ -898,23 +1122,24 @@ router.post(
 router.post("/start", roleRequired("driver"), requireApprovedDriver, ...rideIdValidators, async (req, res, next) => {
   try {
     const { rideId } = req.body;
-    const ride = await Ride.findById(rideId);
-    if (!ride || ride.driverId?.toString() !== req.userId) {
-      throw new AppError("Not your ride", 403);
+    const updated = await Ride.findOneAndUpdate(
+      { _id: rideId, driverId: req.userId, status: { $in: ["accepted", "passenger_onboard"] } },
+      { $set: { status: "ongoing", startedAt: new Date() } },
+      { new: true }
+    );
+    if (!updated) {
+      const ride = await Ride.findById(rideId);
+      if (!ride || ride.driverId?.toString() !== req.userId) {
+        throw new AppError("Not your ride", 403);
+      }
+      if (ride.status === "ongoing") {
+        const populated = await populatedRideById(ride._id);
+        return res.json({ ride: populated });
+      }
+      throw new AppError("Ride must be accepted or passenger onboard first", 400);
     }
-    // Idempotent: if already ongoing, just return current ride.
-    if (ride.status === "ongoing") {
-      const populated = await populatedRideById(ride._id);
-      return res.json({ ride: populated });
-    }
-    if (ride.status !== "accepted") {
-      throw new AppError("Ride must be accepted first", 400);
-    }
-    ride.status = "ongoing";
-    ride.startedAt = new Date();
-    await ride.save();
-    const populated = await populatedRideById(ride._id);
-    notifyTripStarted(ride).catch(() => {});
+    const populated = await populatedRideById(updated._id);
+    notifyTripStarted(populated).catch(() => {});
     return res.json({ ride: populated });
   } catch (e) {
     next(e);
@@ -991,36 +1216,39 @@ router.post(
     try {
       const { rideId } = req.body;
       const reason = String(req.body.reason || "").trim().slice(0, 300);
-      const ride = await Ride.findById(rideId);
-      if (!ride) throw new AppError("Not found", 404);
-      if (String(ride.passengerId) !== String(req.userId)) throw new AppError("Forbidden", 403);
-      if (ride.status !== "pending" && ride.status !== "accepted") {
+      const updated = await Ride.findOneAndUpdate(
+        {
+          _id: rideId,
+          passengerId: req.userId,
+          status: { $in: ["pending", "accepted", "driver_arriving", "passenger_onboard"] },
+        },
+        {
+          $set: {
+            status: "cancelled",
+            cancelledAt: new Date(),
+            cancelledBy: "passenger",
+            cancelReason: reason,
+            driverProposal: null,
+            awaitingDriverConfirm: false,
+            preassignedDriverId: null,
+            preassignedFare: null,
+          },
+        },
+        { new: true }
+      );
+      if (!updated) {
+        const ride = await Ride.findById(rideId);
+        if (!ride) throw new AppError("Not found", 404);
+        if (String(ride.passengerId) !== String(req.userId)) throw new AppError("Forbidden", 403);
+        if (ride.status === "cancelled") {
+          const populated = await populatedRideById(ride._id);
+          return res.json({ ride: populated });
+        }
         throw new AppError("Ride cannot be cancelled at this stage", 400);
       }
-      if (ride.status === "accepted") {
-        // Pooling: prevent cancelling the whole ride if other confirmed bookings exist.
-        const others = await Booking.countDocuments({
-          rideId,
-          status: "confirmed",
-          passengerId: { $ne: req.userId },
-        });
-        if (others > 0) {
-          throw new AppError("Cannot cancel a pooled ride with other passengers", 409);
-        }
-      }
-      ride.status = "cancelled";
-      ride.cancelledAt = new Date();
-      ride.cancelledBy = "passenger";
-      ride.cancelReason = reason;
-      // Release any pending proposal/assignment
-      ride.driverProposal = null;
-      ride.awaitingDriverConfirm = false;
-      ride.preassignedDriverId = null;
-      ride.preassignedFare = null;
-      await ride.save();
-      refundPassengerForRide(req.userId, ride._id, ride.agreedFare || ride.estimatedFare).catch(() => {});
-      const populated = await populatedRideById(ride._id);
-      notifyRideCancelled(ride, req.userId, reason).catch(() => {});
+      refundPassengerForRide(req.userId, updated._id, updated.agreedFare || updated.estimatedFare).catch(() => {});
+      const populated = await populatedRideById(updated._id);
+      notifyRideCancelled(populated, req.userId, reason).catch(() => {});
       return res.json({ ride: populated });
     } catch (e) {
       next(e);
@@ -1134,14 +1362,14 @@ router.get(
 router.get(
   "/:rideId/messages",
   docIdParam("rideId"),
+  validate(chatQuerySchema, "query"),
   validateRequest,
   async (req, res, next) => {
     try {
       await getRideAndAssertParticipant(req.params.rideId, req.userId);
-      const messages = await Message.find({ rideId: req.params.rideId })
-        .sort({ createdAt: 1 })
-        .limit(300)
-        .populate("senderId", "name role");
+      const before = req.query.before;
+      const limit = Number(req.query.limit) || 30;
+      const messages = await getMessagesByRideId(req.params.rideId, { before, limit });
       return res.json({ messages });
     } catch (e) {
       next(e);
@@ -1154,6 +1382,7 @@ router.post(
   docIdParam("rideId"),
   validate(chatMessageSchema),
   body("text").trim().notEmpty().isLength({ max: 2000 }),
+  docIdOptionalBody("idempotencyKey"),
   validateRequest,
   async (req, res, next) => {
     try {
@@ -1161,17 +1390,21 @@ router.post(
       if (!canPostChatMessage(ride, req.userId)) {
         throw new AppError("Cannot send message for this ride", 403);
       }
-      const msg = await Message.create({
-        rideId: ride._id,
-        senderId: req.userId,
-        text: String(req.body.text).trim(),
-      });
-      const populated = await Message.findById(msg._id).populate("senderId", "name role");
+      const text = String(req.body.text).trim();
+      const idempotencyKey = req.body.idempotencyKey;
+      const result = await createMessage(req.params.rideId, req.userId, text, idempotencyKey);
+      if (result.deduplicated) {
+        const existing = await getMessagesByRideId(req.params.rideId, { limit: 50 });
+        const msg = existing.find((m) => m._id === result._id) || existing[existing.length - 1];
+        return res.status(200).json({ message: msg, deduplicated: true });
+      }
+      const messages = await getMessagesByRideId(req.params.rideId, { limit: 1 });
+      const populated = messages.length > 0 ? messages[messages.length - 1] : { _id: result._id };
       const recipientId =
         String(req.userId) === String(ride.passengerId) ? ride.driverId : ride.passengerId;
       if (recipientId) {
         const senderName = populated?.senderId?.name || "";
-        notifyNewMessage(ride._id, req.userId, senderName, String(req.body.text).trim(), recipientId).catch(() => {});
+        notifyNewMessage(req.params.rideId, req.userId, senderName, text, recipientId).catch(() => {});
       }
       return res.status(201).json({ message: populated });
     } catch (e) {

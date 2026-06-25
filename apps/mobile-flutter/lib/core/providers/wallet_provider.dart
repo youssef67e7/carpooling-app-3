@@ -2,11 +2,41 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/api_client.dart';
 import '../api/api_endpoints.dart';
 
+const _walletPageSize = 20;
+
+class WalletPagination {
+  const WalletPagination({
+    required this.page,
+    required this.total,
+    required this.totalPages,
+  });
+
+  factory WalletPagination.fromJson(Map<String, dynamic>? json) {
+    if (json == null) return const WalletPagination(page: 1, total: 0, totalPages: 1);
+    final total = (json['total'] as num?)?.toInt() ?? 0;
+    return WalletPagination(
+      page: (json['page'] as num?)?.toInt() ?? 1,
+      total: total,
+      totalPages: _walletPageSize > 0 ? (total + _walletPageSize - 1) ~/ _walletPageSize : 1,
+    );
+  }
+
+  final int page;
+  final int total;
+  final int totalPages;
+
+  bool get hasPrev => page > 1;
+  bool get hasNext => page < totalPages;
+}
+
 class WalletState {
   const WalletState({
     this.accounts = const [],
     this.totalBalance = 0,
     this.transactions = const [],
+    this.transactionsPagination = const WalletPagination(page: 1, total: 0, totalPages: 1),
+    this.transactionsLoading = false,
+    this.transactionsError,
     this.loading = false,
     this.error,
     this.lastWithdrawMeta,
@@ -15,6 +45,9 @@ class WalletState {
   final List<dynamic> accounts;
   final num totalBalance;
   final List<dynamic> transactions;
+  final WalletPagination transactionsPagination;
+  final bool transactionsLoading;
+  final String? transactionsError;
   final bool loading;
   final String? error;
   final Map<String, dynamic>? lastWithdrawMeta;
@@ -23,6 +56,10 @@ class WalletState {
     List<dynamic>? accounts,
     num? totalBalance,
     List<dynamic>? transactions,
+    WalletPagination? transactionsPagination,
+    bool? transactionsLoading,
+    String? transactionsError,
+    bool clearTransactionsError = false,
     bool? loading,
     String? error,
     Map<String, dynamic>? lastWithdrawMeta,
@@ -31,6 +68,9 @@ class WalletState {
       accounts: accounts ?? this.accounts,
       totalBalance: totalBalance ?? this.totalBalance,
       transactions: transactions ?? this.transactions,
+      transactionsPagination: transactionsPagination ?? this.transactionsPagination,
+      transactionsLoading: transactionsLoading ?? this.transactionsLoading,
+      transactionsError: clearTransactionsError ? null : (transactionsError ?? this.transactionsError),
       loading: loading ?? this.loading,
       error: error,
       lastWithdrawMeta: lastWithdrawMeta ?? this.lastWithdrawMeta,
@@ -58,15 +98,22 @@ class WalletNotifier extends StateNotifier<WalletState> {
     }
   }
 
-  Future<void> fetchTransactions() async {
-    state = state.copyWith(loading: true);
+  Future<void> fetchTransactions({int page = 1}) async {
+    state = state.copyWith(transactionsLoading: true, clearTransactionsError: true);
     try {
       final api = await _api;
-      final data = await api.getJson(ApiEndpoints.walletTransactions, query: {'limit': 60});
-      final nested = data['data'] as Map? ?? {};
-      state = state.copyWith(transactions: nested['items'] as List? ?? [], loading: false);
+      final data = await api.getJson(ApiEndpoints.walletTransactions, query: {
+        'page': page,
+        'limit': _walletPageSize,
+      });
+      final nested = Map<String, dynamic>.from(data['data'] as Map? ?? {});
+      state = state.copyWith(
+        transactions: nested['items'] as List? ?? [],
+        transactionsPagination: WalletPagination.fromJson(nested),
+        transactionsLoading: false,
+      );
     } catch (e) {
-      state = state.copyWith(loading: false, error: e.toString());
+      state = state.copyWith(transactionsLoading: false, transactionsError: e.toString());
     }
   }
 

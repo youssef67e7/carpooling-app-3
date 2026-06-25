@@ -13,7 +13,16 @@ export async function notifyDriverArrived(ride) {
   await sendPushToUser(
     ride.passengerId,
     { title: "Driver has arrived", body: "Your driver is waiting at the pickup point" },
-    { type: "ride_update", rideId: String(ride._id), status: "arrived" },
+    { type: "ride_update", rideId: String(ride._id), status: "driver_arriving" },
+    { highPriority: true }
+  );
+}
+
+export async function notifyPassengerOnboard(ride) {
+  await sendPushToUser(
+    ride.passengerId,
+    { title: "You're on board", body: "Your driver is now starting the trip" },
+    { type: "ride_update", rideId: String(ride._id), status: "onboard" },
     { highPriority: true }
   );
 }
@@ -22,7 +31,7 @@ export async function notifyTripStarted(ride) {
   await sendPushToUser(
     ride.passengerId,
     { title: "Trip started", body: "You are on your way" },
-    { type: "ride_update", rideId: String(ride._id), status: "in_progress" },
+    { type: "ride_update", rideId: String(ride._id), status: "ongoing" },
     { highPriority: true }
   );
 }

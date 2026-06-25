@@ -99,8 +99,9 @@ class RideNotifier extends StateNotifier<RideState> {
       return list.where((r) => '${r['_id']}' != id).toList();
     }
 
+    const driverActive = {'accepted', 'driver_arriving', 'passenger_onboard', 'ongoing'};
     if (_isDriver) {
-      if (!{'accepted', 'ongoing'}.contains(status)) return list;
+      if (!driverActive.contains(status)) return list;
       final idx = list.indexWhere((r) => '${r['_id']}' == id);
       if (idx >= 0) {
         list[idx] = ride;
@@ -111,7 +112,7 @@ class RideNotifier extends StateNotifier<RideState> {
       return list.take(kMaxDriverConcurrentRides).toList();
     }
 
-    if ({'pending', 'accepted', 'ongoing'}.contains(status)) {
+    if ({'pending', 'accepted', 'driver_arriving', 'passenger_onboard', 'ongoing'}.contains(status)) {
       return [ride];
     }
     return list;
@@ -188,15 +189,28 @@ class RideNotifier extends StateNotifier<RideState> {
     if (ride != null) _applyActiveRides(_mergeActiveRide(ride));
   }
 
-  Future<List<dynamic>> fetchMessages(String rideId) async {
+  final Map<String, String> _messageIdempotencyKeys = {};
+
+  Future<List<dynamic>> fetchMessages(String rideId, {String? before}) async {
     final api = await _api;
+    final params = <String, String>{};
+    if (before != null) params['before'] = before;
+    if (params.isNotEmpty) {
+      final data = await api.getJson('${ApiEndpoints.rideMessages(rideId)}?${Uri(queryParameters: params).query}');
+      return data['messages'] as List? ?? [];
+    }
     final data = await api.getJson(ApiEndpoints.rideMessages(rideId));
     return data['messages'] as List? ?? [];
   }
 
   Future<void> sendMessage(String rideId, String text) async {
     final api = await _api;
-    await api.postJson(ApiEndpoints.rideMessages(rideId), {'text': text});
+    final key = '${rideId}_${DateTime.now().millisecondsSinceEpoch}_${text.hashCode}';
+    _messageIdempotencyKeys[rideId] = key;
+    await api.postJson(ApiEndpoints.rideMessages(rideId), {
+      'text': text,
+      'idempotencyKey': key,
+    });
   }
 
   Future<void> fetchHistory() async {
@@ -283,11 +297,52 @@ class RideNotifier extends StateNotifier<RideState> {
     return ride;
   }
 
+  Future<Map<String, dynamic>> driverArriving(String rideId) async {
+    final api = await _api;
+    final data = await api.postJson(ApiEndpoints.ridesArriving(rideId), {});
+    final ride = data['data'] as Map<String, dynamic>;
+    _applyActiveRides(_mergeActiveRide(ride));
+    return ride;
+  }
+
+  Future<Map<String, dynamic>> passengerOnboard(String rideId) async {
+    final api = await _api;
+    final data = await api.postJson(ApiEndpoints.ridesOnboard(rideId), {});
+    final ride = data['data'] as Map<String, dynamic>;
+    _applyActiveRides(_mergeActiveRide(ride));
+    return ride;
+  }
+
   Future<Map<String, dynamic>> startRide(String rideId) async {
     final api = await _api;
     final data = await api.postJson(ApiEndpoints.ridesStart, {'rideId': rideId});
     final ride = data['ride'] as Map<String, dynamic>;
     _applyActiveRides(_mergeActiveRide(ride));
+    return ride;
+  }
+
+  Future<Map<String, dynamic>> cancelRide(String rideId, {String? reason}) async {
+    final api = await _api;
+    final body = <String, dynamic>{};
+    if (reason != null && reason.isNotEmpty) body['reason'] = reason;
+    final data = await api.postJson(ApiEndpoints.ridesCancel(rideId), body);
+    final ride = data['data'] as Map<String, dynamic>;
+    _applyActiveRides(_mergeActiveRide(ride));
+    _ref.read(walletProvider.notifier).refresh();
+    fetchHistory();
+    return ride;
+  }
+
+  Future<Map<String, dynamic>> driverCancelRide(String rideId, {String? reason}) async {
+    final api = await _api;
+    final body = <String, dynamic>{};
+    if (reason != null && reason.isNotEmpty) body['reason'] = reason;
+    final data = await api.postJson(ApiEndpoints.ridesDriverCancel(rideId), body);
+    final ride = data['data'] as Map<String, dynamic>;
+    _applyActiveRides(_mergeActiveRide(ride));
+    _ref.read(walletProvider.notifier).refresh();
+    fetchAvailable();
+    fetchHistory();
     return ride;
   }
 
@@ -400,8 +455,8 @@ class RideNotifier extends StateNotifier<RideState> {
 
   void syncUserRides(List<Map<String, dynamic>> rides, {required String activeRole}) {
     const terminal = {'completed', 'cancelled'};
-    const passengerActive = {'pending', 'accepted', 'ongoing'};
-    const driverActive = {'accepted', 'ongoing'};
+    const passengerActive = {'pending', 'accepted', 'driver_arriving', 'passenger_onboard', 'ongoing'};
+    const driverActive = {'accepted', 'driver_arriving', 'passenger_onboard', 'ongoing'};
     final active = <Map<String, dynamic>>[];
     final history = <Map<String, dynamic>>[];
     final available = <Map<String, dynamic>>[];

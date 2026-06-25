@@ -1,20 +1,20 @@
+import { getCollection } from "../mongo/client.js";
 import { WalletAccount } from "../models/WalletAccount.js";
 import { Transaction } from "../models/Transaction.js";
 
 /**
  * Find or create the default cash wallet for a user.
+ * Uses atomic findOneAndUpdate with upsert to prevent duplicate creation races.
  */
 async function getOrCreateCashWallet(userId) {
   let account = await WalletAccount.findOne({ userId, walletType: "cash" }).sort({ createdAt: 1 });
   if (!account) {
-    account = await WalletAccount.create({
-      userId,
-      walletType: "cash",
-      phoneNumber: "",
-      balance: 0,
-      label: "Ride earnings",
-      isDefault: true,
-    });
+    const created = await WalletAccount.findOneAndUpdate(
+      { userId, walletType: "cash" },
+      { $setOnInsert: { userId, walletType: "cash", phoneNumber: "", balance: 0, label: "Ride earnings", isDefault: true } },
+      { upsert: true, new: true }
+    );
+    account = created ?? (await WalletAccount.findOne({ userId, walletType: "cash" }).sort({ createdAt: 1 }));
   }
   return account;
 }
@@ -31,6 +31,7 @@ async function rideAlreadyPaid(rideId) {
 /**
  * Credit driver wallet when a ride completes (mock settlement — no real PSP).
  * Idempotent: skips if a ride_payment transaction already exists for this rideId.
+ * Uses atomic $inc to prevent lost updates from concurrent requests.
  */
 export async function creditDriverForRide(driverId, rideId, amount) {
   const amt = Math.round(Number(amount) * 100) / 100;
@@ -38,8 +39,10 @@ export async function creditDriverForRide(driverId, rideId, amount) {
   if (await rideAlreadyPaid(rideId)) return null;
 
   const account = await getOrCreateCashWallet(driverId);
-  account.balance = Math.round((Number(account.balance) + amt) * 100) / 100;
-  await account.save();
+  await getCollection("wallet_accounts").updateOne(
+    { _id: account._id },
+    { $inc: { balance: amt } }
+  );
 
   const tx = await Transaction.create({
     userId: driverId,
@@ -56,6 +59,7 @@ export async function creditDriverForRide(driverId, rideId, amount) {
 /**
  * Debit passenger wallet when a ride completes with wallet as the payment method.
  * Returns the transaction or null if insufficient funds / already debited.
+ * Uses atomic findOneAndUpdate with { balance: { $gte: amt } } guard to prevent negative balance.
  */
 export async function debitPassengerForRide(passengerId, rideId, amount) {
   const amt = Math.round(Number(amount) * 100) / 100;
@@ -65,8 +69,13 @@ export async function debitPassengerForRide(passengerId, rideId, amount) {
   if (already) return null;
 
   const account = await getOrCreateCashWallet(passengerId);
-  const balance = Number(account.balance) || 0;
-  if (balance < amt) {
+  const updated = await WalletAccount.findOneAndUpdate(
+    { _id: account._id, balance: { $gte: amt } },
+    { $inc: { balance: -amt } },
+    { new: true }
+  );
+
+  if (!updated) {
     await Transaction.create({
       userId: passengerId,
       walletAccountId: account._id,
@@ -78,9 +87,6 @@ export async function debitPassengerForRide(passengerId, rideId, amount) {
     });
     return null;
   }
-
-  account.balance = Math.round((balance - amt) * 100) / 100;
-  await account.save();
 
   const tx = await Transaction.create({
     userId: passengerId,
@@ -96,7 +102,9 @@ export async function debitPassengerForRide(passengerId, rideId, amount) {
 
 /**
  * Refund passenger wallet when a ride is cancelled and the passenger paid via wallet.
+ * Only refunds if a ride_debit transaction exists (passenger actually paid).
  * Idempotent: skips if a ride_refund transaction already exists for this rideId.
+ * Uses atomic $inc to prevent lost updates from concurrent requests.
  */
 export async function refundPassengerForRide(passengerId, rideId, amount) {
   const amt = Math.round(Number(amount) * 100) / 100;
@@ -105,9 +113,15 @@ export async function refundPassengerForRide(passengerId, rideId, amount) {
   const already = await Transaction.findOne({ rideId, type: "ride_refund" });
   if (already) return null;
 
+  // Only refund if the passenger actually paid via wallet debit
+  const debit = await Transaction.findOne({ rideId, type: "ride_debit", status: "success" });
+  if (!debit) return null;
+
   const account = await getOrCreateCashWallet(passengerId);
-  account.balance = Math.round((Number(account.balance) + amt) * 100) / 100;
-  await account.save();
+  await getCollection("wallet_accounts").updateOne(
+    { _id: account._id },
+    { $inc: { balance: amt } }
+  );
 
   const tx = await Transaction.create({
     userId: passengerId,
@@ -123,14 +137,17 @@ export async function refundPassengerForRide(passengerId, rideId, amount) {
 
 /**
  * Admin-ledger: credit a user's wallet (used for manual cash refunds).
+ * Uses atomic $inc to prevent lost updates from concurrent requests.
  */
 export async function adminCreditUser(userId, rideId, amount, note) {
   const amt = Math.round(Number(amount) * 100) / 100;
   if (!userId || !amt || Number.isNaN(amt) || amt <= 0) return null;
 
   const account = await getOrCreateCashWallet(userId);
-  account.balance = Math.round((Number(account.balance) + amt) * 100) / 100;
-  await account.save();
+  await getCollection("wallet_accounts").updateOne(
+    { _id: account._id },
+    { $inc: { balance: amt } }
+  );
 
   const tx = await Transaction.create({
     userId,

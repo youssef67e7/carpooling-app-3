@@ -127,8 +127,8 @@ All vulnerabilities have fixes available via `npm audit fix`.
 | RATE_LIMIT_MAX | 500 | ✅ |
 | AUTH_RATE_LIMIT_WINDOW_MS | 900000 | ✅ |
 | AUTH_RATE_LIMIT_MAX | 30 | ✅ |
-| ADMIN_PASSWORD_YOUSSEF | `youssef12345` | ⚠️ **Plaintext, should use bcrypt** |
-| ADMIN_PASSWORD_YOUSSEF1 | `youssef12345` | ⚠️ **Plaintext, should use bcrypt** |
+| ADMIN_PASSWORD_YOUSSEF | [REDACTED] | ⚠️ **Plaintext, should use bcrypt** |
+| ADMIN_PASSWORD_YOUSSEF1 | [REDACTED] | ⚠️ **Plaintext, should use bcrypt** |
 
 ### Mobile Flutter (`apps/mobile-flutter/.env`)
 | Var | Value |

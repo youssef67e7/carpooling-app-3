@@ -66,7 +66,7 @@
 | **Duration** | 15 min |
 | **Depends on** | Nothing |
 
-**Current connection string:** `mongodb+srv://os5027817_db_user:Kz7bygXxewckgq8J@cluster0.bccjvvm.mongodb.net/weret`
+**Current connection string:** `mongodb+srv://[REDACTED]:[REDACTED]@[REDACTED]/weret`
 
 **Actions:**
 ```

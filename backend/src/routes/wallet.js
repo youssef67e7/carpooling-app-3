@@ -74,7 +74,7 @@ router.delete("/accounts/:id", docIdParam("id"), validateRequest, async (req, re
   }
 });
 
-/** Mock top-up — credits balance (no real PSP). */
+/** Mock top-up — credits balance (no real PSP). Uses atomic $inc. */
 router.post(
   "/deposit",
   validate(depositSchema),
@@ -84,20 +84,22 @@ router.post(
   async (req, res, next) => {
     try {
       const { walletAccountId, amount } = req.body;
-      const acc = await WalletAccount.findOne({ _id: walletAccountId, userId: req.userId });
-      if (!acc) throw new AppError("Wallet not found", 404);
       const amt = Math.round(Number(amount) * 100) / 100;
-      acc.balance = Math.round((Number(acc.balance) + amt) * 100) / 100;
-      await acc.save();
+      const updated = await WalletAccount.findOneAndUpdate(
+        { _id: walletAccountId, userId: req.userId },
+        { $inc: { balance: amt } },
+        { new: true }
+      );
+      if (!updated) throw new AppError("Wallet not found", 404);
       const tx = await Transaction.create({
         userId: req.userId,
-        walletAccountId: acc._id,
+        walletAccountId: updated._id,
         amount: amt,
         type: "deposit",
         status: "success",
         note: "Simulated deposit",
       });
-      return res.json({ account: acc.toJSON(), transaction: tx.toJSON() });
+      return res.json({ account: updated.toJSON(), transaction: tx.toJSON() });
     } catch (e) {
       next(e);
     }
@@ -172,29 +174,29 @@ router.post(
         throw new AppError("Invalid code", 400);
       }
 
-      const acc = await WalletAccount.findOne({ _id: wr.walletAccountId, userId: req.userId });
-      if (!acc) throw new AppError("Wallet missing", 400);
-      if (Number(acc.balance) < wr.amount) {
+      const updated = await WalletAccount.findOneAndUpdate(
+        { _id: wr.walletAccountId, userId: req.userId, balance: { $gte: wr.amount } },
+        { $inc: { balance: -wr.amount } },
+        { new: true }
+      );
+      if (!updated) {
         wr.status = "failed";
         await wr.save();
         throw new AppError("Insufficient balance", 400);
       }
-
-      acc.balance = Math.round((Number(acc.balance) - wr.amount) * 100) / 100;
-      await acc.save();
       wr.status = "completed";
       await wr.save();
 
       const tx = await Transaction.create({
         userId: req.userId,
-        walletAccountId: acc._id,
+        walletAccountId: updated._id,
         amount: wr.amount,
         type: "withdraw",
         status: "success",
         note: "Simulated payout to linked wallet",
       });
 
-      return res.json({ account: acc.toJSON(), transaction: tx.toJSON() });
+      return res.json({ account: updated.toJSON(), transaction: tx.toJSON() });
     } catch (e) {
       next(e);
     }

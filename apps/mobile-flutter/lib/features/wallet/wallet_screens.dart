@@ -1,6 +1,7 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/providers/wallet_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/api_error_message.dart';
@@ -415,7 +416,7 @@ class _WalletWithdrawScreenState extends ConsumerState<WalletWithdrawScreen> {
 }
 
 // ────────────────────────────────────────────────────────────
-//  WalletHistoryScreen (preserved, minor style update)
+//  WalletHistoryScreen
 // ────────────────────────────────────────────────────────────
 
 class WalletHistoryScreen extends ConsumerStatefulWidget {
@@ -429,13 +430,14 @@ class _WalletHistoryScreenState extends ConsumerState<WalletHistoryScreen> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() => ref.read(walletProvider.notifier).fetchTransactions());
+    Future.microtask(() => ref.read(walletProvider.notifier).fetchTransactions(page: 1));
   }
 
   @override
   Widget build(BuildContext context) {
     final w = ref.watch(walletProvider);
     final txs = w.transactions;
+    final pag = w.transactionsPagination;
     return Scaffold(
       backgroundColor: AppColors.secondary,
       appBar: AppBar(
@@ -445,19 +447,30 @@ class _WalletHistoryScreenState extends ConsumerState<WalletHistoryScreen> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: Colors.black),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => context.pop(),
         ),
       ),
       body: RefreshIndicator(
-        onRefresh: () => ref.read(walletProvider.notifier).fetchTransactions(),
-        child: w.loading && txs.isEmpty
+        onRefresh: () => ref.read(walletProvider.notifier).fetchTransactions(page: pag.page),
+        child: w.transactionsLoading && txs.isEmpty
             ? const Center(child: CircularProgressIndicator())
-            : w.error != null && txs.isEmpty
+            : w.transactionsError != null && txs.isEmpty
                 ? ListView(
                     physics: const AlwaysScrollableScrollPhysics(),
                     children: [
                       SizedBox(height: MediaQuery.sizeOf(context).height * 0.3),
-                      Center(child: Text(w.error!, style: const TextStyle(color: Colors.red))),
+                      Center(
+                        child: Column(
+                          children: [
+                            Text(w.transactionsError!, style: const TextStyle(color: Colors.red)),
+                            const SizedBox(height: 12),
+                            TextButton(
+                              onPressed: () => ref.read(walletProvider.notifier).fetchTransactions(page: 1),
+                              child: const Text('Retry'),
+                            ),
+                          ],
+                        ),
+                      ),
                     ],
                   )
                 : txs.isEmpty
@@ -468,49 +481,84 @@ class _WalletHistoryScreenState extends ConsumerState<WalletHistoryScreen> {
                           const Center(child: Text('No transactions', style: TextStyle(color: AppColors.textMuted))),
                         ],
                       )
-                    : ListView.separated(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: txs.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 8),
-                        itemBuilder: (_, i) {
-                  final tx = Map<String, dynamic>.from(txs[i] as Map);
-                  final type = '${tx['type'] ?? ''}';
-                  final amt = tx['amount'] ?? 0;
-                  final note = tx['note']?.toString() ?? '';
-                  final created = tx['createdAt']?.toString() ?? '';
-                  final isCredit = type == 'deposit' || type == 'ride_payment';
-                  return Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: AppColors.borderLight.withValues(alpha: 0.7)),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(walletTxTypeLabel(type), style: const TextStyle(fontWeight: FontWeight.w700)),
-                              if (note.isNotEmpty) Text(note, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-                              if (created.isNotEmpty) Text(created, style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
-                            ],
+                    : Column(
+                        children: [
+                          Expanded(
+                            child: ListView.separated(
+                              padding: const EdgeInsets.all(16),
+                              itemCount: txs.length,
+                              separatorBuilder: (_, __) => const SizedBox(height: 8),
+                              itemBuilder: (_, i) {
+                                final tx = Map<String, dynamic>.from(txs[i] as Map);
+                                final type = '${tx['type'] ?? ''}';
+                                final amt = tx['amount'] ?? 0;
+                                final note = tx['note']?.toString() ?? '';
+                                final created = tx['createdAt']?.toString() ?? '';
+                                final isCredit = type == 'deposit' || type == 'ride_payment';
+                                return Container(
+                                  padding: const EdgeInsets.all(14),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(color: AppColors.borderLight.withValues(alpha: 0.7)),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(walletTxTypeLabel(type), style: const TextStyle(fontWeight: FontWeight.w700)),
+                                            if (note.isNotEmpty) Text(note, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                                            if (created.isNotEmpty) Text(created, style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                                          ],
+                                        ),
+                                      ),
+                                      Text(
+                                        '${isCredit ? '+' : '-'}$amt',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 18,
+                                          color: isCredit ? Colors.green.shade700 : Colors.black,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
                           ),
-                        ),
-                        Text(
-                          '${isCredit ? '+' : '-'}$amt',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 18,
-                            color: isCredit ? Colors.green.shade700 : Colors.black,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
+                          if (pag.totalPages > 1)
+                            Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                border: Border(top: BorderSide(color: AppColors.borderLight)),
+                              ),
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  TextButton.icon(
+                                    onPressed: pag.hasPrev
+                                        ? () => ref.read(walletProvider.notifier).fetchTransactions(page: pag.page - 1)
+                                        : null,
+                                    icon: const Icon(Icons.chevron_left, size: 20),
+                                    label: const Text('Previous'),
+                                  ),
+                                  Text('${pag.page} / ${pag.totalPages}',
+                                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                                  TextButton.icon(
+                                    onPressed: pag.hasNext
+                                        ? () => ref.read(walletProvider.notifier).fetchTransactions(page: pag.page + 1)
+                                        : null,
+                                    icon: const Icon(Icons.chevron_right, size: 20),
+                                    label: const Text('Next'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
       ),
     );
   }

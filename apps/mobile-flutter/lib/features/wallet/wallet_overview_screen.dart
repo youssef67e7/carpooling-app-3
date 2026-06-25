@@ -81,7 +81,16 @@ class _WalletOverviewScreenState extends ConsumerState<WalletOverviewScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 children: [
                   const SizedBox(height: 24),
-                  const Text('Recent Activities', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.black)),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Recent Activities', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.black)),
+                      TextButton(
+                        onPressed: () => context.push('history'),
+                        child: const Text('View All', style: TextStyle(fontSize: 13)),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 8),
                   if (w.error != null)
                     Padding(

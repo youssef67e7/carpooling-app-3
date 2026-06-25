@@ -9,6 +9,7 @@
     "hash-admin-password": "node src/scripts/hashAdminPassword.js",
     "test": "node --test test/**/*.test.js",
     "test:smoke": "node scripts/smoke-api.js",
+    "migrate:ids": "node src/scripts/migrateObjectIdsToUuid.js",
     "mongo:verify": "node scripts/verify-mongo-crud.js",
     "mongo:test-atlas": "node scripts/test-atlas-connection.js",
     "init:mongo": "node scripts/init-mongo.js"

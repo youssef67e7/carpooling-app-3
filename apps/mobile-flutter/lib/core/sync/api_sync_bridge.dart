@@ -69,8 +69,6 @@ class _ApiSyncBridge {
     if (_fcmInitialized) return;
     _fcmInitialized = true;
 
-    await FcmService.initialize();
-
     _tokenSub = FcmService.listenTokenRefresh((token) {
       _registerFcmToken().catchError((_) {});
     });
@@ -98,16 +96,21 @@ class _ApiSyncBridge {
     if (userId == null) return;
     try {
       final auth = _ref.read(authProvider);
+      if (!auth.isAuthenticated) return;
       if (auth.user?.role == 'admin') {
         await _ref.read(adminProvider.notifier).fetchStats();
         _ref.read(apiSyncReadyProvider.notifier).state = true;
         return;
       }
+      if (_userId != userId) return;
       final ride = _ref.read(rideProvider.notifier);
       final wallet = _ref.read(walletProvider.notifier);
       await ride.fetchVehicles();
+      if (_userId != userId) return;
       await wallet.refresh();
+      if (_userId != userId) return;
       await ride.refreshActiveRide();
+      if (_userId != userId) return;
       if (_activeRole == 'passenger') {
         final vt = auth.user?.vehicleType;
         await ride.fetchNearbyDrivers(vt != null && vt.isNotEmpty ? vt : 'delivery');
@@ -117,6 +120,7 @@ class _ApiSyncBridge {
         await ride.fetchAvailable();
         await ride.fetchHistory();
       }
+      if (_userId != userId) return;
       _ref.read(apiSyncReadyProvider.notifier).state = true;
     } catch (_) {
       _ref.read(apiSyncReadyProvider.notifier).state = false;

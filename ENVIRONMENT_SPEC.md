@@ -4,10 +4,10 @@
 
 ```env
 # MongoDB
-MONGODB_URI=mongodb+srv://reachnative:3d0jJvAuO9o2j4lC@reachnativecar.yjgguon.mongodb.net/reachnativecar
+MONGODB_URI=mongodb+srv://[REDACTED]@[REDACTED]/reachnativecar
 
 # JWT
-JWT_SECRET=8b1c5e3a9f7d2e4c6a8b0f1d3e5c7a9b2d4f6e8c0a1b3d5e7f9a2b4c6d8e0
+JWT_SECRET=[REDACTED]
 
 # Twilio (SMS)
 TWILIO_ACCOUNT_SID=<twilio-sid>
