@@ -30,7 +30,10 @@ async function requireDriverProfile(userId) {
 function isOwnedUploadUrl(userId, raw) {
   const s = String(raw || "").trim();
   if (!s) return false;
-  if (s.startsWith("http://") || s.startsWith("https://")) return true;
+  if (s.startsWith("http://") || s.startsWith("https://")) {
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME || "dixvj7zzs";
+    return s.includes(`res.cloudinary.com/${cloudName}`);
+  }
   return s.startsWith(`/uploads/public/${String(userId)}/`) || s.startsWith(`/uploads/private/${String(userId)}/`);
 }
 

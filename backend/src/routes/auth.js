@@ -181,7 +181,7 @@ router.post(
       const rawRefreshToken = generateRefreshToken();
       await storeRefreshToken(fresh._id, rawRefreshToken);
       logAction({ req, action: "Admin login", file: "routes/auth.js:login", extra: { email } });
-      return res.json({ token: accessToken, refreshToken: rawRefreshToken, user: fresh.toJSON() });
+      return res.json({ accessToken, refreshToken: rawRefreshToken, user: fresh.toJSON() });
     } catch (e) {
       next(e);
     }

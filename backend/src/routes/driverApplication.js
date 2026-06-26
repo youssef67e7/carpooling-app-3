@@ -15,7 +15,11 @@ router.use(authRequired, blockCheck);
 function isOwnedUploadUrl(userId, raw) {
   const s = String(raw || "").trim();
   if (!s) return false;
-  if (s.startsWith("http://") || s.startsWith("https://")) return true; // allow external CDN/URLs
+  if (s.startsWith("http://") || s.startsWith("https://")) {
+    // Only allow Cloudinary URLs from our cloud (prevents arbitrary URL injection)
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME || "dixvj7zzs";
+    return s.includes(`res.cloudinary.com/${cloudName}`);
+  }
   // Our upload URLs are returned as `/uploads/public/<userId>/<file>` or `/uploads/private/<userId>/<file>`
   return s.startsWith(`/uploads/public/${String(userId)}/`) || s.startsWith(`/uploads/private/${String(userId)}/`);
 }
