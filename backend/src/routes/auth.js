@@ -649,7 +649,7 @@ router.post("/email/send-otp", authWriteLimiter, validate(sendEmailOtpSchema), a
     });
     return res.json({
       success: true,
-      data: { message: "OTP sent", email: emailNorm, _devOtp: process.env.NODE_ENV !== "production" ? otp : undefined },
+      data: { message: "OTP sent", email: emailNorm, _devOtp: process.env.NODE_ENV !== "production" || process.env.EMAIL_CONSOLE_MODE ? otp : undefined },
     });
   } catch (err) {
     next(err);
