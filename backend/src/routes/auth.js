@@ -22,6 +22,8 @@ import {
   sendOtpSchema,
   verifyOtpSchema,
   verifyFirebasePhoneSchema,
+  sendEmailOtpSchema,
+  verifyEmailOtpSchema,
 } from "../schemas/auth.schemas.js";
 import {
   generateRefreshToken,
@@ -39,10 +41,12 @@ import {
 } from "../utils/resolveGoogleSignInToken.js";
 import { upsertUserFromGoogleSignIn } from "../utils/googleSignInUser.js";
 import { PhoneLoginOtp } from "../models/PhoneLoginOtp.js";
+import { EmailLoginOtp } from "../models/EmailLoginOtp.js";
 import { EmailPasswordResetOtp } from "../models/EmailPasswordResetOtp.js";
 import { normalizePhone, hashPhoneOtp, randomPhoneOtp6, syntheticEmailForPhone } from "../utils/phoneOtp.js";
 import { hashEmailOtp, randomEmailOtp6 } from "../utils/emailOtp.js";
 import { sendSms, buildLoginOtpMessage } from "../services/sendSms.js";
+import { sendEmail } from "../services/sendEmail.js";
 import { sendPhoneOtp, verifyPhoneOtp } from "../services/authNativeService.js";
 import { verifyFirebasePhoneToken } from "../services/firebasePhoneService.js";
 import { registerFcmTokenSchema } from "../schemas/misc.schemas.js";
@@ -50,6 +54,8 @@ import { registerFcmTokenSchema } from "../schemas/misc.schemas.js";
 const router = Router();
 const PHONE_OTP_TTL_MS = 10 * 60 * 1000;
 const PHONE_OTP_MAX_ATTEMPTS = 5;
+const EMAIL_LOGIN_OTP_TTL_MS = 10 * 60 * 1000;
+const EMAIL_LOGIN_OTP_MAX_ATTEMPTS = 5;
 const EMAIL_RESET_OTP_TTL_MS = 15 * 60 * 1000;
 const EMAIL_RESET_OTP_MAX_ATTEMPTS = 5;
 
@@ -619,6 +625,81 @@ router.post("/verify-firebase-phone", validate(verifyFirebasePhoneSchema), async
       return res.status(401).type("json").send(JSON.stringify({ success: false, error: { code: "AUTH_ERROR", message: msg } }));
     }
     return res.status(500).type("json").send(JSON.stringify({ success: false, error: { code: "INTERNAL_ERROR", message: msg } }));
+  }
+});
+
+// --- Email OTP login ---
+
+router.post("/email/send-otp", authWriteLimiter, validate(sendEmailOtpSchema), async (req, res, next) => {
+  try {
+    const emailNorm = req.body.email.toLowerCase().trim();
+    const otp = randomEmailOtp6();
+    const expiresAt = new Date(Date.now() + EMAIL_LOGIN_OTP_TTL_MS);
+    await EmailLoginOtp.deleteMany({ email: emailNorm });
+    await EmailLoginOtp.create({
+      email: emailNorm,
+      otpDigest: hashEmailOtp(otp),
+      expiresAt,
+      attempts: 0,
+    });
+    await sendEmail({
+      to: emailNorm,
+      subject: "Your verification code",
+      text: `Your verification code is: ${otp}\nValid for 10 minutes. Do not share this code.`,
+    });
+    return res.json({
+      success: true,
+      data: { message: "OTP sent", email: emailNorm, _devOtp: process.env.NODE_ENV !== "production" ? otp : undefined },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/email/verify-otp", authWriteLimiter, validate(verifyEmailOtpSchema), async (req, res, next) => {
+  try {
+    const emailNorm = req.body.email.toLowerCase().trim();
+    const code = String(req.body.code || "").trim();
+    const record = await EmailLoginOtp.findOne({ email: emailNorm }).sort({ createdAt: -1 });
+    if (!record || record.expiresAt <= new Date()) {
+      return res.status(400).json({ success: false, error: { code: "OTP_EXPIRED", message: "Code expired. Request a new one." } });
+    }
+    if (record.attempts >= EMAIL_LOGIN_OTP_MAX_ATTEMPTS) {
+      await EmailLoginOtp.deleteMany({ email: emailNorm });
+      return res.status(429).json({ success: false, error: { code: "OTP_MAX_ATTEMPTS", message: "Too many attempts. Request a new code." } });
+    }
+    if (record.otpDigest !== hashEmailOtp(code)) {
+      record.attempts += 1;
+      await record.save();
+      return res.status(401).json({ success: false, error: { code: "OTP_INVALID", message: "Invalid code" } });
+    }
+    await EmailLoginOtp.deleteMany({ email: emailNorm });
+    let user = await User.findOne({ email: emailNorm });
+    const isNewUser = !user;
+    if (!user) {
+      user = await User.create({
+        email: emailNorm,
+        name: emailNorm.split("@")[0],
+        role: "passenger",
+        active_role: "passenger",
+        isOnline: false,
+        is_verified: true,
+      });
+      await PassengerProfile.create({ userId: user._id });
+    }
+    await finalizeUserForSession(user);
+    const fresh = await User.findById(user._id);
+    const accessToken = signUserToken(fresh);
+    const rawRefreshToken = generateRefreshToken();
+    await storeRefreshToken(fresh._id, rawRefreshToken);
+    logAction({ req, action: "Email OTP login", file: "routes/auth.js:email_verify_otp", extra: { email: emailNorm, isNewUser } });
+    return res.json({
+      success: true,
+      data: { accessToken, refreshToken: rawRefreshToken, user: fresh.toJSON(), isNewUser },
+    });
+  } catch (err) {
+    logAction({ req, action: "Email OTP login failed", file: "routes/auth.js:email_verify_otp", error: err });
+    next(err);
   }
 });
 

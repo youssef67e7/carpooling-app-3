@@ -77,4 +77,6 @@ class ApiEndpoints {
   static const authLogout = '/auth/logout';
   static const authVerifyFirebasePhone = '/auth/verify-firebase-phone';
   static const authRegisterToken = '/auth/register-token';
+  static const authEmailSendOtp = '/auth/email/send-otp';
+  static const authEmailVerifyOtp = '/auth/email/verify-otp';
 }

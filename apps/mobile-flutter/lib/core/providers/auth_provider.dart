@@ -331,6 +331,37 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  Future<Map<String, dynamic>> requestEmailOtp(String email) async {
+    state = state.copyWith(clearError: true);
+    try {
+      final api = await _api;
+      return await api.postJson(ApiEndpoints.authEmailSendOtp, {'email': email.trim()});
+    } catch (e) {
+      state = state.copyWith(error: localizedApiError(e, fallbackKey: 'error'));
+      rethrow;
+    }
+  }
+
+  Future<void> verifyEmailOtp(String email, String code) async {
+    state = state.copyWith(loading: true, clearError: true);
+    try {
+      final api = await _api;
+      final data = await api.postJson(ApiEndpoints.authEmailVerifyOtp, {
+        'email': email.trim(),
+        'code': code.trim(),
+      });
+      final token = '${data['data']['accessToken']}';
+      final refreshToken = '${data['data']['refreshToken'] ?? ''}';
+      if (data['data']['user'] != null) {
+        final user = WeretUser.fromJson(data['data']['user'] as Map<String, dynamic>);
+        await applySession(token: token, refreshToken: refreshToken, user: user);
+      }
+    } catch (e) {
+      state = state.copyWith(loading: false, error: localizedApiError(e, fallbackKey: 'error'));
+      rethrow;
+    }
+  }
+
   Future<void> verifyFirebasePhone(String firebaseIdToken, {String? name}) async {
     state = state.copyWith(loading: true, clearError: true);
     try {

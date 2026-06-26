@@ -11,6 +11,7 @@
 - **`.vercelignore` added**: Excludes `node_modules/`, `apps/mobile-flutter/`, `*.md`, etc. — deployment size dropped from 891MB → 21KB
 - **Removed incompatible `functions` from `vercel.json`**: `builds` + `functions` conflict resolved (Hobby timeout 10s default)
 - **Flutter upload service simplified**: Removed direct Cloudinary upload attempt (unsigned preset `weret_unsigned` didn't exist), always uses backend proxy `POST /api/upload` — `apps/mobile-flutter/lib/core/services/upload_service.dart` refactored from 3 methods (direct + fallback) to single backend-only method
+- **Email OTP login system**: New backend endpoints `POST /auth/email/send-otp` and `POST /auth/email/verify-otp` with nodemailer/Gmail SMTP for email delivery (console fallback in dev). Flutter UI: "Send Code" button on email step + OTP input. Zero-cost replacement for Firebase phone SMS auth.
 - **Login screen Form wrappers**: `_phoneStep`, `_otpStep`, `_emailStep` in `login_screen.dart` now wrapped in `Form(key: _formKey)` widgets — `_sendOtp()`, `_verifyOtp()`, `_emailLogin()` were silently returning because `_formKey.currentState` was null (no Form ancestor); also added null guard on `_verifyOtp` to prevent crash
 - **Driver onboarding validation feedback**: `_next()` now shows a snackbar (`authValidationCheckFields`) when form validation fails, instead of silently doing nothing
 - **Translation keys**: Added `authValidationCheckFields` to `en.json` and `ar.json`

@@ -30,11 +30,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _otp = TextEditingController();
   final _email = TextEditingController();
   final _password = TextEditingController();
+  final _emailOtp = TextEditingController();
   final _phoneFormKey = GlobalKey<FormState>();
   final _otpFormKey = GlobalKey<FormState>();
   final _emailFormKey = GlobalKey<FormState>();
+  final _emailOtpFormKey = GlobalKey<FormState>();
   String? _devOtpHint;
   String? _normalizedPhone;
+  String? _normalizedEmail;
   bool _sendingOtp = false;
   int _resendSeconds = 0;
   Timer? _resendTimer;
@@ -49,6 +52,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     _otp.dispose();
     _email.dispose();
     _password.dispose();
+    _emailOtp.dispose();
     super.dispose();
   }
 
@@ -209,10 +213,45 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
+  bool _emailOtpLoading = false;
+
+  Future<void> _sendEmailOtp() async {
+    if (_emailFormKey.currentState == null || !_emailFormKey.currentState!.validate()) return;
+    setState(() => _emailOtpLoading = true);
+    ref.read(authProvider.notifier).clearError();
+    try {
+      final email = _email.text.trim();
+      setState(() => _normalizedEmail = email);
+      await ref.read(authProvider.notifier).requestEmailOtp(email);
+      setState(() => _step = 'emailOtp');
+      _startResendCooldown();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(localizedApiError(e))));
+      }
+    } finally {
+      if (mounted) setState(() => _emailOtpLoading = false);
+    }
+  }
+
+  Future<void> _verifyEmailOtp() async {
+    if (_emailOtpFormKey.currentState == null || !_emailOtpFormKey.currentState!.validate()) return;
+    ref.read(authProvider.notifier).clearError();
+    try {
+      await ref.read(authProvider.notifier).verifyEmailOtp(_normalizedEmail!, _emailOtp.text.trim());
+      if (mounted) _goHome();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(localizedApiError(e))));
+      }
+    }
+  }
+
   void _back() {
     setState(() {
       _step = switch (_step) {
         'phoneOtp' => 'phone',
+        'emailOtp' => 'email',
         'phone' || 'email' => 'welcome',
         _ => 'welcome',
       };
@@ -260,6 +299,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             'phone' => _phoneStep(auth.error),
             'phoneOtp' => _otpStep(auth.loading, auth.error),
             'email' => _emailStep(auth.loading, auth.error),
+            'emailOtp' => _emailOtpStep(auth.loading, auth.error),
             _ => _welcome(auth),
           },
         ),
@@ -521,6 +561,38 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
+  Widget _emailOtpStep(bool loading, String? error) {
+    return Form(
+      key: _emailOtpFormKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 32),
+          Text('Enter verification code', style: AppStyles.headlineSmall),
+          const SizedBox(height: 8),
+          Text("Sent to $_normalizedEmail", style: AppStyles.bodyRegular),
+          const SizedBox(height: 24),
+          _errorBanner(error),
+          OtpInput(
+            length: 6,
+            onCompleted: (code) {
+              _emailOtp.text = code;
+              _verifyEmailOtp();
+            },
+          ),
+          const SizedBox(height: 16),
+          _primaryButton('Verify', loading: loading, onPressed: _verifyEmailOtp),
+          const SizedBox(height: 16),
+          _textLink(
+            _resendSeconds > 0 ? 'Resend in $_resendSeconds sec' : 'Resend code',
+            onPressed: _resendSeconds > 0 ? () {} : _sendEmailOtp,
+          ),
+          _textLink('Change email', onPressed: () => setState(() => _step = 'email')),
+        ],
+      ),
+    );
+  }
+
   Widget _emailStep(bool loading, String? error) {
     return Form(
       key: _emailFormKey,
@@ -549,6 +621,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           ),
           const SizedBox(height: 16),
           _primaryButton('Login', loading: loading, onPressed: _emailLogin),
+          const SizedBox(height: 8),
+          _primaryButton('Send Code', loading: _emailOtpLoading, onPressed: _sendEmailOtp),
           const SizedBox(height: 16),
           _textLink('Forgot password?', onPressed: () => context.push('/forgot-password')),
           _textLink('Create an account', onPressed: () => context.push('/register')),
