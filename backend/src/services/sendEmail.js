@@ -42,7 +42,7 @@ export async function sendEmail({ to, subject, text, html }) {
   }
 
   const allowConsole =
-    process.env.EMAIL_CONSOLE_MODE === "1" ||
+    process.env.EMAIL_CONSOLE_MODE ||
     process.env.NODE_ENV !== "production" ||
     process.env.NODE_ENV == null;
 

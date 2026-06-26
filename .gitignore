@@ -85,3 +85,4 @@ flutter_logs_err.txt
 /updated_docs/
 # Android build
 apps/mobile-flutter/android/build/
+.vercel
