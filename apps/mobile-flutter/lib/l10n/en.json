@@ -927,5 +927,7 @@
   "driverPayAgain": "Pay again",
   "driverMemberSince": "Member since {{date}}",
   "driverProfilePersonal": "Personal Information",
-  "driverSwitchToUser": "Switch to User Mode"
+  "driverSwitchToUser": "Switch to User Mode",
+  "deleteAccount": "Delete Account",
+  "deleteAccountConfirm": "Are you sure? This action cannot be undone. Your account and all associated data will be permanently deleted."
 }

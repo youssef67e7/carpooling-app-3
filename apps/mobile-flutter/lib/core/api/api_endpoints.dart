@@ -79,4 +79,5 @@ class ApiEndpoints {
   static const authRegisterToken = '/auth/register-token';
   static const authEmailSendOtp = '/auth/email/send-otp';
   static const authEmailVerifyOtp = '/auth/email/verify-otp';
+  static const authDeleteAccount = '/auth/delete-account';
 }

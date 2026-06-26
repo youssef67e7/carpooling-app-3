@@ -7,6 +7,17 @@ import { User } from "../models/User.js";
 import { AdminAccount } from "../models/AdminAccount.js";
 import { WalletAccount } from "../models/WalletAccount.js";
 import { PassengerProfile } from "../models/PassengerProfile.js";
+import { DriverProfile } from "../models/DriverProfile.js";
+import { DriverDocuments } from "../models/DriverDocuments.js";
+import { Transaction } from "../models/Transaction.js";
+import { FcmToken } from "../models/FcmToken.js";
+import { Notification } from "../models/Notification.js";
+import { WithdrawalRequest } from "../models/WithdrawalRequest.js";
+import { Report } from "../models/Report.js";
+import { Message } from "../models/Message.js";
+import { Booking } from "../models/Booking.js";
+import { Ride } from "../models/Ride.js";
+import { AdminAuditLog } from "../models/AdminAuditLog.js";
 import { authRequired, blockCheck } from "../middleware/auth.js";
 import { validateRequest } from "../middleware/validateRequest.js";
 import { validate } from "../middleware/validate.js";
@@ -516,6 +527,52 @@ router.post(
       }
       const ok = await bcrypt.compare(String(req.body.password), user.password);
       if (!ok) throw new AppError("Invalid password", 401);
+      return res.json({ ok: true });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+router.post(
+  "/delete-account",
+  authRequired,
+  blockCheck,
+  async (req, res, next) => {
+    try {
+      const user = await User.findById(req.userId);
+      if (!user) throw new AppError("User not found", 401);
+      const uid = user._id;
+
+      const { password } = req.body || {};
+      if (password) {
+        if (!user.password) {
+          if (user.googleSub) throw new AppError("This account uses Google sign-in; re-authenticate via Google to delete", 400);
+          throw new AppError("Password not set on this account", 400);
+        }
+        const ok = await bcrypt.compare(String(password), user.password);
+        if (!ok) throw new AppError("Invalid password", 401);
+      }
+
+      await Promise.all([
+        DriverProfile.deleteMany({ userId: uid }),
+        DriverDocuments.deleteMany({ userId: uid }),
+        PassengerProfile.deleteMany({ userId: uid }),
+        WalletAccount.deleteMany({ userId: uid }),
+        Transaction.deleteMany({ userId: uid }),
+        FcmToken.deleteMany({ userId: uid }),
+        Notification.deleteMany({ userId: uid }),
+        WithdrawalRequest.deleteMany({ userId: uid }),
+        Report.deleteMany({ reporterId: uid }),
+        Report.deleteMany({ reportedUserId: uid }),
+        Message.deleteMany({ senderId: uid }),
+        Ride.updateMany({ passengerId: uid }, { $set: { passengerId: null } }),
+        Ride.updateMany({ driverId: uid }, { $set: { driverId: null } }),
+        Booking.deleteMany({ passengerId: uid }),
+      ]);
+
+      await User.deleteOne({ _id: uid });
+      logAction({ req, action: "User deleted own account", file: "routes/auth.js:delete_account", extra: { email: user.email, role: user.role } });
       return res.json({ ok: true });
     } catch (e) {
       next(e);

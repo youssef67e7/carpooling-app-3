@@ -422,6 +422,25 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = state.copyWith(user: user);
   }
 
+  Future<void> deleteAccount({String? password}) async {
+    state = state.copyWith(loading: true, clearError: true);
+    try {
+      final api = await _api;
+      final body = <String, dynamic>{};
+      if (password != null && password.isNotEmpty) body['password'] = password;
+      await api.postJson(ApiEndpoints.authDeleteAccount, body);
+      if (_googleSignInInstance != null) {
+        try {
+          await _googleSignInInstance!.signOut();
+        } catch (_) {}
+      }
+      await clearLocalSession();
+    } catch (e) {
+      state = state.copyWith(loading: false, error: localizedApiError(e, fallbackKey: 'error'));
+      rethrow;
+    }
+  }
+
   Future<void> logout() async {
     final hasToken = await TokenManager.hasAccessToken();
     if (hasToken) {

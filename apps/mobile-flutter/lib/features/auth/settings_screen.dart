@@ -15,6 +15,7 @@ import '../../shared/widgets/custom_button.dart';
 import '../../shared/widgets/weret_pill_toggle.dart';
 import '../../shared/widgets/weret_section_card.dart';
 import '../../core/utils/show_alert.dart';
+import '../../core/utils/api_error_message.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -145,10 +146,68 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
                 WeretSectionCard(
                   title: 'account'.tr(),
-                  child: CustomButton(
-                    title: 'logout'.tr(),
-                    variant: 'outline',
-                    onPressed: () => performLogout(ref, context),
+                  child: Column(
+                    children: [
+                      CustomButton(
+                        title: 'logout'.tr(),
+                        variant: 'outline',
+                        onPressed: () => performLogout(ref, context),
+                      ),
+                      const SizedBox(height: 12),
+                      CustomButton(
+                        title: 'deleteAccount'.tr(),
+                        variant: 'outline',
+                        onPressed: () async {
+                          final auth = ref.read(authProvider);
+                          String? password;
+                          final hasGoogle = auth.user?.googleSub != null && '${auth.user?.googleSub}'.isNotEmpty;
+                          if (!hasGoogle) {
+                            final pwCtrl = TextEditingController();
+                            final pw = await showDialog<String>(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                title: Text('deleteAccount'.tr()),
+                                content: TextField(
+                                  controller: pwCtrl,
+                                  obscureText: true,
+                                  decoration: InputDecoration(labelText: 'password'.tr()),
+                                ),
+                                actions: [
+                                  TextButton(onPressed: () => Navigator.pop(ctx), child: Text('cancel'.tr())),
+                                  TextButton(onPressed: () => Navigator.pop(ctx, pwCtrl.text), child: Text('confirm'.tr())),
+                                ],
+                              ),
+                            );
+                            password = pw;
+                            pwCtrl.dispose();
+                            if (password == null || password.isEmpty) return;
+                          } else {
+                            final confirmed = await showDialog<bool>(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                title: Text('deleteAccount'.tr()),
+                                content: Text('deleteAccountConfirm'.tr()),
+                                actions: [
+                                  TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text('cancel'.tr())),
+                                  TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text('confirm'.tr())),
+                                ],
+                              ),
+                            );
+                            if (confirmed != true) return;
+                          }
+                          try {
+                            await ref.read(authProvider.notifier).deleteAccount(password: password);
+                            if (context.mounted) {
+                              Navigator.pushNamedAndRemoveUntil(context, '/login', (_) => false);
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              showAlert(context, 'error'.tr(), localizedApiError(e, fallbackKey: 'error'));
+                            }
+                          }
+                        },
+                      ),
+                    ],
                   ),
                 ),
               ],
