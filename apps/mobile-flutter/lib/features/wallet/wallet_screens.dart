@@ -494,7 +494,7 @@ class _WalletHistoryScreenState extends ConsumerState<WalletHistoryScreen> {
                                 final amt = tx['amount'] ?? 0;
                                 final note = tx['note']?.toString() ?? '';
                                 final created = tx['createdAt']?.toString() ?? '';
-                                final isCredit = type == 'deposit' || type == 'ride_payment';
+                                final isCredit = type == 'deposit' || type == 'ride_payment' || type == 'ride_refund';
                                 return Container(
                                   padding: const EdgeInsets.all(14),
                                   decoration: BoxDecoration(

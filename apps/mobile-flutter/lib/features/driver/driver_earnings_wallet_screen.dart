@@ -123,7 +123,7 @@ class _DriverEarningsWalletScreenState extends ConsumerState<DriverEarningsWalle
                       final tx = Map<String, dynamic>.from(raw as Map);
                       final type = '${tx['type'] ?? ''}';
                       final amt = num.tryParse('${tx['amount'] ?? 0}') ?? 0;
-                      final isCredit = type == 'deposit' || type == 'ride_payment';
+                      final isCredit = type == 'deposit' || type == 'ride_payment' || type == 'ride_refund';
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 12),
                         child: Row(

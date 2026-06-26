@@ -120,7 +120,27 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
                 const SizedBox(height: 12),
                 GestureDetector(
                   onTap: () => context.push('/driver/verification-status'),
-                  child: DriverInfoBanner(text: 'driverPendingBanner'.tr()),
+                  child: user.driverApplicationStatus == 'rejected'
+                      ? Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: WeretTokens.error.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: WeretTokens.error.withValues(alpha: 0.3)),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(Icons.warning_amber_rounded, size: 18, color: WeretTokens.error),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text('driverRejectedBanner'.tr(),
+                                    style: const TextStyle(fontSize: 12, height: 1.4, color: WeretTokens.error)),
+                              ),
+                            ],
+                          ),
+                        )
+                      : DriverInfoBanner(text: 'driverPendingBanner'.tr()),
                 ),
               ],
               const SizedBox(height: 12),

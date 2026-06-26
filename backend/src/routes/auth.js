@@ -233,7 +233,7 @@ router.post(
   }
 );
 
-router.get("/me", authRequired, async (req, res, next) => {
+router.get("/me", authRequired, blockCheck, async (req, res, next) => {
   try {
     const user = await User.findById(req.userId);
     if (!user) throw new AppError("User not found", 401);

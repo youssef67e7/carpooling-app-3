@@ -146,10 +146,10 @@ router.patch(
       }
       if ("block_reason" in req.body) user.block_reason = String(req.body.block_reason || "").slice(0, 500);
 
-      // Driver approval/rejection should NOT force role switching.
-      // We only update the application/profile statuses; the user can switch modes explicitly.
       if (user.driver_application_status === "approved") {
         user.is_verified = true;
+        user.role = "driver";
+        user.active_role = "driver";
         await DriverProfile.updateOne({ userId: user._id }, { $set: { status: "approved", reviewNote: "" } }, { upsert: true });
       }
       if (user.driver_application_status === "rejected") {

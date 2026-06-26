@@ -1,4 +1,6 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
+import '../router/app_router.dart' show rootNavigatorKey;
 import '../services/token_manager.dart';
 
 class _PendingRequest {
@@ -37,12 +39,30 @@ class AuthInterceptor extends Interceptor {
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
-    if (err.response?.statusCode != 401) {
+    final statusCode = err.response?.statusCode;
+    final data = err.response?.data is Map ? err.response?.data as Map : <dynamic, dynamic>{};
+    final code = data['code'] as String?;
+    final errorMsg = data['message'] as String?;
+
+    if (statusCode == 403 && (code == 'ACCOUNT_BLOCKED' || code == 'ACCOUNT_SUSPENDED')) {
+      await _forceLogout();
+      if (rootNavigatorKey.currentContext != null) {
+        ScaffoldMessenger.of(rootNavigatorKey.currentContext!).showSnackBar(
+          SnackBar(
+            content: Text(errorMsg ?? (code == 'ACCOUNT_BLOCKED' ? 'Account blocked' : 'Account suspended')),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
+      }
       handler.next(err);
       return;
     }
 
-    final code = err.response?.data is Map ? (err.response?.data as Map)['code'] : null;
+    if (statusCode != 401) {
+      handler.next(err);
+      return;
+    }
+
     if (code == 'TOKEN_INVALID' || code == 'TOKEN_REVOKED') {
       await _forceLogout();
       handler.next(err);

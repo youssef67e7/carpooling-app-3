@@ -209,11 +209,13 @@ class _DriverVerificationStatusScreenState extends ConsumerState<DriverVerificat
 
   @override
   Widget build(BuildContext context) {
-    final progress = (_verification?['overallProgress'] as num?)?.toInt() ?? 0;
+      final progress = (_verification?['overallProgress'] as num?)?.toInt() ?? 0;
     final steps = Map<String, dynamic>.from(_verification?['steps'] as Map? ?? {});
     final estRaw = _verification?['estimatedCompletionDate'];
     final est = DateTime.tryParse('$estRaw');
     final estLabel = est != null ? DateFormat.yMMMd().format(est) : '—';
+    final appStatus = _verification?['applicationStatus'] as String? ?? '';
+    final reviewNote = _verification?['reviewNote'] as String? ?? '';
 
     return Scaffold(
       backgroundColor: WeretTokens.bg,
@@ -278,6 +280,43 @@ class _DriverVerificationStatusScreenState extends ConsumerState<DriverVerificat
                       ],
                     ),
                   ),
+                  if (appStatus == 'rejected') ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: WeretTokens.error.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(WeretTokens.cardRadius),
+                        border: Border.all(color: WeretTokens.error.withValues(alpha: 0.3)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.cancel_outlined, color: WeretTokens.error),
+                              const SizedBox(width: 8),
+                              Text('driverApplicationRejected'.tr(), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: WeretTokens.error)),
+                            ],
+                          ),
+                          if (reviewNote.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Text(reviewNote, style: const TextStyle(color: WeretTokens.textSecondary, height: 1.4, fontSize: 13)),
+                          ],
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: () {},
+                              icon: const Icon(Icons.support_agent_outlined, size: 18),
+                              label: Text('driverContactSupport'.tr()),
+                              style: OutlinedButton.styleFrom(foregroundColor: WeretTokens.error, side: const BorderSide(color: WeretTokens.error)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 20),
                   DriverTimelineStep(
                     title: 'driverStepPersonal'.tr(),

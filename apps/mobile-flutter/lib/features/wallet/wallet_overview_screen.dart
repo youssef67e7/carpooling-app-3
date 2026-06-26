@@ -121,7 +121,7 @@ class _WalletOverviewScreenState extends ConsumerState<WalletOverviewScreen> {
                       final type = '${m['type'] ?? ''}';
                       final amt = m['amount'] ?? 0;
                       final created = m['createdAt']?.toString() ?? '';
-                      final isCredit = type == 'deposit' || type == 'ride_payment';
+                      final isCredit = type == 'deposit' || type == 'ride_payment' || type == 'ride_refund';
                       final icon = isCredit ? Icons.add : Icons.send;
                       final date = created.length >= 10 ? created.substring(0, 10) : created;
                       return WalletActivityItem(
