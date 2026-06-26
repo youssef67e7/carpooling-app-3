@@ -7,9 +7,11 @@ import { authRequired, blockCheck } from "../middleware/auth.js";
 import { validateRequest } from "../middleware/validateRequest.js";
 import { validate } from "../middleware/validate.js";
 import { AppError } from "../errors/AppError.js";
+import { newDocId } from "../mongo/odm.js";
 import { requireApprovedDriver } from "../middleware/driverGate.js";
 import { driverLocationSchema } from "../schemas/driver.schemas.js";
 import { getDriverDashboard } from "../services/driverDashboard.js";
+import { logAction } from "../utils/logger.js";
 
 const router = Router();
 
@@ -131,8 +133,10 @@ router.post("/toggle-status", async (req, res, next) => {
     }
     user.isOnline = goingOnline;
     await user.save();
+    logAction({ req, action: `Driver ${goingOnline ? "online" : "offline"}`, file: "routes/driver.js:toggle_status" });
     return res.json({ isOnline: user.isOnline, user: user.toJSON() });
   } catch (e) {
+    logAction({ req, action: "Driver toggle status failed", file: "routes/driver.js:toggle_status", error: e });
     next(e);
   }
 });
@@ -154,6 +158,7 @@ router.post(
       assertNotAdmin(user);
       const prof = await requireDriverProfile(req.userId);
       const car = {
+        _id: newDocId(),
         imageUrl: String(req.body.imageUrl).trim().slice(0, 500),
         brand: String(req.body.brand).trim().slice(0, 80),
         model: String(req.body.model).trim().slice(0, 80),
@@ -165,10 +170,12 @@ router.post(
       if (!isOwnedUploadUrl(req.userId, car.imageUrl)) throw new AppError("Invalid image URL", 400);
       if (!Array.isArray(prof.cars)) prof.cars = [];
       prof.cars.push(car);
-      if (!prof.selectedCarId && prof.cars[0]?._id) prof.selectedCarId = prof.cars[0]._id;
+      if (!prof.selectedCarId) prof.selectedCarId = car._id;
       await prof.save();
+      logAction({ req, action: "Car added", file: "routes/driver.js:cars_add", extra: { brand: car.brand, model: car.model, plateNumber: car.plateNumber } });
       return res.status(201).json({ profile: prof.toJSON() });
     } catch (e) {
+      logAction({ req, action: "Car add failed", file: "routes/driver.js:cars_add", error: e });
       next(e);
     }
   }
@@ -199,8 +206,10 @@ router.patch(
       if (req.body.seats != null) car.seats = Number(req.body.seats);
       if (req.body.carCategory != null) car.carCategory = String(req.body.carCategory).toLowerCase();
       await prof.save();
+      logAction({ req, action: "Car updated", file: "routes/driver.js:cars_update", extra: { carId: req.params.carId } });
       return res.json({ profile: prof.toJSON() });
     } catch (e) {
+      logAction({ req, action: "Car update failed", file: "routes/driver.js:cars_update", error: e });
       next(e);
     }
   }
@@ -224,8 +233,10 @@ router.delete("/cars/:carId", async (req, res, next) => {
       prof.selectedCarId = prof.cars[0]?._id || null;
     }
     await prof.save();
+    logAction({ req, action: "Car deleted", file: "routes/driver.js:cars_delete", extra: { carId } });
     return res.json({ ok: true, profile: prof.toJSON() });
   } catch (e) {
+    logAction({ req, action: "Car delete failed", file: "routes/driver.js:cars_delete", error: e });
     next(e);
   }
 });
@@ -241,8 +252,10 @@ router.patch("/cars/:carId/set-active", async (req, res, next) => {
     if (!exists) throw new AppError("Car not found", 404);
     prof.selectedCarId = carId;
     await prof.save();
+    logAction({ req, action: "Active car changed", file: "routes/driver.js:set_active_car", extra: { carId } });
     return res.json({ ok: true, profile: prof.toJSON() });
   } catch (e) {
+    logAction({ req, action: "Set active car failed", file: "routes/driver.js:set_active_car", error: e });
     next(e);
   }
 });
@@ -262,8 +275,10 @@ router.post(
       assertNotAdmin(user);
       user.location = { lat: Number(lat), lng: Number(lng) };
       await user.save();
+      logAction({ req, action: "Location updated", file: "routes/driver.js:location_update", extra: { lat: Number(lat), lng: Number(lng) } });
       return res.json({ location: user.location });
     } catch (e) {
+      logAction({ req, action: "Location update failed", file: "routes/driver.js:location_update", error: e });
       next(e);
     }
   }

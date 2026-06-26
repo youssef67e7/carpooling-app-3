@@ -1,7 +1,7 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/theme/app_colors.dart';
+import '../../core/theme/weret_tokens.dart';
 
 final connectivityProvider = StreamProvider<List<ConnectivityResult>>((ref) {
   return Connectivity().onConnectivityChanged;
@@ -27,7 +27,7 @@ class OfflineBanner extends ConsumerWidget {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 6),
-            color: AppColors.accent,
+            color: WeretTokens.accent,
             child: const Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/providers/wallet_provider.dart';
-import '../../core/theme/app_colors.dart';
+import '../../core/theme/weret_tokens.dart';
 import '../../core/utils/api_error_message.dart';
 import '../../shared/widgets/success_modal.dart';
 import 'wallet_labels.dart';
@@ -76,7 +76,7 @@ class _WalletDepositScreenState extends ConsumerState<WalletDepositScreen> {
     final w = ref.watch(walletProvider);
     final accounts = _accounts(w);
     return Scaffold(
-      backgroundColor: AppColors.secondary,
+      backgroundColor: WeretTokens.bg,
       body: SafeArea(
         child: Column(
           children: [
@@ -84,7 +84,7 @@ class _WalletDepositScreenState extends ConsumerState<WalletDepositScreen> {
               width: double.infinity,
               height: 180,
               decoration: const BoxDecoration(
-                color: AppColors.primary,
+                color: WeretTokens.brand,
                 borderRadius: BorderRadius.only(
                   bottomLeft: Radius.circular(30),
                   bottomRight: Radius.circular(30),
@@ -114,12 +114,12 @@ class _WalletDepositScreenState extends ConsumerState<WalletDepositScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text('Amount',
-                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textDarkGray)),
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: WeretTokens.textSecondary)),
                     const SizedBox(height: 6),
                     Container(
                       height: 50,
                       decoration: BoxDecoration(
-                        border: Border.all(color: AppColors.borderMedium),
+                        border: Border.all(color: WeretTokens.border),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -128,14 +128,14 @@ class _WalletDepositScreenState extends ConsumerState<WalletDepositScreen> {
                         keyboardType: TextInputType.number,
                         decoration: const InputDecoration(
                           hintText: '0.00',
-                          hintStyle: TextStyle(color: AppColors.textMuted, fontSize: 14),
+                          hintStyle: TextStyle(color: WeretTokens.textMuted, fontSize: 14),
                           border: InputBorder.none,
                         ),
                       ),
                     ),
                     const SizedBox(height: 16),
                     const Text('Select account',
-                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textDarkGray)),
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: WeretTokens.textSecondary)),
                     const SizedBox(height: 6),
                     DropdownButtonFormField<String>(
                       value: _selectedAccountId,
@@ -143,7 +143,7 @@ class _WalletDepositScreenState extends ConsumerState<WalletDepositScreen> {
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                         contentPadding: const EdgeInsets.symmetric(horizontal: 16),
                       ),
-                      hint: const Text('Choose one', style: TextStyle(color: AppColors.textMuted)),
+                      hint: const Text('Choose one', style: TextStyle(color: WeretTokens.textMuted)),
                       items: accounts.map((a) {
                         final id = walletAccountId(a);
                         final label = a['label']?.toString() ?? walletTypeLabel('${a['walletType'] ?? ''}');
@@ -163,7 +163,7 @@ class _WalletDepositScreenState extends ConsumerState<WalletDepositScreen> {
                 child: FilledButton(
                   onPressed: (_busy || w.loading) ? null : _submit,
                   style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.primary,
+                    backgroundColor: WeretTokens.brand,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
@@ -273,7 +273,7 @@ class _WalletWithdrawScreenState extends ConsumerState<WalletWithdrawScreen> {
     final w = ref.watch(walletProvider);
     final accounts = _accounts(w);
     return Scaffold(
-      backgroundColor: AppColors.secondary,
+      backgroundColor: WeretTokens.bg,
       body: SafeArea(
         child: Column(
           children: [
@@ -281,7 +281,7 @@ class _WalletWithdrawScreenState extends ConsumerState<WalletWithdrawScreen> {
               width: double.infinity,
               height: 120,
               decoration: const BoxDecoration(
-                color: AppColors.primary,
+                color: WeretTokens.brand,
                 borderRadius: BorderRadius.only(
                   bottomLeft: Radius.circular(30),
                   bottomRight: Radius.circular(30),
@@ -318,7 +318,7 @@ class _WalletWithdrawScreenState extends ConsumerState<WalletWithdrawScreen> {
                 child: FilledButton(
                   onPressed: (_busy || w.loading) ? null : (_step2 ? _confirm : _request),
                   style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.primary,
+                    backgroundColor: WeretTokens.brand,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
@@ -340,12 +340,12 @@ class _WalletWithdrawScreenState extends ConsumerState<WalletWithdrawScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text('Amount',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textDarkGray)),
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: WeretTokens.textSecondary)),
         const SizedBox(height: 6),
         Container(
           height: 50,
           decoration: BoxDecoration(
-            border: Border.all(color: AppColors.borderMedium),
+            border: Border.all(color: WeretTokens.border),
             borderRadius: BorderRadius.circular(12),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -354,14 +354,14 @@ class _WalletWithdrawScreenState extends ConsumerState<WalletWithdrawScreen> {
             keyboardType: TextInputType.number,
             decoration: const InputDecoration(
               hintText: '0.00',
-              hintStyle: TextStyle(color: AppColors.textMuted, fontSize: 14),
+              hintStyle: TextStyle(color: WeretTokens.textMuted, fontSize: 14),
               border: InputBorder.none,
             ),
           ),
         ),
         const SizedBox(height: 16),
         const Text('From account',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textDarkGray)),
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: WeretTokens.textSecondary)),
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
           value: _selectedAccountId,
@@ -369,7 +369,7 @@ class _WalletWithdrawScreenState extends ConsumerState<WalletWithdrawScreen> {
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             contentPadding: const EdgeInsets.symmetric(horizontal: 16),
           ),
-          hint: const Text('Choose one', style: TextStyle(color: AppColors.textMuted)),
+          hint: const Text('Choose one', style: TextStyle(color: WeretTokens.textMuted)),
           items: accounts.map((a) {
             final id = walletAccountId(a);
             final label = a['label']?.toString() ?? walletTypeLabel('${a['walletType'] ?? ''}');
@@ -387,16 +387,16 @@ class _WalletWithdrawScreenState extends ConsumerState<WalletWithdrawScreen> {
       children: [
         const Text(
           'Enter the OTP sent to your registered phone number',
-          style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+          style: TextStyle(fontSize: 14, color: WeretTokens.textSecondary),
         ),
         const SizedBox(height: 24),
         const Text('OTP',
-            style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
+            style: TextStyle(fontSize: 12, color: WeretTokens.textMuted)),
         const SizedBox(height: 6),
         Container(
           height: 50,
           decoration: BoxDecoration(
-            border: Border.all(color: AppColors.borderMedium),
+            border: Border.all(color: WeretTokens.border),
             borderRadius: BorderRadius.circular(12),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -405,7 +405,7 @@ class _WalletWithdrawScreenState extends ConsumerState<WalletWithdrawScreen> {
             keyboardType: TextInputType.number,
             decoration: const InputDecoration(
               hintText: 'Enter OTP',
-              hintStyle: TextStyle(color: AppColors.textMuted, fontSize: 14),
+              hintStyle: TextStyle(color: WeretTokens.textMuted, fontSize: 14),
               border: InputBorder.none,
             ),
           ),
@@ -439,7 +439,7 @@ class _WalletHistoryScreenState extends ConsumerState<WalletHistoryScreen> {
     final txs = w.transactions;
     final pag = w.transactionsPagination;
     return Scaffold(
-      backgroundColor: AppColors.secondary,
+      backgroundColor: WeretTokens.bg,
       appBar: AppBar(
         title: const Text('Wallet History', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black)),
         centerTitle: true,
@@ -478,7 +478,7 @@ class _WalletHistoryScreenState extends ConsumerState<WalletHistoryScreen> {
                         physics: const AlwaysScrollableScrollPhysics(),
                         children: [
                           SizedBox(height: MediaQuery.sizeOf(context).height * 0.3),
-                          const Center(child: Text('No transactions', style: TextStyle(color: AppColors.textMuted))),
+                          const Center(child: Text('No transactions', style: TextStyle(color: WeretTokens.textMuted))),
                         ],
                       )
                     : Column(
@@ -500,7 +500,7 @@ class _WalletHistoryScreenState extends ConsumerState<WalletHistoryScreen> {
                                   decoration: BoxDecoration(
                                     color: Colors.white,
                                     borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(color: AppColors.borderLight.withValues(alpha: 0.7)),
+                                    border: Border.all(color: WeretTokens.borderSubtle.withValues(alpha: 0.7)),
                                   ),
                                   child: Row(
                                     children: [
@@ -509,8 +509,8 @@ class _WalletHistoryScreenState extends ConsumerState<WalletHistoryScreen> {
                                           crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
                                             Text(walletTxTypeLabel(type), style: const TextStyle(fontWeight: FontWeight.w700)),
-                                            if (note.isNotEmpty) Text(note, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-                                            if (created.isNotEmpty) Text(created, style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                                            if (note.isNotEmpty) Text(note, style: const TextStyle(color: WeretTokens.textSecondary, fontSize: 12)),
+                                            if (created.isNotEmpty) Text(created, style: const TextStyle(color: WeretTokens.textSecondary, fontSize: 11)),
                                           ],
                                         ),
                                       ),
@@ -532,7 +532,7 @@ class _WalletHistoryScreenState extends ConsumerState<WalletHistoryScreen> {
                             Container(
                               decoration: BoxDecoration(
                                 color: Colors.white,
-                                border: Border(top: BorderSide(color: AppColors.borderLight)),
+                                border: Border(top: BorderSide(color: WeretTokens.borderSubtle)),
                               ),
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                               child: Row(
@@ -546,7 +546,7 @@ class _WalletHistoryScreenState extends ConsumerState<WalletHistoryScreen> {
                                     label: const Text('Previous'),
                                   ),
                                   Text('${pag.page} / ${pag.totalPages}',
-                                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                                      style: const TextStyle(color: WeretTokens.textSecondary, fontSize: 13)),
                                   TextButton.icon(
                                     onPressed: pag.hasNext
                                         ? () => ref.read(walletProvider.notifier).fetchTransactions(page: pag.page + 1)
@@ -616,7 +616,7 @@ class _WalletAddAccountScreenState extends ConsumerState<WalletAddAccountScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.secondary,
+      backgroundColor: WeretTokens.bg,
       appBar: AppBar(
         title: const Text('Add Payment Method', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black)),
         centerTitle: true,
@@ -635,7 +635,7 @@ class _WalletAddAccountScreenState extends ConsumerState<WalletAddAccountScreen>
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.borderLight.withValues(alpha: 0.7)),
+              border: Border.all(color: WeretTokens.borderSubtle.withValues(alpha: 0.7)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -658,7 +658,7 @@ class _WalletAddAccountScreenState extends ConsumerState<WalletAddAccountScreen>
             Container(
               height: 50,
               decoration: BoxDecoration(
-                border: Border.all(color: AppColors.borderMedium),
+                border: Border.all(color: WeretTokens.border),
                 borderRadius: BorderRadius.circular(12),
               ),
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -667,7 +667,7 @@ class _WalletAddAccountScreenState extends ConsumerState<WalletAddAccountScreen>
                 keyboardType: TextInputType.phone,
                 decoration: const InputDecoration(
                   hintText: 'Phone number',
-                  hintStyle: TextStyle(color: AppColors.textMuted, fontSize: 14),
+                  hintStyle: TextStyle(color: WeretTokens.textMuted, fontSize: 14),
                   border: InputBorder.none,
                 ),
               ),
@@ -677,7 +677,7 @@ class _WalletAddAccountScreenState extends ConsumerState<WalletAddAccountScreen>
           Container(
             height: 50,
             decoration: BoxDecoration(
-              border: Border.all(color: AppColors.borderMedium),
+              border: Border.all(color: WeretTokens.border),
               borderRadius: BorderRadius.circular(12),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -685,7 +685,7 @@ class _WalletAddAccountScreenState extends ConsumerState<WalletAddAccountScreen>
               controller: _label,
               decoration: const InputDecoration(
                 hintText: 'Label (optional)',
-                hintStyle: TextStyle(color: AppColors.textMuted, fontSize: 14),
+                hintStyle: TextStyle(color: WeretTokens.textMuted, fontSize: 14),
                 border: InputBorder.none,
               ),
             ),
@@ -697,7 +697,7 @@ class _WalletAddAccountScreenState extends ConsumerState<WalletAddAccountScreen>
             child: FilledButton(
               onPressed: _busy ? null : _save,
               style: FilledButton.styleFrom(
-                backgroundColor: AppColors.primary,
+                backgroundColor: WeretTokens.brand,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),

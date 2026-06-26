@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_assets.dart';
+import '../../core/theme/weret_tokens.dart';
 import '../../core/theme/app_styles.dart';
 import '../../shared/widgets/weret_logo.dart';
 
@@ -53,7 +54,7 @@ class _WeretOnboardingScreenState extends ConsumerState<WeretOnboardingScreen> {
   Widget build(BuildContext context) {
     if (!_splashDone) {
       return Scaffold(
-        backgroundColor: AppColors.primary,
+        backgroundColor: WeretTokens.brand,
         body: Center(
           child: Stack(
             children: [
@@ -85,7 +86,7 @@ class _WeretOnboardingScreenState extends ConsumerState<WeretOnboardingScreen> {
     }
 
     return Scaffold(
-      backgroundColor: AppColors.secondary,
+      backgroundColor: WeretTokens.bg,
       body: SafeArea(
         child: Column(
           children: [
@@ -94,7 +95,7 @@ class _WeretOnboardingScreenState extends ConsumerState<WeretOnboardingScreen> {
                 alignment: Alignment.topRight,
                 child: TextButton(
                   onPressed: _finish,
-                  child: Text('Skip', style: TextStyle(color: AppColors.textMuted, fontSize: 14, fontWeight: FontWeight.w500)),
+                  child: Text('Skip', style: TextStyle(color: WeretTokens.textMuted, fontSize: 14, fontWeight: FontWeight.w500)),
                 ),
               ),
             Expanded(
@@ -120,7 +121,7 @@ class _WeretOnboardingScreenState extends ConsumerState<WeretOnboardingScreen> {
                       height: 8,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: _pageIndex == i ? AppColors.primary : AppColors.borderLight,
+                        color: _pageIndex == i ? WeretTokens.brand : WeretTokens.borderSubtle,
                       ),
                     ),
                   ),
@@ -151,7 +152,7 @@ class _WeretOnboardingScreenState extends ConsumerState<WeretOnboardingScreen> {
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(20),
-                child: Image.asset('assets/images/placeholder.png', fit: BoxFit.cover),
+                child: Image.asset(AppAssets.carTopview, fit: BoxFit.cover),
               ),
             ),
           ),
@@ -179,7 +180,7 @@ class _WeretOnboardingScreenState extends ConsumerState<WeretOnboardingScreen> {
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(20),
-                child: Image.asset('assets/images/placeholder.png', fit: BoxFit.cover),
+                child: Image.asset(AppAssets.carFrontSuv, fit: BoxFit.cover),
               ),
             ),
           ),
@@ -199,7 +200,7 @@ class _WeretOnboardingScreenState extends ConsumerState<WeretOnboardingScreen> {
                 width: 48,
                 height: 48,
                 decoration: const BoxDecoration(
-                  color: AppColors.primary,
+                  color: WeretTokens.brand,
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.arrow_forward, color: Colors.white, size: 20),

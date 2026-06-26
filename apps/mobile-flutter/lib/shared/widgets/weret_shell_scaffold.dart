@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../core/theme/app_colors.dart';
+import '../../core/theme/weret_tokens.dart';
 import 'offline_banner.dart';
 
 class WeretShellScaffold extends ConsumerWidget {
@@ -17,11 +17,11 @@ class WeretShellScaffold extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      backgroundColor: AppColors.secondary,
+      backgroundColor: WeretTokens.bg,
       body: OfflineBanner(child: navigationShell),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
-          color: AppColors.secondary,
+          color: WeretTokens.bg,
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.05),

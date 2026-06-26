@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../core/theme/app_colors.dart';
+import '../../core/theme/weret_tokens.dart';
 
 class WalletActivityItem extends StatelessWidget {
   const WalletActivityItem({
@@ -22,7 +22,7 @@ class WalletActivityItem extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16),
       decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.borderLight, width: 1)),
+        border: Border(bottom: BorderSide(color: WeretTokens.borderSubtle, width: 1)),
       ),
       child: Row(
         children: [
@@ -42,7 +42,7 @@ class WalletActivityItem extends StatelessWidget {
               children: [
                 Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Colors.black)),
                 const SizedBox(height: 2),
-                Text(subtitle, style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                Text(subtitle, style: const TextStyle(fontSize: 12, color: WeretTokens.textMuted)),
               ],
             ),
           ),

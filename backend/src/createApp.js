@@ -25,6 +25,8 @@ import { User } from "./models/User.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { globalApiLimiter } from "./middleware/rateLimiters.js";
 import { getUploadRoot } from "./uploadPaths.js";
+import { requestLogger } from "./middleware/requestLogger.js";
+import { cleanupOldLogs } from "./utils/logger.js";
 
 const __dirnameSrc = path.dirname(fileURLToPath(import.meta.url));
 const adminWebPath = path.resolve(__dirnameSrc, "../../apps/web");
@@ -40,7 +42,8 @@ export function createApp() {
       crossOriginResourcePolicy: { policy: "cross-origin" },
     })
   );
-  app.use(cors());
+  const corsOrigins = (process.env.CORS_ORIGINS || "").split(",").map((s) => s.trim()).filter(Boolean);
+  app.use(cors(corsOrigins.length ? { origin: corsOrigins } : {}));
   app.use(express.json({ limit: "10mb" }));
 
   app.use(async (req, res, next) => {
@@ -86,18 +89,24 @@ export function createApp() {
   const isSensitive = (k) => SENSITIVE_KEYS.some((s) => k.toUpperCase().includes(s));
   const maskVal = (v) => (v?.length > 8 ? v.slice(0, 4) + "…" + v.slice(-4) : v ? "****" : null);
 
-  app.get(["/debug/env", "/api/debug/env"], (_req, res) => {
-    const raw = { ...process.env };
-    const vars = Object.keys(raw)
-      .filter((k) => !k.startsWith("npm_") && k !== "Path" && !k.startsWith("_"))
-      .sort()
-      .map((k) => ({
-        key: k,
-        value: isSensitive(k) ? maskVal(raw[k]) : raw[k],
-        set: Boolean(raw[k]),
-      }));
-    res.json({ count: vars.length, vars, vercel: Boolean(process.env.VERCEL) });
-  });
+  if (!process.env.VERCEL) {
+    app.get(["/debug/env", "/api/debug/env"], (_req, res) => {
+      const raw = { ...process.env };
+      const vars = Object.keys(raw)
+        .filter((k) => !k.startsWith("npm_") && k !== "Path" && !k.startsWith("_"))
+        .sort()
+        .map((k) => ({
+          key: k,
+          value: isSensitive(k) ? maskVal(raw[k]) : raw[k],
+          set: Boolean(raw[k]),
+        }));
+      res.json({ count: vars.length, vars, vercel: false });
+    });
+  }
+
+  app.use(requestLogger);
+
+  cleanupOldLogs();
 
   app.use(globalApiLimiter);
 

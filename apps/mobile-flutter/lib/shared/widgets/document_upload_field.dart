@@ -38,8 +38,15 @@ class _DocumentUploadFieldState extends ConsumerState<DocumentUploadField> {
       widget.onChanged(url);
     } catch (e) {
       if (mounted) {
+        final errorMsg = e.toString();
+        String userMessage;
+        if (errorMsg.contains('401') || errorMsg.contains('Missing token') || errorMsg.contains('TOKEN_MISSING')) {
+          userMessage = 'authUploadRequiresLogin'.tr();
+        } else {
+          userMessage = 'authUploadFailed'.tr(namedArgs: {'error': errorMsg});
+        }
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('authUploadFailed'.tr(namedArgs: {'error': e.toString()}))),
+          SnackBar(content: Text(userMessage)),
         );
       }
     } finally {

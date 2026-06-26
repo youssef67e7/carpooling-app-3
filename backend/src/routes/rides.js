@@ -49,6 +49,7 @@ import {
   acceptRide,
 } from "../services/rideNativeService.js";
 import { getMessagesByRideId, createMessage } from "../mongo/queries/messages.js";
+import { logAction } from "../utils/logger.js";
 
 const router = Router();
 
@@ -81,8 +82,10 @@ router.post("/", authRequired, blockCheck, roleRequired("passenger", "admin"), v
       longitude: dropoff.lng,
       address: dropoff.address || '',
     }, vehicleType);
+    logAction({ req, action: "Ride created", file: "routes/rides.js:create", extra: { rideId: result.ride?._id, vehicleType } });
     return res.status(201).json({ success: true, data: { ride: result.ride, nearbyDrivers: result.nearbyDrivers.length } });
   } catch (err) {
+    logAction({ req, action: "Ride create failed", file: "routes/rides.js:create", error: err });
     const status = err.message === "User already has an active ride" ? 400 : 500;
     return res.status(status).json({ success: false, error: { code: "RIDE_ERROR", message: err.message } });
   }
@@ -104,8 +107,10 @@ router.post("/:id/accept", authRequired, blockCheck, roleRequired("driver", "adm
     const driverId = req.userId;
     await assertDriverCanTakeAnotherRide(driverId);
     const result = await acceptRide(id, driverId);
+    logAction({ req, action: "Ride accepted by driver", file: "routes/rides.js:accept", extra: { rideId: id } });
     return res.status(200).json({ success: true, data: result });
   } catch (err) {
+    logAction({ req, action: "Ride accept failed", file: "routes/rides.js:accept", error: err, extra: { rideId: req.params.id } });
     const msg = err.message.toLowerCase();
     let status = 500;
     if (msg.includes("not found")) status = 404;
@@ -155,9 +160,10 @@ router.post("/:id/arriving", authRequired, blockCheck, roleRequired("driver", "a
       return res.status(400).json({ success: false, error: { code: "STATE_ERROR", message: "Ride must be accepted first" } });
     }
     notifyDriverArrived(updated).catch(() => {});
-    console.log(`[AUDIT] ride ${id} status → driver_arriving by ${req.userId}`);
+    logAction({ req, action: "Ride status → driver_arriving", file: "routes/rides.js:arriving", extra: { rideId: id } });
     return res.status(200).json({ success: true, data: updated });
   } catch (err) {
+    logAction({ req, action: "Ride arriving failed", file: "routes/rides.js:arriving", error: err, extra: { rideId: req.params.id } });
     return res.status(500).json({ success: false, error: { code: "SERVER_ERROR", message: err.message } });
   }
 });
@@ -184,9 +190,10 @@ router.post("/:id/onboard", authRequired, blockCheck, roleRequired("driver", "ad
       return res.status(400).json({ success: false, error: { code: "STATE_ERROR", message: "Driver must arrive first" } });
     }
     notifyPassengerOnboard(updated).catch(() => {});
-    console.log(`[AUDIT] ride ${id} status → passenger_onboard by ${req.userId}`);
+    logAction({ req, action: "Ride status → passenger_onboard", file: "routes/rides.js:onboard", extra: { rideId: id } });
     return res.status(200).json({ success: true, data: updated });
   } catch (err) {
+    logAction({ req, action: "Ride onboard failed", file: "routes/rides.js:onboard", error: err, extra: { rideId: req.params.id } });
     return res.status(500).json({ success: false, error: { code: "SERVER_ERROR", message: err.message } });
   }
 });
@@ -231,9 +238,10 @@ router.post("/:id/cancel", authRequired, blockCheck, roleRequired("passenger"), 
     }
     refundPassengerForRide(req.userId, updated._id, updated.agreedFare || updated.estimatedFare).catch(() => {});
     notifyRideCancelled(updated, req.userId, reason).catch(() => {});
-    console.log(`[AUDIT] ride ${id} cancelled by passenger ${req.userId}`);
+    logAction({ req, action: "Ride cancelled by passenger", file: "routes/rides.js:cancel_passenger", extra: { rideId: id, reason } });
     return res.status(200).json({ success: true, data: updated });
   } catch (err) {
+    logAction({ req, action: "Ride cancel by passenger failed", file: "routes/rides.js:cancel_passenger", error: err, extra: { rideId: req.params.id } });
     return res.status(500).json({ success: false, error: { code: "SERVER_ERROR", message: err.message } });
   }
 });
@@ -276,9 +284,10 @@ router.post("/:id/driver-cancel", authRequired, blockCheck, roleRequired("driver
     }
     refundPassengerForRide(updated.passengerId, updated._id, updated.agreedFare || updated.estimatedFare).catch(() => {});
     notifyRideCancelled(updated, updated.driverId, reason).catch(() => {});
-    console.log(`[AUDIT] ride ${id} cancelled by driver ${req.userId}`);
+    logAction({ req, action: "Ride cancelled by driver", file: "routes/rides.js:cancel_driver", extra: { rideId: id, reason } });
     return res.status(200).json({ success: true, data: updated });
   } catch (err) {
+    logAction({ req, action: "Ride cancel by driver failed", file: "routes/rides.js:cancel_driver", error: err, extra: { rideId: req.params.id } });
     return res.status(500).json({ success: false, error: { code: "SERVER_ERROR", message: err.message } });
   }
 });
@@ -317,9 +326,10 @@ router.post("/:id/admin-cancel", authRequired, blockCheck, roleRequired("admin")
     }
     refundPassengerForRide(updated.passengerId, updated._id, updated.agreedFare || updated.estimatedFare).catch(() => {});
     notifyRideCancelled(updated, updated.driverId, reason).catch(() => {});
-    console.log(`[AUDIT] ride ${id} cancelled by admin ${req.userId}`);
+    logAction({ req, action: "Ride cancelled by admin", file: "routes/rides.js:cancel_admin", extra: { rideId: id, reason } });
     return res.status(200).json({ success: true, data: updated });
   } catch (err) {
+    logAction({ req, action: "Ride cancel by admin failed", file: "routes/rides.js:cancel_admin", error: err, extra: { rideId: req.params.id } });
     return res.status(500).json({ success: false, error: { code: "SERVER_ERROR", message: err.message } });
   }
 });
@@ -1140,8 +1150,10 @@ router.post("/start", roleRequired("driver"), requireApprovedDriver, ...rideIdVa
     }
     const populated = await populatedRideById(updated._id);
     notifyTripStarted(populated).catch(() => {});
+    logAction({ req, action: "Ride started (ongoing)", file: "routes/rides.js:start", extra: { rideId } });
     return res.json({ ride: populated });
   } catch (e) {
+    logAction({ req, action: "Ride start failed", file: "routes/rides.js:start", error: e, extra: { rideId: req.body?.rideId } });
     next(e);
   }
 });
@@ -1199,8 +1211,10 @@ router.post("/end", roleRequired("driver"), requireApprovedDriver, ...rideIdVali
     if (updated.driverId) {
       notifyPaymentReceived(updated.driverId, rideId, updated.fare).catch(() => {});
     }
+    logAction({ req, action: "Ride completed", file: "routes/rides.js:end", extra: { rideId, fare: updated.fare } });
     return res.json({ ride: populated });
   } catch (e) {
+    logAction({ req, action: "Ride end failed", file: "routes/rides.js:end", error: e, extra: { rideId: req.body?.rideId } });
     next(e);
   }
 });
@@ -1249,8 +1263,10 @@ router.post(
       refundPassengerForRide(req.userId, updated._id, updated.agreedFare || updated.estimatedFare).catch(() => {});
       const populated = await populatedRideById(updated._id);
       notifyRideCancelled(populated, req.userId, reason).catch(() => {});
+      logAction({ req, action: "Ride cancelled by passenger (V1)", file: "routes/rides.js:cancel_v1", extra: { rideId, reason } });
       return res.json({ ride: populated });
     } catch (e) {
+      logAction({ req, action: "Ride cancel (V1) failed", file: "routes/rides.js:cancel_v1", error: e, extra: { rideId: req.body?.rideId } });
       next(e);
     }
   }

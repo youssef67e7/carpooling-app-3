@@ -5,8 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import '../../core/providers/ride_provider.dart';
-import '../../core/theme/app_colors.dart';
-import '../../core/theme/app_styles.dart';
+import '../../core/theme/weret_tokens.dart';
 import '../../core/utils/map_scene_builder.dart';
 import '../../shared/widgets/weret_ride_map.dart';
 
@@ -195,7 +194,7 @@ class _PassengerMapPickerScreenState extends ConsumerState<PassengerMapPickerScr
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.circle, color: AppColors.textSecondary, size: 16),
+                      const Icon(Icons.circle, color: WeretTokens.textSecondary, size: 16),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
@@ -219,7 +218,7 @@ class _PassengerMapPickerScreenState extends ConsumerState<PassengerMapPickerScr
                               width: 2,
                               height: 3,
                               decoration: BoxDecoration(
-                                color: AppColors.borderMedium,
+                                color: WeretTokens.border,
                                 borderRadius: BorderRadius.circular(1),
                               ),
                             ),
@@ -230,12 +229,12 @@ class _PassengerMapPickerScreenState extends ConsumerState<PassengerMapPickerScr
                   ),
                   Row(
                     children: [
-                      const Icon(Icons.location_on, color: AppColors.textSecondary, size: 16),
+                      const Icon(Icons.location_on, color: WeretTokens.textSecondary, size: 16),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
                           _destination != null ? '${_destination!.latitude.toStringAsFixed(4)}, ${_destination!.longitude.toStringAsFixed(4)}' : 'passengerMapPickerDestination'.tr(),
-                          style: const TextStyle(fontSize: 14, color: AppColors.textMuted),
+                          style: const TextStyle(fontSize: 14, color: WeretTokens.textMuted),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
@@ -318,7 +317,7 @@ class _PassengerMapPickerScreenState extends ConsumerState<PassengerMapPickerScr
                           children: [
                             const Text('Economy Ride', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16, color: Colors.black)),
                             const SizedBox(height: 2),
-                            const Text('3 mins away', style: TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+                            const Text('3 mins away', style: TextStyle(fontSize: 13, color: WeretTokens.textSecondary)),
                           ],
                         ),
                       ),
@@ -326,7 +325,7 @@ class _PassengerMapPickerScreenState extends ConsumerState<PassengerMapPickerScr
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           const Text('EGP 12.50', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.black)),
-                          Text('STANDARD', style: AppStyles.sectionLabel),
+                          Text('STANDARD', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500, letterSpacing: 1.2, color: WeretTokens.textMuted)),
                         ],
                       ),
                     ],
@@ -341,7 +340,7 @@ class _PassengerMapPickerScreenState extends ConsumerState<PassengerMapPickerScr
                         Navigator.pop(context, {'pickup': _pickup, 'destination': _destination});
                       },
                       style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.primary,
+                        backgroundColor: WeretTokens.brand,
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),

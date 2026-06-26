@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/api_client.dart';
 import '../api/api_endpoints.dart';
@@ -426,6 +427,7 @@ class RideNotifier extends StateNotifier<RideState> {
       list[idx] = ride;
     } else if (type == 'ride.created') {
       list.insert(0, ride);
+      if (_isDriver) SystemSound.play(SystemSoundType.alert);
     }
 
     state = state.copyWith(availableRides: list);

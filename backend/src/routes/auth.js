@@ -32,6 +32,7 @@ import {
 } from "../services/refreshTokenService.js";
 import { refreshTokenSchema } from "../schemas/auth.schemas.js";
 import { signUserToken } from "../utils/signUserToken.js";
+import { logAction } from "../utils/logger.js";
 import {
   isGoogleOrFirebaseSignInConfigured,
   resolveGoogleSignInToken,
@@ -125,8 +126,10 @@ router.post(
       const accessToken = signUserToken(fresh);
       const rawRefreshToken = generateRefreshToken();
       await storeRefreshToken(fresh._id, rawRefreshToken);
+      logAction({ req, action: "Google sign-in", file: "routes/auth.js:google", extra: { email: user.email } });
       return res.json({ accessToken, refreshToken: rawRefreshToken, user: fresh.toJSON() });
     } catch (e) {
+      logAction({ req, action: "Google sign-in failed", file: "routes/auth.js:google", error: e });
       next(e);
     }
   }
@@ -179,8 +182,10 @@ router.post(
       const accessToken = signUserToken(user);
       const rawRefreshToken = generateRefreshToken();
       await storeRefreshToken(user._id, rawRefreshToken);
+      logAction({ req, action: "Register", file: "routes/auth.js:register", extra: { email: user.email } });
       return res.status(201).json({ accessToken, refreshToken: rawRefreshToken, user: user.toJSON() });
     } catch (e) {
+      logAction({ req, action: "Register failed", file: "routes/auth.js:register", error: e });
       next(e);
     }
   }
@@ -243,8 +248,10 @@ router.patch(
         user.vehicleType = String(req.body.vehicleType).toLowerCase().trim();
       }
       await user.save();
+      logAction({ req, action: "Profile updated", file: "routes/auth.js:profile", extra: { fields: Object.keys(req.body) } });
       return res.json({ user: user.toJSON() });
     } catch (e) {
+      logAction({ req, action: "Profile update failed", file: "routes/auth.js:profile", error: e });
       next(e);
     }
   }
@@ -348,8 +355,10 @@ router.post(
       const accessToken = signUserToken(fresh);
       const rawRefreshToken = generateRefreshToken();
       await storeRefreshToken(fresh._id, rawRefreshToken);
+      logAction({ req, action: "Phone OTP verify", file: "routes/auth.js:phone_verify", extra: { phone } });
       return res.json({ accessToken, refreshToken: rawRefreshToken, user: fresh.toJSON() });
     } catch (e) {
+      logAction({ req, action: "Phone OTP verify failed", file: "routes/auth.js:phone_verify", error: e });
       next(e);
     }
   }
@@ -440,8 +449,10 @@ router.post(
       const accessToken = signUserToken(user);
       const rawRefreshToken = generateRefreshToken();
       await storeRefreshToken(user._id, rawRefreshToken);
+      logAction({ req, action: "Login", file: "routes/auth.js:login", extra: { email: user.email } });
       return res.json({ accessToken, refreshToken: rawRefreshToken, user: user.toJSON() });
     } catch (e) {
+      logAction({ req, action: "Login failed", file: "routes/auth.js:login", error: e });
       next(e);
     }
   }
@@ -547,8 +558,10 @@ router.post(
       await EmailPasswordResetOtp.deleteMany({ email: emailNorm });
       user.password = await bcrypt.hash(req.body.password, 10);
       await user.save();
+      logAction({ req, action: "Password reset", file: "routes/auth.js:reset_password", extra: { email: emailNorm } });
       return res.json({ ok: true, message: "Password updated" });
     } catch (e) {
+      logAction({ req, action: "Password reset failed", file: "routes/auth.js:reset_password", error: e });
       next(e);
     }
   }
@@ -655,11 +668,13 @@ router.post("/refresh", validate(refreshTokenSchema), async (req, res, next) => 
 router.post("/logout", authRequired, async (req, res, next) => {
   try {
     const count = await revokeAllRefreshTokens(req.userId);
+    logAction({ req, action: "Logout", file: "routes/auth.js:logout" });
     res.json({
       success: true,
       data: { revokedSessions: count },
     });
   } catch (err) {
+    logAction({ req, action: "Logout failed", file: "routes/auth.js:logout", error: err });
     next(err);
   }
 });

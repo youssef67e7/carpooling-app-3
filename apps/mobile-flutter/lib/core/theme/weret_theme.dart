@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import 'app_colors.dart';
 import 'weret_tokens.dart';
@@ -23,7 +24,7 @@ class WeretTheme {
       brightness: brightness,
       colorScheme: scheme,
       scaffoldBackgroundColor: isLight ? AppColors.secondary : const Color(0xFF121212),
-      fontFamily: 'Roboto',
+      fontFamily: GoogleFonts.poppins().fontFamily,
       appBarTheme: AppBarTheme(
         centerTitle: true,
         elevation: 0,

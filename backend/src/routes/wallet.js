@@ -11,6 +11,7 @@ import { validate } from "../middleware/validate.js";
 import { docIdBody, docIdParam } from "../middleware/docId.js";
 import { AppError } from "../errors/AppError.js";
 import { depositSchema } from "../schemas/wallet.schemas.js";
+import { logAction } from "../utils/logger.js";
 
 const router = Router();
 
@@ -99,8 +100,10 @@ router.post(
         status: "success",
         note: "Simulated deposit",
       });
+      logAction({ req, action: "Wallet deposit", file: "routes/wallet.js:deposit", extra: { amount: amt, accountId: walletAccountId } });
       return res.json({ account: updated.toJSON(), transaction: tx.toJSON() });
     } catch (e) {
+      logAction({ req, action: "Wallet deposit failed", file: "routes/wallet.js:deposit", error: e });
       next(e);
     }
   }
@@ -139,6 +142,7 @@ router.post(
         console.log(`[wallet] Simulated withdraw OTP for ${req.user.email || req.userId}: ${otp} (request ${wr._id})`);
       }
 
+      logAction({ req, action: "Withdraw request created", file: "routes/wallet.js:withdraw_request", extra: { amount: amt, requestId: wr._id } });
       return res.status(201).json({
         requestId: wr._id.toString(),
         expiresAt: expiresAt.toISOString(),
@@ -146,6 +150,7 @@ router.post(
         _devOtp: process.env.NODE_ENV !== "production" ? otp : undefined,
       });
     } catch (e) {
+      logAction({ req, action: "Withdraw request failed", file: "routes/wallet.js:withdraw_request", error: e });
       next(e);
     }
   }
@@ -196,8 +201,10 @@ router.post(
         note: "Simulated payout to linked wallet",
       });
 
+      logAction({ req, action: "Withdraw confirmed", file: "routes/wallet.js:withdraw_confirm", extra: { amount: wr.amount, requestId: requestId } });
       return res.json({ account: updated.toJSON(), transaction: tx.toJSON() });
     } catch (e) {
+      logAction({ req, action: "Withdraw confirm failed", file: "routes/wallet.js:withdraw_confirm", error: e });
       next(e);
     }
   }

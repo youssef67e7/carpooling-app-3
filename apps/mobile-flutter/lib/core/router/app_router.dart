@@ -77,9 +77,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         DebugLogger.instance.log(LogLevel.navigation, 'REDIRECT', '$loc → /login (unauthenticated)');
         return '/login';
       }
-      if (loggedIn && loc == '/register/driver') {
-        DebugLogger.instance.log(LogLevel.navigation, 'REDIRECT', '$loc → /passenger/more/driver-onboarding (already driver)');
-        return '/passenger/more/driver-onboarding';
+      if (loggedIn && loc == '/register/driver' && auth.user?.role == 'driver') {
+        DebugLogger.instance.log(LogLevel.navigation, 'REDIRECT', '$loc → /driver/home (already driver)');
+        return '/driver/home';
       }
       if (loggedIn && isAuthRoute && loc != '/driver/onboarding' && loc != '/driver/application-received' && loc != '/driver/verification-status') {
         final home = AuthNavigation.homeForUser(auth.user);

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../core/theme/app_colors.dart';
+import '../../core/theme/weret_tokens.dart';
 
 class SuccessModal extends StatelessWidget {
   const SuccessModal({
@@ -72,10 +72,10 @@ class SuccessModal extends StatelessWidget {
             Text(
               description,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
+              style:   const TextStyle(fontSize: 14, color: WeretTokens.textSecondary),
             ),
             const SizedBox(height: 20),
-            const Text('Total Payment', style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
+            const Text('Total Payment', style: TextStyle(fontSize: 12, color: WeretTokens.textMuted)),
             const SizedBox(height: 4),
             Text('$currency $amount', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 28, color: Colors.black)),
             const SizedBox(height: 24),
@@ -85,7 +85,7 @@ class SuccessModal extends StatelessWidget {
               child: FilledButton(
                 onPressed: onDone,
                 style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.primary,
+                  backgroundColor: WeretTokens.brand,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),

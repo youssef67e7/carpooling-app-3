@@ -9,7 +9,7 @@ export async function resolveAuth(req, res, next) {
   const header = req.headers.authorization || "";
   const token = header.startsWith("Bearer ") ? header.slice(7).trim() : null;
   if (!token) {
-    return res.status(401).json({ message: "Missing token" });
+    return res.status(401).json({ success: false, error: { code: "TOKEN_MISSING", message: "Missing token" } });
   }
 
   try {
@@ -19,17 +19,9 @@ export async function resolveAuth(req, res, next) {
     return next();
   } catch (err) {
     if (err instanceof TokenExpiredError) {
-      return res.status(401).json({
-        success: false,
-        error: "Access token expired",
-        code: "TOKEN_EXPIRED",
-      });
+      return res.status(401).json({ success: false, error: { code: "TOKEN_EXPIRED", message: "Access token expired" } });
     }
-    return res.status(401).json({
-      success: false,
-      error: "Invalid access token",
-      code: "TOKEN_INVALID",
-    });
+    return res.status(401).json({ success: false, error: { code: "TOKEN_INVALID", message: "Invalid access token" } });
   }
 }
 
@@ -41,7 +33,7 @@ export function authRequired(req, res, next) {
 export async function blockCheck(req, res, next) {
   try {
     const user = await User.findById(req.userId).select("is_blocked blocked_until role");
-    if (!user) return res.status(401).json({ message: "User not found" });
+    if (!user) return res.status(401).json({ success: false, error: { code: "USER_NOT_FOUND", message: "User not found" } });
     const now = new Date();
     if (user.is_blocked && user.blocked_until && user.blocked_until <= now) {
       await User.updateOne(
@@ -53,11 +45,11 @@ export async function blockCheck(req, res, next) {
     if (user.is_blocked) {
       if (user.blocked_until && user.blocked_until > now) {
         return res.status(403).json({
-          message: "Account suspended",
-          until: user.blocked_until.toISOString(),
+          success: false,
+          error: { code: "ACCOUNT_SUSPENDED", message: "Account suspended", details: { until: user.blocked_until.toISOString() } },
         });
       }
-      return res.status(403).json({ message: "Account blocked" });
+      return res.status(403).json({ success: false, error: { code: "ACCOUNT_BLOCKED", message: "Account blocked" } });
     }
     next();
   } catch (e) {
@@ -69,14 +61,14 @@ export function roleRequired(...roles) {
   return async (req, res, next) => {
     try {
       const user = await User.findById(req.userId);
-      if (!user) return res.status(401).json({ message: "User not found" });
+      if (!user) return res.status(401).json({ success: false, error: { code: "USER_NOT_FOUND", message: "User not found" } });
       const mode = user.role === "admin" ? "admin" : user.active_role || user.role || "passenger";
       const ok = roles.includes(mode) || (roles.includes("admin") && user.role === "admin");
-      if (!ok) return res.status(403).json({ message: "Forbidden" });
+      if (!ok) return res.status(403).json({ success: false, error: { code: "FORBIDDEN", message: "Forbidden" } });
       req.user = user;
       next();
     } catch (e) {
-      return res.status(500).json({ message: "Server error" });
+      return res.status(500).json({ success: false, error: { code: "SERVER_ERROR", message: "Server error" } });
     }
   };
 }

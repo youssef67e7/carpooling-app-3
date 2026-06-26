@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/providers/wallet_provider.dart';
-import '../../core/theme/app_colors.dart';
+import '../../core/theme/weret_tokens.dart';
 import '../../shared/widgets/wallet_activity_item.dart';
 import 'wallet_labels.dart';
 
@@ -23,14 +23,14 @@ class _WalletOverviewScreenState extends ConsumerState<WalletOverviewScreen> {
   Widget build(BuildContext context) {
     final w = ref.watch(walletProvider);
     return Scaffold(
-      backgroundColor: AppColors.secondary,
+      backgroundColor: WeretTokens.bg,
       body: Column(
         children: [
           Container(
             width: double.infinity,
             height: 160,
             decoration: const BoxDecoration(
-              color: AppColors.primary,
+              color: WeretTokens.brand,
               borderRadius: BorderRadius.only(
                 bottomLeft: Radius.circular(30),
                 bottomRight: Radius.circular(30),
@@ -113,7 +113,7 @@ class _WalletOverviewScreenState extends ConsumerState<WalletOverviewScreen> {
                   else if (w.transactions.isEmpty)
                     const Padding(
                       padding: EdgeInsets.only(top: 32),
-                      child: Center(child: Text('No recent activity', style: TextStyle(color: AppColors.textMuted))),
+                      child: Center(child: Text('No recent activity', style: TextStyle(color: WeretTokens.textMuted))),
                     )
                   else
                     ...w.transactions.map((tx) {

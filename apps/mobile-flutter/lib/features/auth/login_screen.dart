@@ -6,13 +6,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/providers/auth_provider.dart';
-import '../../core/theme/app_colors.dart';
+import '../../core/theme/weret_tokens.dart';
 import '../../core/theme/app_styles.dart';
 import '../../core/utils/api_error_message.dart';
 import '../../core/utils/auth_navigation.dart';
 import '../../core/utils/auth_validators.dart';
 import '../../core/utils/google_o_auth_errors.dart';
 import '../../shared/widgets/weret_logo.dart';
+import '../../shared/widgets/country_code_picker.dart';
+import '../../shared/widgets/otp_input.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -38,6 +40,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Timer? _resendTimer;
   String? _verificationId;
   bool _firebaseLoading = false;
+  CountryCode _countryCode = kDefaultCountries[2]; // EG +20
 
   @override
   void dispose() {
@@ -238,14 +241,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final isWelcome = _step == 'welcome';
 
     return Scaffold(
-      backgroundColor: AppColors.secondary,
+      backgroundColor: WeretTokens.bg,
       appBar: isWelcome
           ? null
           : AppBar(
               backgroundColor: Colors.transparent,
               elevation: 0,
               leading: IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: AppColors.textPrimary),
+                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: WeretTokens.textPrimary),
                 onPressed: _back,
               ),
             ),
@@ -264,7 +267,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
+  void _continueFromWelcome() {
+    final input = _phone.text.trim();
+    if (input.isEmpty) return;
+    final emailRegex = RegExp(r'^[^@]+@[^@]+\.[^@]+$');
+    if (emailRegex.hasMatch(input)) {
+      _email.text = input;
+      setState(() => _step = 'email');
+    } else {
+      setState(() => _step = 'phone');
+    }
+  }
+
   Widget _welcome(AuthState auth) {
+    if (!auth.googleSignInEnabled && auth.hydrated) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(authProvider.notifier).retryLoadGoogleConfig();
+      });
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -278,26 +298,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           height: 50,
           child: TextField(
             controller: _phone,
-            keyboardType: TextInputType.phone,
+            keyboardType: TextInputType.text,
             decoration: InputDecoration(
               hintText: 'Phone number or Email',
-              hintStyle: TextStyle(color: AppColors.textMuted, fontSize: 14),
+              hintStyle: TextStyle(color: WeretTokens.textMuted, fontSize: 14),
               filled: true,
-              fillColor: AppColors.inputBackground,
+              fillColor: WeretTokens.inputFill,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: AppColors.borderLight),
+                borderSide: const BorderSide(color: WeretTokens.borderSubtle),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: AppColors.borderLight),
+                borderSide: const BorderSide(color: WeretTokens.borderSubtle),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+                borderSide: const BorderSide(color: WeretTokens.brand, width: 1.5),
               ),
               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             ),
+            onSubmitted: (_) => _continueFromWelcome(),
           ),
         ),
         const SizedBox(height: 16),
@@ -305,9 +326,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           width: double.infinity,
           height: 55,
           child: FilledButton(
-            onPressed: () => setState(() => _step = 'phone'),
+            onPressed: _continueFromWelcome,
             style: FilledButton.styleFrom(
-              backgroundColor: AppColors.primary,
+              backgroundColor: WeretTokens.brand,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
@@ -318,12 +339,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         const SizedBox(height: 24),
         Row(
           children: [
-            const Expanded(child: Divider(color: AppColors.borderLight, thickness: 1)),
+            const Expanded(child: Divider(color: WeretTokens.borderSubtle, thickness: 1)),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Text('OR', style: TextStyle(color: AppColors.textMuted, fontSize: 12, fontWeight: FontWeight.w500)),
+              child: Text('OR', style: TextStyle(color: WeretTokens.textMuted, fontSize: 12, fontWeight: FontWeight.w500)),
             ),
-            const Expanded(child: Divider(color: AppColors.borderLight, thickness: 1)),
+            const Expanded(child: Divider(color: WeretTokens.borderSubtle, thickness: 1)),
           ],
         ),
         const SizedBox(height: 24),
@@ -333,10 +354,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             height: 50,
             child: OutlinedButton.icon(
               onPressed: _google,
-              icon: Image.asset('assets/images/placeholder.png', width: 20, height: 20),
-              label: Text('Google', style: TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w600)),
+              icon: Image.asset('assets/images/design/03_google_modal_avatar_a.png', width: 20, height: 20),
+              label: Text('Google', style: TextStyle(color: WeretTokens.textPrimary, fontSize: 14, fontWeight: FontWeight.w600)),
               style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: AppColors.borderLight),
+                side: const BorderSide(color: WeretTokens.borderSubtle),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 backgroundColor: Colors.transparent,
               ),
@@ -350,11 +371,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         const SizedBox(height: 24),
         TextButton(
           onPressed: () => setState(() => _step = 'email'),
-          child: Text('Sign in with Email', style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600, fontSize: 14)),
+          child: Text('Use email instead', style: TextStyle(color: WeretTokens.textSecondary, fontWeight: FontWeight.w600, fontSize: 14)),
         ),
         TextButton(
           onPressed: () => context.push('/register'),
-          child: Text('Create an account', style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600, fontSize: 14)),
+          child: Text('Create an account', style: TextStyle(color: WeretTokens.textSecondary, fontWeight: FontWeight.w600, fontSize: 14)),
         ),
       ],
     );
@@ -372,20 +393,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         onFieldSubmitted: onFieldSubmitted,
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: TextStyle(color: AppColors.textMuted, fontSize: 14),
+          hintStyle: TextStyle(color: WeretTokens.textMuted, fontSize: 14),
           filled: true,
-          fillColor: AppColors.inputBackground,
+          fillColor: WeretTokens.inputFill,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: AppColors.borderLight),
+            borderSide: const BorderSide(color: WeretTokens.borderSubtle),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: AppColors.borderLight),
+            borderSide: const BorderSide(color: WeretTokens.borderSubtle),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+            borderSide: const BorderSide(color: WeretTokens.brand, width: 1.5),
           ),
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         ),
@@ -400,7 +421,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       child: FilledButton(
         onPressed: onPressed,
         style: FilledButton.styleFrom(
-          backgroundColor: AppColors.primary,
+          backgroundColor: WeretTokens.brand,
           foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
@@ -415,7 +436,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget _textLink(String label, {VoidCallback? onPressed}) {
     return TextButton(
       onPressed: onPressed,
-      child: Text(label, style: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600, fontSize: 14)),
+      child: Text(label, style: const TextStyle(color: WeretTokens.textSecondary, fontWeight: FontWeight.w600, fontSize: 14)),
     );
   }
 
@@ -429,13 +450,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         Text("We'll send you a verification code", style: AppStyles.bodyRegular),
         const SizedBox(height: 24),
         _errorBanner(error),
-        _buildInput(
-          _phone,
-          hint: 'Phone number',
-          keyboardType: TextInputType.phone,
-          validator: (v) => validatePhone(v, required: true),
-          textInputAction: TextInputAction.done,
-          onFieldSubmitted: (_) => _sendOtp(),
+        Row(
+          children: [
+            CountryCodeSelector(
+              selected: _countryCode,
+              onChanged: (c) => setState(() => _countryCode = c),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _buildInput(
+                _phone,
+                hint: 'Phone number',
+                keyboardType: TextInputType.phone,
+                validator: (v) => validatePhone(v, required: true),
+                textInputAction: TextInputAction.done,
+                onFieldSubmitted: (_) => _sendOtp(),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 16),
         _primaryButton('Send Code', loading: _sendingOtp || _firebaseLoading, onPressed: _sendOtp),
@@ -463,13 +495,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             padding: const EdgeInsets.only(bottom: 8),
             child: Text('phoneOtpDevHint'.tr(namedArgs: {'code': _devOtpHint!}), style: const TextStyle(fontSize: 12, color: Colors.orange)),
           ),
-        _buildInput(
-          _otp,
-          hint: 'Code',
-          keyboardType: TextInputType.number,
-          validator: validateOtp,
-          textInputAction: TextInputAction.done,
-          onFieldSubmitted: (_) => _verifyOtp(),
+        OtpInput(
+          length: 4,
+          onCompleted: (code) {
+            _otp.text = code;
+            _verifyOtp();
+          },
         ),
         const SizedBox(height: 16),
         _primaryButton('Verify', loading: loading, onPressed: _verifyOtp),
@@ -479,6 +510,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           onPressed: _resendSeconds > 0 ? () {} : _sendOtp,
         ),
         _textLink('Change phone number', onPressed: () => setState(() => _step = 'phone')),
+        _textLink('Use email instead', onPressed: () => setState(() => _step = 'email')),
       ],
     );
   }

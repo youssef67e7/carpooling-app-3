@@ -16,6 +16,7 @@ import '../driver/driver_shared_widgets.dart';
 import '../driver/driver_passenger_helpers.dart';
 import '../../core/providers/driver_provider.dart';
 import '../../shared/widgets/weret_ride_map.dart';
+import '../../core/theme/app_assets.dart';
 
 class DriverHomeScreen extends ConsumerStatefulWidget {
   const DriverHomeScreen({super.key});
@@ -298,6 +299,19 @@ class _ActiveRideCard extends StatelessWidget {
     }
   }
 
+  String _statusLabel(String status) {
+    const labels = {
+      'pending': 'Waiting for driver',
+      'accepted': 'Driver accepted',
+      'driver_arriving': 'Driver arriving',
+      'passenger_onboard': 'Passenger onboard',
+      'ongoing': 'In progress',
+      'completed': 'Completed',
+      'cancelled': 'Cancelled',
+    };
+    return labels[status] ?? status[0].toUpperCase() + status.substring(1).replaceAll('_', ' ');
+  }
+
   VoidCallback? _action(String status) {
     switch (status) {
       case 'accepted':
@@ -328,7 +342,7 @@ class _ActiveRideCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('${'driverRideSlot'.tr(namedArgs: {'n': '$idx'})} · ${'rideStatus_$status'.tr()}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+          Text('${'driverRideSlot'.tr(namedArgs: {'n': '$idx'})} · ${_statusLabel(status)}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
           const SizedBox(height: 6),
           Text('${'estimatedFare'.tr()}: $fare', style: const TextStyle(color: WeretTokens.textSecondary)),
           Text('${'passenger'.tr()}: $passenger', style: const TextStyle(fontSize: 13)),
@@ -374,9 +388,9 @@ class _RequestCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final fare = ride['estimatedFare'] ?? ride['preassignedFare'] ?? ride['fare'] ?? '—';
     final pu = ride['pickupLocation'];
-    final pickup = pu is Map ? '${pu['address'] ?? '—'}' : '—';
+    final pickup = pu is Map ? '${pu['address'] ?? _coordFallback(pu as Map<String, dynamic>)}' : '—';
     final de = ride['destinationLocation'];
-    final dropoff = de is Map ? '${de['address'] ?? '—'}' : '—';
+    final dropoff = de is Map ? '${de['address'] ?? _coordFallback(de as Map<String, dynamic>)}' : '—';
 
     return GestureDetector(
       onTap: onTap,
@@ -393,8 +407,8 @@ class _RequestCard extends StatelessWidget {
             if (premium)
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: const BoxDecoration(color: WeretTokens.brandHover, borderRadius: BorderRadius.vertical(top: Radius.circular(WeretTokens.cardRadius))),
-                child: Text('driverTopRatedUser'.tr(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 11)),
+                decoration: BoxDecoration(color: WeretTokens.neutralSoft, borderRadius: BorderRadius.vertical(top: Radius.circular(WeretTokens.cardRadius))),
+                child: Text('driverTopRatedUser'.tr(), style: TextStyle(color: WeretTokens.onNeutral, fontWeight: FontWeight.w800, fontSize: 11)),
               ),
             Padding(
               padding: const EdgeInsets.all(14),
@@ -404,8 +418,8 @@ class _RequestCard extends StatelessWidget {
                   Row(
                     children: [
                       CircleAvatar(
-                        backgroundImage: passengerImageUrl != null ? NetworkImage(passengerImageUrl!) : null,
-                        child: passengerImageUrl == null ? Text(passengerName.isNotEmpty ? passengerName[0].toUpperCase() : '?') : null,
+                        backgroundImage: passengerImageUrl != null ? NetworkImage(passengerImageUrl!) : AssetImage(AppAssets.avatarSarahJenkinsDash) as ImageProvider,
+                        child: passengerImageUrl == null ? null : null,
                       ),
                       const SizedBox(width: 10),
                       Expanded(
@@ -446,7 +460,7 @@ class _RequestCard extends StatelessWidget {
                   else
                     FilledButton(
                       style: FilledButton.styleFrom(
-                        backgroundColor: WeretTokens.brand,
+                        backgroundColor: premium ? WeretTokens.premium : WeretTokens.brand,
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
                       onPressed: online && canTakeMore ? onAccept : null,
@@ -478,5 +492,12 @@ class _RequestCard extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  String _coordFallback(Map<String, dynamic> loc) {
+    final lat = loc['lat'] ?? loc['latitude'];
+    final lng = loc['lng'] ?? loc['longitude'];
+    if (lat != null && lng != null) return '${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)}';
+    return '—';
   }
 }

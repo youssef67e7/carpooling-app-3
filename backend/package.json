@@ -12,7 +12,8 @@
     "migrate:ids": "node src/scripts/migrateObjectIdsToUuid.js",
     "mongo:verify": "node scripts/verify-mongo-crud.js",
     "mongo:test-atlas": "node scripts/test-atlas-connection.js",
-    "init:mongo": "node scripts/init-mongo.js"
+    "init:mongo": "node scripts/init-mongo.js",
+    "init:indexes": "node scripts/init-indexes.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

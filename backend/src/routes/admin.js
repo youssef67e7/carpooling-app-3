@@ -28,6 +28,7 @@ import { WithdrawalRequest } from "../models/WithdrawalRequest.js";
 import { AdminAuditLog } from "../models/AdminAuditLog.js";
 import { notifyDriverVerified, notifyDriverRejected } from "../services/notificationHelpers.js";
 import { getMessagesByRideId } from "../mongo/queries/messages.js";
+import { logAction } from "../utils/logger.js";
 
 const router = Router();
 
@@ -172,6 +173,7 @@ router.patch(
         summary: `PATCH user ${user.email}`,
         detail: { patch: req.body, before: { is_blocked: before.is_blocked, is_verified: before.is_verified, driver_application_status: before.driver_application_status }, after: { is_blocked: after.is_blocked, is_verified: after.is_verified, driver_application_status: after.driver_application_status } },
       });
+      logAction({ req, action: "Admin patched user", file: "routes/admin.js:users_patch", extra: { targetUserId: req.params.userId, patches: Object.keys(req.body) } });
       return res.json({ user: user.toJSON() });
     } catch (e) {
       next(e);
@@ -231,8 +233,10 @@ router.delete("/users/:userId", docIdParam("userId"), validateRequest, async (re
       summary: `DELETE user ${user.email}`,
       detail: { email: user.email, role: user.role },
     });
+    logAction({ req, action: "Admin deleted user", file: "routes/admin.js:users_delete", extra: { targetUserId: req.params.userId, email: user.email } });
     return res.json({ ok: true });
   } catch (e) {
+    logAction({ req, action: "Admin delete user failed", file: "routes/admin.js:users_delete", error: e });
     next(e);
   }
 });
@@ -548,6 +552,7 @@ router.post(
         detail: { userId, amount, rideId: rideId || null, note: note || "" },
       });
 
+      logAction({ req, action: "Admin manual refund", file: "routes/admin.js:refund", extra: { targetUserId: userId, amount } });
       return res.json({ transaction: tx.toJSON ? tx.toJSON() : tx });
     } catch (e) {
       next(e);
@@ -598,8 +603,10 @@ router.delete(
         targetId: req.params.messageId,
         summary: `Deleted message ${req.params.messageId}`,
       });
+      logAction({ req, action: "Admin deleted message", file: "routes/admin.js:messages_delete", extra: { messageId: req.params.messageId } });
       return res.json({ ok: true });
     } catch (e) {
+      logAction({ req, action: "Admin delete message failed", file: "routes/admin.js:messages_delete", error: e });
       next(e);
     }
   }

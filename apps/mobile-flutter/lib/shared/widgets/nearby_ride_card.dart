@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../core/theme/app_colors.dart';
+import '../../core/theme/weret_tokens.dart';
 
 class NearbyRideCard extends StatelessWidget {
   const NearbyRideCard({
@@ -52,11 +52,11 @@ class NearbyRideCard extends StatelessWidget {
                 ),
                 Row(
                   children: [
-                    const Icon(Icons.star, color: AppColors.accent, size: 16),
+                    const Icon(Icons.star, color: WeretTokens.accent, size: 16),
                     const SizedBox(width: 4),
                     Text(
                       '$rating ($rideCount rides)',
-                      style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                      style: const TextStyle(fontSize: 12, color: WeretTokens.textSecondary),
                     ),
                   ],
                 ),
@@ -70,7 +70,7 @@ class NearbyRideCard extends StatelessWidget {
                 const SizedBox(width: 4),
                 Padding(
                   padding: const EdgeInsets.only(bottom: 2),
-                  child: Text('PER SEAT', style: TextStyle(fontSize: 10, color: AppColors.textMuted, letterSpacing: 0.5)),
+                  child: Text('PER SEAT', style: TextStyle(fontSize: 10, color: WeretTokens.textMuted, letterSpacing: 0.5)),
                 ),
               ],
             ),
@@ -109,7 +109,7 @@ class NearbyRideCard extends StatelessWidget {
                   ),
                 ),
                 const Spacer(),
-                Text('$seatsLeft seats left', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                Text('$seatsLeft seats left', style: const TextStyle(fontSize: 12, color: WeretTokens.textSecondary)),
               ],
             ),
             const SizedBox(height: 16),
@@ -140,7 +140,7 @@ class NearbyRideCard extends StatelessWidget {
           width: 20,
           height: 20,
           decoration: const BoxDecoration(
-            color: AppColors.accent,
+            color: WeretTokens.accent,
             shape: BoxShape.circle,
           ),
           child: const Icon(Icons.location_on, color: Colors.white, size: 14),

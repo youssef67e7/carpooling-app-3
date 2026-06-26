@@ -86,10 +86,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final freshUser = WeretUser.fromJson(data['user'] as Map<String, dynamic>? ?? data);
       await _cacheUser(freshUser);
       state = state.copyWith(user: freshUser, clearError: true);
-    } catch (_) {
+    } catch (e) {
+      final msg = localizedApiError(e);
       await clearLocalSession();
+      state = state.copyWith(error: msg, hydrated: true);
     }
   }
+
+  int _googleConfigRetryCount = 0;
 
   Future<void> _loadGoogleConfig() async {
     try {
@@ -100,7 +104,29 @@ class AuthNotifier extends StateNotifier<AuthState> {
         googleWebClientId: webId.isNotEmpty ? webId : null,
         googleSignInEnabled: data['enabled'] == true,
       );
-    } catch (_) {}
+      _googleConfigRetryCount = 0;
+    } catch (_) {
+      _scheduleGoogleConfigRetry();
+    }
+  }
+
+  Future<void> retryLoadGoogleConfig() async {
+    _scheduleGoogleConfigRetry(retryNow: true);
+  }
+
+  void _scheduleGoogleConfigRetry({bool retryNow = false}) {
+    if (retryNow) {
+      _loadGoogleConfig();
+      return;
+    }
+    _googleConfigRetryCount++;
+    final delay = _googleConfigRetryCount <= 3
+        ? Duration(seconds: _googleConfigRetryCount * 5)
+        : const Duration(seconds: 60);
+    Future.delayed(delay, () async {
+      if (state.googleSignInEnabled) return;
+      await _loadGoogleConfig();
+    });
   }
 
   GoogleSignIn get googleSignIn {
