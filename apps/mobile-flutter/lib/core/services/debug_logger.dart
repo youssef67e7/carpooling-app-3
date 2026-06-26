@@ -68,8 +68,11 @@ class DebugLogger {
   void action(String label, {String? screen}) {
     log(LogLevel.action, 'TAP', label);
   }
-  void network(String method, String url, {int? statusCode, dynamic error}) {
-    final msg = error != null ? '$method $url → ERROR: $error' : '$method $url → $statusCode';
+  void network(String method, String url, {int? statusCode, dynamic error, int? durationMs}) {
+    final durationStr = durationMs != null ? ' (${durationMs}ms)' : '';
+    final msg = error != null 
+        ? '$method $url → ERROR: $error$durationStr'
+        : '$method $url → $statusCode$durationStr';
     log(LogLevel.network, 'HTTP', msg);
   }
 
