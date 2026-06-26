@@ -216,17 +216,26 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
         'password': _password.text,
         'phone': _phone.text.trim(),
       });
-      final user = ref.read(authProvider).user;
-      if (user == null) return;
-      await ref.read(authProvider.notifier).submitDriverApplication(_applicationPayload(user));
-      if (mounted) context.go('/driver/application-received');
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(ref.read(authProvider).error ?? localizedApiError(e))),
-        );
+      final errMsg = ref.read(authProvider).error ?? localizedApiError(e);
+      if (errMsg.contains('already registered') || errMsg.contains('409')) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Account already exists. Please log in first.')),
+          );
+        }
+        if (mounted) context.go('/login');
+        return;
       }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errMsg)));
+      }
+      return;
     }
+    final user = ref.read(authProvider).user;
+    if (user == null) return;
+    await ref.read(authProvider.notifier).submitDriverApplication(_applicationPayload(user));
+    if (mounted) context.go('/driver/application-received');
   }
 
   @override
