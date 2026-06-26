@@ -88,3 +88,38 @@ All known MVP-blocking defects have been resolved.
 ## Declaration
 
 **MVP Core Platform Complete**
+
+---
+
+## Production Deployment Validation (2026-06-26)
+
+| Test | Result |
+|---|---|
+| Vercel deployment live | **PASS** — `https://carpooling-app-3-virid.vercel.app` |
+| MongoDB Atlas connected | **PASS** — `mode: atlas`, 86 users, 37 rides, 92 wallets |
+| Upload (base64 JSON, no auth) | **PASS** — Cloudinary returns `{ success, data: { url } }` |
+| Google config endpoint | **PASS** — returns web/android/iOS client IDs |
+| Send OTP | **PASS** — returns 6-digit code |
+| Verify OTP → create user | **PASS** — returns JWT + user |
+| GET `/api/auth/me` (auth required) | **PASS** — returns user profile |
+| GET `/api/driver/dashboard` (auth required) | **PASS** — returns stats, verification steps |
+| Wallet balance (plain user → 403) | **PASS** — correctly rejected (not passenger/driver) |
+| Deployment upload size | **PASS** — ~21KB (`.vercelignore` excludes node_modules + Flutter app) |
+| `flutter analyze` | **PASS** — 0 errors, 0 warnings (120 infos, all pre-existing style lint) |
+
+### Fixes Applied This Session
+
+| Fix | File | Description |
+|---|---|---|
+| MongoDB credentials | Vercel env var | Updated `MONGODB_URI` with correct Atlas password |
+| `.vercelignore` | Root | Excluded `node_modules/`, `apps/mobile-flutter/`, `*.md`, etc. (891MB→21KB) |
+| ODM ObjectId mismatch | `backend/src/mongo/odm.js` | 24-char hex strings now auto-converted to `ObjectId()` in all query/update/delete operations |
+| Removed incompatible `functions` from vercel.json | `vercel.json` | `builds` + `functions` conflict resolved (Hobby timeout 10s default) |
+
+### Known Remaining Issues
+
+| Issue | Impact | Priority |
+|---|---|---|
+| Cloudinary API secret marked `ROTATE_ME_IN_CLOUDINARY_DASHBOARD` in .env | Upload may fail if Vercel still has old secret | **HIGH** — verify Cloudinary dashboard |
+| No cron jobs (Vercel Hobby) | Driver simulation unavailable | **LOW** — `SIMULATION_ENABLED=0` |
+| SMS_CONSOLE_MODE=1 | OTP codes logged to console, not sent via SMS/Twilio | **LOW** — dev mode, normal until Twilio configured |
