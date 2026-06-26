@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { ObjectId } from "mongodb";
 import { getCollection } from "./client.js";
 import { camelToSnake, collectionToTable, docToRow, rowToDoc, readField, snakeToCamel, syncFieldAliases } from "./fieldMap.js";
 
@@ -104,7 +105,8 @@ export class MongoDoc {
     const id = String(payload.id || this._id);
     delete payload.id;
     const table = this._model.tableName;
-    await getCollection(table).replaceOne({ _id: id }, { _id: id, ...payload }, { upsert: true });
+    const queryId = /^[0-9a-f]{24}$/i.test(id) ? new ObjectId(id) : id;
+    await getCollection(table).replaceOne({ _id: queryId }, { _id: queryId, ...payload }, { upsert: true });
     this._isNew = false;
     return this;
   }
@@ -255,7 +257,8 @@ async function fetchDocByPath(modelName, id, select) {
   if (!id) return null;
   const model = MODEL_REGISTRY.get(modelName);
   if (!model) return null;
-  const row = await getCollection(model.tableName).findOne({ _id: String(id) });
+  const queryId = /^[0-9a-f]{24}$/i.test(String(id)) ? new ObjectId(String(id)) : String(id);
+  const row = await getCollection(model.tableName).findOne({ _id: queryId });
   let doc = docFromRow(rowFromDoc(row), model);
   if (select) {
     const projected = projectFields([doc], select);
@@ -390,7 +393,9 @@ export class MongoQuery {
   async exec() {
     let docs;
     if (this._singleId) {
-      const row = await getCollection(this._model.tableName).findOne({ _id: String(this._singleId) });
+      const rawId = String(this._singleId);
+      const queryId = /^[0-9a-f]{24}$/i.test(rawId) ? new ObjectId(rawId) : rawId;
+      const row = await getCollection(this._model.tableName).findOne({ _id: queryId });
       docs = row ? [docFromRow(rowFromDoc(row), this._model)] : [];
     } else {
       docs = await loadCollectionDocs(this._model);
@@ -492,7 +497,7 @@ export function createModel(collectionName, options = {}) {
         return out;
       };
       const nativeFilter = toSnakeKeys(filter);
-      nativeFilter._id = id;
+      nativeFilter._id = /^[0-9a-f]{24}$/i.test(id) ? new ObjectId(id) : id;
       const nativeUpdate = {};
       for (const [op, fields] of Object.entries(update)) {
         if (op === "$set" || op === "$inc" || op === "$unset") {
@@ -538,7 +543,9 @@ export function createModel(collectionName, options = {}) {
     const docs = await loadCollectionDocs(model);
     const match = docs.find((d) => matchesFilter(d.toObject(), filter));
     if (!match) return { deletedCount: 0 };
-    await getCollection(model.tableName).deleteOne({ _id: String(match._id) });
+    const id = String(match._id);
+    const queryId = /^[0-9a-f]{24}$/i.test(id) ? new ObjectId(id) : id;
+    await getCollection(model.tableName).deleteOne({ _id: queryId });
     return { deletedCount: 1 };
   };
 
@@ -547,7 +554,9 @@ export function createModel(collectionName, options = {}) {
     let deletedCount = 0;
     for (const doc of docs) {
       if (!matchesFilter(doc.toObject(), filter)) continue;
-      await getCollection(model.tableName).deleteOne({ _id: String(doc._id) });
+      const id = String(doc._id);
+      const queryId = /^[0-9a-f]{24}$/i.test(id) ? new ObjectId(id) : id;
+      await getCollection(model.tableName).deleteOne({ _id: queryId });
       deletedCount += 1;
     }
     return { deletedCount };
@@ -574,7 +583,7 @@ export function createModel(collectionName, options = {}) {
     }
     if (id) {
       const nativeFilter = toSnakeKeys(filter);
-      nativeFilter._id = id;
+      nativeFilter._id = /^[0-9a-f]{24}$/i.test(id) ? new ObjectId(id) : id;
 
       const row = await getCollection(model.tableName).findOneAndUpdate(
         nativeFilter,
