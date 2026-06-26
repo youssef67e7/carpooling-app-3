@@ -682,7 +682,7 @@ async function onGoogleCredential(resp) {
       body: JSON.stringify({ idToken }),
     });
     if (!assertAdminSession(data.user)) return;
-    setToken(data.token);
+    setToken(data.token || data.accessToken);
     persistApiBase();
     showDashboard(data.user);
     setSection("overview");

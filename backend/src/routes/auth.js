@@ -142,6 +142,42 @@ router.post(
 );
 
 router.post(
+  "/login",
+  authWriteLimiter,
+  validate(loginSchema),
+  async (req, res, next) => {
+    try {
+      const { email, password } = req.body;
+      const normalizedEmail = normalizeAdminEmail(email);
+      if (!isFixedAdminEmail(normalizedEmail)) {
+        throw new AppError("Email not allowed", 403);
+      }
+      const account = await AdminAccount.findOne({ email: normalizedEmail });
+      if (!account) {
+        throw new AppError("Admin account not found", 401);
+      }
+      const valid = await bcrypt.compare(password, account.passwordHash);
+      if (!valid) {
+        throw new AppError("Invalid password", 401);
+      }
+      const user = await User.findOne({ email: normalizedEmail });
+      if (!user) {
+        throw new AppError("User not found", 401);
+      }
+      await finalizeUserForSession(user);
+      const fresh = await User.findById(user._id);
+      const accessToken = signUserToken(fresh);
+      const rawRefreshToken = generateRefreshToken();
+      await storeRefreshToken(fresh._id, rawRefreshToken);
+      logAction({ req, action: "Admin login", file: "routes/auth.js:login", extra: { email } });
+      return res.json({ token: accessToken, refreshToken: rawRefreshToken, user: fresh.toJSON() });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+router.post(
   "/register",
   authWriteLimiter,
   validate(registerSchema),
