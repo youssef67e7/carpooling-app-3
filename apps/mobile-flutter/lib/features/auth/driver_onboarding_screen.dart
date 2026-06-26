@@ -103,7 +103,10 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
   bool _docsStep2Ready() => _carImageUrl != null && _registrationDocUrl != null && _insuranceDocUrl != null;
 
   void _next() {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('authValidationCheckFields'.tr())));
+      return;
+    }
     if (_step == 1 && !_docsStep1Ready()) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('authUploadDocsRequired'.tr())));
       return;

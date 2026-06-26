@@ -78,6 +78,7 @@
   "becomeDriverTitle": "كن سائقًا",
   "becomeDriverSubtitle": "أكمل بياناتك ومركبتك. يلزم موافقة الإدارة قبل التواجد أونلاين.",
   "authValidationNameRequired": "أدخل اسمك",
+  "authValidationCheckFields": "يرجى ملء جميع الحقول المطلوبة",
   "authValidationNameShort": "الاسم قصير جداً",
   "authValidationEmailRequired": "أدخل بريدك الإلكتروني",
   "authValidationEmailInvalid": "أدخل بريداً إلكترونياً صالحاً",

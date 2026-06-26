@@ -116,7 +116,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Future<void> _verifyOtp() async {
-    if (!_otpFormKey.currentState!.validate()) return;
+    if (_otpFormKey.currentState == null || !_otpFormKey.currentState!.validate()) return;
     ref.read(authProvider.notifier).clearError();
     try {
       await _verifyRealSmsOtp(_otp.text.trim());
@@ -441,110 +441,119 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Widget _phoneStep(String? error) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SizedBox(height: 32),
-        Text('Enter your phone number', style: AppStyles.headlineSmall),
-        const SizedBox(height: 8),
-        Text("We'll send you a verification code", style: AppStyles.bodyRegular),
-        const SizedBox(height: 24),
-        _errorBanner(error),
-        Row(
-          children: [
-            CountryCodeSelector(
-              selected: _countryCode,
-              onChanged: (c) => setState(() => _countryCode = c),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _buildInput(
-                _phone,
-                hint: 'Phone number',
-                keyboardType: TextInputType.phone,
-                validator: (v) => validatePhone(v, required: true),
-                textInputAction: TextInputAction.done,
-                onFieldSubmitted: (_) => _sendOtp(),
+    return Form(
+      key: _phoneFormKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 32),
+          Text('Enter your phone number', style: AppStyles.headlineSmall),
+          const SizedBox(height: 8),
+          Text("We'll send you a verification code", style: AppStyles.bodyRegular),
+          const SizedBox(height: 24),
+          _errorBanner(error),
+          Row(
+            children: [
+              CountryCodeSelector(
+                selected: _countryCode,
+                onChanged: (c) => setState(() => _countryCode = c),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        _primaryButton('Send Code', loading: _sendingOtp || _firebaseLoading, onPressed: _sendOtp),
-        const SizedBox(height: 16),
-        _textLink('Sign in with Email', onPressed: () => setState(() => _step = 'email')),
-        _textLink('Create an account', onPressed: () => context.push('/register')),
-      ],
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildInput(
+                  _phone,
+                  hint: 'Phone number',
+                  keyboardType: TextInputType.phone,
+                  validator: (v) => validatePhone(v, required: true),
+                  textInputAction: TextInputAction.done,
+                  onFieldSubmitted: (_) => _sendOtp(),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _primaryButton('Send Code', loading: _sendingOtp || _firebaseLoading, onPressed: _sendOtp),
+          const SizedBox(height: 16),
+          _textLink('Sign in with Email', onPressed: () => setState(() => _step = 'email')),
+          _textLink('Create an account', onPressed: () => context.push('/register')),
+        ],
+      ),
     );
   }
 
   Widget _otpStep(bool loading, String? error) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SizedBox(height: 32),
-        Text('Enter verification code', style: AppStyles.headlineSmall),
-        if (_normalizedPhone != null) ...[
-          const SizedBox(height: 8),
-          Text("Sent to $_normalizedPhone", style: AppStyles.bodyRegular),
-        ],
-        const SizedBox(height: 24),
-        _errorBanner(error),
-        if (_devOtpHint != null)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text('phoneOtpDevHint'.tr(namedArgs: {'code': _devOtpHint!}), style: const TextStyle(fontSize: 12, color: Colors.orange)),
+    return Form(
+      key: _otpFormKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 32),
+          Text('Enter verification code', style: AppStyles.headlineSmall),
+          if (_normalizedPhone != null) ...[
+            const SizedBox(height: 8),
+            Text("Sent to $_normalizedPhone", style: AppStyles.bodyRegular),
+          ],
+          const SizedBox(height: 24),
+          _errorBanner(error),
+          if (_devOtpHint != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text('phoneOtpDevHint'.tr(namedArgs: {'code': _devOtpHint!}), style: const TextStyle(fontSize: 12, color: Colors.orange)),
+            ),
+          OtpInput(
+            length: 4,
+            onCompleted: (code) {
+              _otp.text = code;
+              _verifyOtp();
+            },
           ),
-        OtpInput(
-          length: 4,
-          onCompleted: (code) {
-            _otp.text = code;
-            _verifyOtp();
-          },
-        ),
-        const SizedBox(height: 16),
-        _primaryButton('Verify', loading: loading, onPressed: _verifyOtp),
-        const SizedBox(height: 16),
-        _textLink(
-          _resendSeconds > 0 ? 'Resend in $_resendSeconds sec' : 'Resend code',
-          onPressed: _resendSeconds > 0 ? () {} : _sendOtp,
-        ),
-        _textLink('Change phone number', onPressed: () => setState(() => _step = 'phone')),
-        _textLink('Use email instead', onPressed: () => setState(() => _step = 'email')),
-      ],
+          const SizedBox(height: 16),
+          _primaryButton('Verify', loading: loading, onPressed: _verifyOtp),
+          const SizedBox(height: 16),
+          _textLink(
+            _resendSeconds > 0 ? 'Resend in $_resendSeconds sec' : 'Resend code',
+            onPressed: _resendSeconds > 0 ? () {} : _sendOtp,
+          ),
+          _textLink('Change phone number', onPressed: () => setState(() => _step = 'phone')),
+          _textLink('Use email instead', onPressed: () => setState(() => _step = 'email')),
+        ],
+      ),
     );
   }
 
   Widget _emailStep(bool loading, String? error) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SizedBox(height: 32),
-        Text('Sign in with Email', style: AppStyles.headlineSmall),
-        const SizedBox(height: 24),
-        _errorBanner(error),
-        _buildInput(
-          _email,
-          hint: 'Email',
-          keyboardType: TextInputType.emailAddress,
-          validator: validateEmail,
-          textInputAction: TextInputAction.next,
-        ),
-        const SizedBox(height: 16),
-        _buildInput(
-          _password,
-          hint: 'Password',
-          obscure: true,
-          validator: validatePassword,
-          textInputAction: TextInputAction.done,
-          onFieldSubmitted: (_) => _emailLogin(),
-        ),
-        const SizedBox(height: 16),
-        _primaryButton('Login', loading: loading, onPressed: _emailLogin),
-        const SizedBox(height: 16),
-        _textLink('Forgot password?', onPressed: () => context.push('/forgot-password')),
-        _textLink('Create an account', onPressed: () => context.push('/register')),
-      ],
+    return Form(
+      key: _emailFormKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 32),
+          Text('Sign in with Email', style: AppStyles.headlineSmall),
+          const SizedBox(height: 24),
+          _errorBanner(error),
+          _buildInput(
+            _email,
+            hint: 'Email',
+            keyboardType: TextInputType.emailAddress,
+            validator: validateEmail,
+            textInputAction: TextInputAction.next,
+          ),
+          const SizedBox(height: 16),
+          _buildInput(
+            _password,
+            hint: 'Password',
+            obscure: true,
+            validator: validatePassword,
+            textInputAction: TextInputAction.done,
+            onFieldSubmitted: (_) => _emailLogin(),
+          ),
+          const SizedBox(height: 16),
+          _primaryButton('Login', loading: loading, onPressed: _emailLogin),
+          const SizedBox(height: 16),
+          _textLink('Forgot password?', onPressed: () => context.push('/forgot-password')),
+          _textLink('Create an account', onPressed: () => context.push('/register')),
+        ],
+      ),
     );
   }
 }

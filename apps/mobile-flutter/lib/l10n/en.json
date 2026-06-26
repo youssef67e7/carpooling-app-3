@@ -78,6 +78,7 @@
   "becomeDriverTitle": "Become a driver",
   "becomeDriverSubtitle": "Apply with your documents and vehicle details. Admin review is required before you can go online.",
   "authValidationNameRequired": "Enter your name",
+  "authValidationCheckFields": "Please fill in all required fields",
   "authValidationNameShort": "Name is too short",
   "authValidationEmailRequired": "Enter your email",
   "authValidationEmailInvalid": "Enter a valid email address",

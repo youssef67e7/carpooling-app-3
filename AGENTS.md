@@ -1,94 +1,40 @@
 # Session Summary
 
 ## Goal
-Add navigation tracing to debug logs and review all MDs to identify project standards.
+- Stabilize full-stack ride-hailing app, fix upload pipeline, resolve production deployment issues, validate all features on live backend, fix login screen "nothing happens" bug
 
 ## Progress
-
 ### Done
-- **Navigation tracing enhanced** in `app_router.dart:23-50`:
-  - `_ScreenLogObserver` now overrides `didPush`, `didPop`, and `didReplace`
-  - `didPop`: logs `POP from → to`, updates current screen
-  - `didReplace`: logs `REPLACE old → new`, updates current screen
-  - `redirect` callback now logs every redirect with reason (not hydrated, unauthenticated, already logged in, admin/passenger/driver role redirect)
-- **Full MD standards review** — 40+ markdown files analyzed, all standards extracted into structured summary below
+- **P0 fix — ODM ObjectId/string _id mismatch**: `backend/src/mongo/odm.js`: All 7 query/update/delete/`findById`/`save` methods now auto-convert 24-char hex `_id` strings to `ObjectId()`. Root cause of `USER_NOT_FOUND` on every authenticated request — `blockCheck` and `roleRequired` middleware used `User.findById()` (ODM) which queried `_id` as plain string, but users created via `queries/users.js` (native driver, no explicit `_id`) had `ObjectId` in MongoDB. Native driver doesn't auto-convert, so string !== ObjectId → query returned null → 401 `USER_NOT_FOUND`
+- **Production deployment on Vercel**: Live at `https://carpooling-app-3-virid.vercel.app` — verified `POST /api/upload` (Cloudinary, no auth), `POST /api/auth/send-otp`, `POST /api/auth/verify-otp`, `GET /api/auth/me`, `GET /api/driver/dashboard`, `GET /api/auth/google-config` all return correct responses
+- **MongoDB Atlas connected**: `database: true`, `mongo: true`, `mongoMode: "atlas"`, 86 users, 37 rides, 92 wallets
+- **`.vercelignore` added**: Excludes `node_modules/`, `apps/mobile-flutter/`, `*.md`, etc. — deployment size dropped from 891MB → 21KB
+- **Removed incompatible `functions` from `vercel.json`**: `builds` + `functions` conflict resolved (Hobby timeout 10s default)
+- **Flutter upload service simplified**: Removed direct Cloudinary upload attempt (unsigned preset `weret_unsigned` didn't exist), always uses backend proxy `POST /api/upload` — `apps/mobile-flutter/lib/core/services/upload_service.dart` refactored from 3 methods (direct + fallback) to single backend-only method
+- **Login screen Form wrappers**: `_phoneStep`, `_otpStep`, `_emailStep` in `login_screen.dart` now wrapped in `Form(key: _formKey)` widgets — `_sendOtp()`, `_verifyOtp()`, `_emailLogin()` were silently returning because `_formKey.currentState` was null (no Form ancestor); also added null guard on `_verifyOtp` to prevent crash
+- **Driver onboarding validation feedback**: `_next()` now shows a snackbar (`authValidationCheckFields`) when form validation fails, instead of silently doing nothing
+- **Translation keys**: Added `authValidationCheckFields` to `en.json` and `ar.json`
+- **Flutter analyze**: 0 errors, 0 warnings
+
+### Blocked
+- **Google sign-in SHA-1 not configured**: `google-services.json` (Firebase) has no `oauth_client` entries for the debug/production keystore. Debug SHA-1: `4D:2C:0D:9B:DA:11:68:77:C6:E4:42:A1:E3:2E:06:18:D2:C3:09:DE` — add to Firebase Console → Project Settings → General → Your apps → Android → add fingerprint
+- **Firebase billing not enabled**: `BILLING_NOT_ENABLED` error on phone auth — Firebase project needs billing enabled (Spark plan still free for auth) to use SMS verification
 
 ### Key Standards Found (from MD review)
+See previous AGENTS.md for full standards — Architecture Rules, Coding Conventions, Security, Documentation, Testing, Free-Tier Constraints
 
-#### Architecture Rules
-| Rule | Description |
-|------|-------------|
-| Layer isolation | Routes → Services → Mongo (ODM). Routes MUST NOT call mongo/ directly |
-| Services | MUST NOT import HTTP modules (req, res, socket.io) |
-| Mongo layer | MUST NOT contain business logic — only queries/aggregations |
-| Utils | MUST be pure functions with no side effects |
-| Auth middleware chain | `authRequired` → `blockCheck` → `roleRequired(...)` → handler |
-| Error format | `{ error: { code: "ERROR_CODE", message: "...", details?: {} } }` |
-| No Socket.io | REST polling only (Vercel serverless incompatible) |
-| No Firestore | MongoDB only source of truth |
-| FCM only for push | No Firestore, no Realtime DB |
-| Cloudinary for images | Base64 JSON upload (no multer — Vercel incompatible) |
+## Relevant Files
+- `backend/src/mongo/odm.js`: ObjectId fix — all query/update/delete/save methods auto-convert 24-char hex `_id` to `new ObjectId(id)`
+- `apps/mobile-flutter/lib/core/services/upload_service.dart`: Simplified — removed direct Cloudinary, always goes through backend proxy
+- `apps/mobile-flutter/lib/features/auth/login_screen.dart`: Added Form wrappers around phone/otp/email steps
+- `apps/mobile-flutter/lib/features/auth/driver_onboarding_screen.dart`: Added snackbar on form validation failure
+- `apps/mobile-flutter/lib/l10n/en.json`, `ar.json`: Added `authValidationCheckFields` key
+- `vercel.json`: Fixed — removed `functions` block, added `.vercelignore`
+- `backend/src/routes/upload.js`: Cloudinary base64 `POST /` handler — no auth required
 
-#### Coding Conventions
-| Convention | Standard |
-|------------|----------|
-| Backend language | Vanilla JS (no TypeScript, no ESLint, no Prettier) |
-| Mobile framework | Flutter with Riverpod state management |
-| File naming | Lowercase with hyphens for backend, snake_case for Flutter? (verify) |
-| Priority order | correctness > maintainability > security > scalability > performance > cost > speed |
-| Input validation | Zod schemas in `middleware/validate.js` |
-| ID format | MongoDB ObjectId or UUID |
-| API versioning | Not implemented (noted as missing) |
-| Ride state machine | `pending → accepted → ongoing → completed` (missing: `driver_arriving`, `passenger_onboard`) |
-
-#### Security Standards
-| Standard | Detail |
-|----------|--------|
-| Auth | JWT Bearer token in `Authorization` header |
-| Role check | `roleRequired(['admin', 'driver', 'user'])` at route level |
-| Token expiry | 60d JWT, no refresh tokens |
-| Rate limiting | Global 100/min, Auth 5/min, Ride 10/min, OTP 3/min, Admin 30/min |
-| CORS | Whitelist from `CORS_ORIGINS` env var only (never `*`) |
-| Security headers | `helmet` middleware required |
-| No secrets in git | `.env` gitignored, Vercel env vars for production |
-| Upload security | Flutter → Cloudinary directly (not through Vercel) |
-| Ownership verification | Cloudinary `public_id` contains `userId` |
-
-#### Documentation Standards
-- 18 required docs listed in `PROJECT_MASTER_PLAN.md` (see below)
-- Validation reports use standardized tables (Test | Result | Verdict)
-- No `.env` or secrets in documentation (use `[REDACTED]`)
-- Completion reports mandatory after each task
-- Stop-for-approval before next task
-
-#### Required Documentation Files
-`WERET_FULL_AUDIT.md`, `AUDIT_VALIDATION.md`, `ARCHITECTURE_CURRENT.md`, `TARGET_ARCHITECTURE.md`, `ARCHITECTURE_RULES.md`, `INFRASTRUCTURE.md`, `ENVIRONMENT_SPEC.md`, `DATABASE_SPEC.md`, `API_SPEC.md`, `FREE_TIER_STRATEGY.md`, `REALTIME_STRATEGY.md`, `UPLOAD_STRATEGY.md`, `NOTIFICATION_STRATEGY.md`, `TEST_PLAN.md`, `MIGRATION_PLAN.md`, `DEPLOYMENT_GUIDE.md`, `PROJECT_MASTER_PLAN.md`, `MISSING_INFRASTRUCTURE.md`
-
-#### Testing Standards
-- Unit: Services + utils (Vitest)
-- Integration: API routes (Supertest + mongodb-memory-server)
-- E2E: Cypress (admin) + Flutter integration (mobile)
-- Coverage: Services 80%+, Middleware 90%+, Routes 60%+, Utils 100%, ODM 70%+, Overall 75%+
-- PR size limit: 400 lines max
-- Every PR must include tests, updated types, migration notes
-
-#### Free-Tier Constraints
-- Vercel Hobby: 10s timeout, 100GB/mo bandwidth, no Cron, 3 instances
-- MongoDB M0: 512MB, 100 connections
-- Cloudinary Free: 25GB storage, 25GB/mo bandwidth
-- No Redis (in-memory Map cache)
-- No Sentry (console logging only)
-- SMS_CONSOLE_MODE=1 (no Twilio)
-
-### Relevant Files
-- `apps/mobile-flutter/lib/core/router/app_router.dart` — Enhanced `_ScreenLogObserver` with didPop, didReplace, redirect tracing
-- `apps/mobile-flutter/lib/core/services/debug_logger.dart` — Singleton logger (navigation, network, taps, errors to .txt file)
-- `apps/mobile-flutter/lib/shared/widgets/logged_button.dart` — LoggedButton, LoggedIconButton, LoggedListTile
-- `apps/mobile-flutter/lib/features/debug/debug_log_screen.dart` — In-app log viewer
-
-### Next Steps
-- Verify navigation tracing works: `flutter run` → check `/debug/log` for `📱 POP`, `📱 REPLACE`, `📱 REDIRECT` entries
-- Apply identified standards rules to new code going forward
-- Fix missing ride states (`driver_arriving`, `passenger_onboard`)
-- Fix ODM `save()` for `selectedCarId`
-- Fix `POST /api/driver/cars` to initialize `prof.cars`
+## Next Steps
+1. Add SHA-1 `4D:2C:0D:9B:DA:11:68:77:C6:E4:42:A1:E3:2E:06:18:D2:C3:09:DE` to Firebase Console Android app
+2. Enable Firebase billing (Spark plan) for SMS phone auth
+3. Test login screen on phone: email sign-in, phone OTP, Google sign-in
+4. Test driver onboarding flow (step 1 documents → continue → step 2 vehicle → continue → step 3 → submit)
+5. Commit and push fixes
