@@ -24,7 +24,7 @@ export async function ensureFixedAdminAccounts() {
     if (!passwordHash) {
       if (!existing) {
         console.warn(
-          `[admin] No ${cfg.hashEnv} or ${cfg.passEnv} — AdminAccount for ${email} not created. Admins cannot log in until set.`
+          `[admin] No ${cfg.hashEnv} or ${cfg.passEnv} — AdminAccount for ${email} not created. Admins cannot log in until set.`,
         );
       }
       continue;
@@ -45,10 +45,7 @@ export async function ensureFixedAdminAccounts() {
     console.warn(`[admin] Unexpected AdminAccount count ${n}; expected at most 2.`);
   }
 
-  const demoted = await User.updateMany(
-    { role: "admin", email: { $nin: FIXED_ADMIN_EMAILS } },
-    { $set: { role: "passenger" } }
-  );
+  const demoted = await User.updateMany({ role: "admin", email: { $nin: FIXED_ADMIN_EMAILS } }, { $set: { role: "passenger" } });
   if (demoted.modifiedCount > 0) {
     console.log(`[admin] Demoted ${demoted.modifiedCount} non-allowlisted admin user(s) to passenger.`);
   }

@@ -5,9 +5,21 @@ import '../../features/auth/passenger_home_screen.dart';
 import '../../features/auth/passenger_history_screen.dart';
 import '../../features/auth/settings_screen.dart';
 import '../../features/more/passenger_more_menu_screen.dart';
+import '../../features/safety/safety_hub_screen.dart';
 import '../../features/wallet/wallet_overview_screen.dart';
 import '../../features/wallet/wallet_screens.dart';
-import '../../features/auth/legacy_screens.dart';
+import '../../features/auth/driver_onboarding_screen.dart';
+import '../../features/more/info_screens.dart';
+import '../../features/more/notification_settings_screen.dart';
+import '../../features/auth/user_dispute_screen.dart';
+import '../../features/auth/user_dispute_chat_screen.dart';
+import '../../features/more/favorite_drivers_screen.dart';
+import '../../features/more/carpool_search_screen.dart';
+import '../../features/more/my_carpools_screen.dart';
+import '../../features/more/saved_places_screen.dart';
+import '../../features/more/payment_methods_screen.dart';
+import '../../features/more/promotions_screen.dart';
+import '../../features/more/referral_screen.dart';
 import '../../shared/widgets/weret_shell_scaffold.dart';
 
 class PassengerShell extends StatelessWidget {
@@ -54,9 +66,17 @@ class PassengerShell extends StatelessWidget {
               GoRoute(path: 'driver-onboarding', builder: (_, __) => const DriverOnboardingScreen()),
               GoRoute(path: 'ride-tips', builder: (_, __) => const RideTipsScreen()),
               GoRoute(path: 'saved-places', builder: (_, __) => const SavedPlacesScreen()),
+              GoRoute(path: 'payment-methods', builder: (_, __) => const PaymentMethodsScreen()),
+              GoRoute(path: 'promotions', builder: (_, __) => const PromotionsScreen()),
+              GoRoute(path: 'referral', builder: (_, __) => const ReferralScreen()),
               GoRoute(path: 'notifications', builder: (_, __) => const NotificationSettingsScreen()),
               GoRoute(path: 'help', builder: (_, __) => const HelpCenterScreen()),
-              GoRoute(path: 'safety', builder: (_, __) => const SafetyTipsScreen()),
+              GoRoute(path: 'safety', builder: (_, __) => const SafetyHubScreen()),
+              GoRoute(path: 'favorite-drivers', builder: (_, __) => const FavoriteDriversScreen()),
+              GoRoute(path: 'find-carpool', builder: (_, __) => const CarpoolSearchScreen()),
+              GoRoute(path: 'my-carpools', builder: (_, __) => const MyCarpoolsScreen()),
+              GoRoute(path: 'disputes', builder: (_, __) => const UserDisputeScreen()),
+              GoRoute(path: 'disputes/:id', builder: (c, s) => UserDisputeChatScreen(disputeId: s.pathParameters['id']!)),
               GoRoute(path: 'about', builder: (_, __) => const AboutWeretScreen()),
             ],
           ),

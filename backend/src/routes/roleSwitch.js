@@ -15,7 +15,9 @@ const router = Router();
 router.use(authRequired, blockCheck);
 
 function normRole(raw) {
-  const r = String(raw || "").trim().toLowerCase();
+  const r = String(raw || "")
+    .trim()
+    .toLowerCase();
   return r === "driver" ? "driver" : r === "passenger" ? "passenger" : null;
 }
 
@@ -55,7 +57,7 @@ router.post(
     } catch (e) {
       next(e);
     }
-  }
+  },
 );
 
 router.get("/driver-status", async (req, res, next) => {
@@ -110,7 +112,7 @@ router.post(
       await DriverProfile.updateOne(
         { userId: user._id },
         { $set: { userId: user._id, status: "pending", cars: [] } },
-        { upsert: true }
+        { upsert: true },
       );
 
       const docSet = {};
@@ -118,19 +120,14 @@ router.post(
         if (req.body[k]) docSet[k] = String(req.body[k]).trim().slice(0, 500);
       }
       if (Object.keys(docSet).length) {
-        await DriverDocuments.updateOne(
-          { userId: user._id },
-          { $set: { userId: user._id, ...docSet } },
-          { upsert: true }
-        );
+        await DriverDocuments.updateOne({ userId: user._id }, { $set: { userId: user._id, ...docSet } }, { upsert: true });
       }
 
       return res.status(201).json({ ok: true, status: "pending" });
     } catch (e) {
       next(e);
     }
-  }
+  },
 );
 
 export default router;
-

@@ -50,7 +50,9 @@ async function audit(req, { action, targetType, targetId, summary = "", detail =
     const ip =
       String(req.headers["x-forwarded-for"] || "")
         .split(",")[0]
-        .trim() || req.ip || "";
+        .trim() ||
+      req.ip ||
+      "";
     const ua = String(req.headers["user-agent"] || "").slice(0, 240);
     await AdminAuditLog.create({
       actorAdminId: req.userId,
@@ -99,7 +101,7 @@ router.get(
     } catch (e) {
       next(e);
     }
-  }
+  },
 );
 
 router.patch(
@@ -171,14 +173,31 @@ router.patch(
         targetType: "user",
         targetId: user._id,
         summary: `PATCH user ${user.email}`,
-        detail: { patch: req.body, before: { is_blocked: before.is_blocked, is_verified: before.is_verified, driver_application_status: before.driver_application_status }, after: { is_blocked: after.is_blocked, is_verified: after.is_verified, driver_application_status: after.driver_application_status } },
+        detail: {
+          patch: req.body,
+          before: {
+            is_blocked: before.is_blocked,
+            is_verified: before.is_verified,
+            driver_application_status: before.driver_application_status,
+          },
+          after: {
+            is_blocked: after.is_blocked,
+            is_verified: after.is_verified,
+            driver_application_status: after.driver_application_status,
+          },
+        },
       });
-      logAction({ req, action: "Admin patched user", file: "routes/admin.js:users_patch", extra: { targetUserId: req.params.userId, patches: Object.keys(req.body) } });
+      logAction({
+        req,
+        action: "Admin patched user",
+        file: "routes/admin.js:users_patch",
+        extra: { targetUserId: req.params.userId, patches: Object.keys(req.body) },
+      });
       return res.json({ user: user.toJSON() });
     } catch (e) {
       next(e);
     }
-  }
+  },
 );
 
 router.delete("/users/:userId", docIdParam("userId"), validateRequest, async (req, res, next) => {
@@ -198,7 +217,7 @@ router.delete("/users/:userId", docIdParam("userId"), validateRequest, async (re
 
     const uid = user._id;
 
-      // Cascade delete associated data
+    // Cascade delete associated data
     await Promise.all([
       DriverProfile.deleteMany({ userId: uid }),
       DriverDocuments.deleteMany({ userId: uid }),
@@ -233,7 +252,12 @@ router.delete("/users/:userId", docIdParam("userId"), validateRequest, async (re
       summary: `DELETE user ${user.email}`,
       detail: { email: user.email, role: user.role },
     });
-    logAction({ req, action: "Admin deleted user", file: "routes/admin.js:users_delete", extra: { targetUserId: req.params.userId, email: user.email } });
+    logAction({
+      req,
+      action: "Admin deleted user",
+      file: "routes/admin.js:users_delete",
+      extra: { targetUserId: req.params.userId, email: user.email },
+    });
     return res.json({ ok: true });
   } catch (e) {
     logAction({ req, action: "Admin delete user failed", file: "routes/admin.js:users_delete", error: e });
@@ -274,7 +298,7 @@ router.get(
     } catch (e) {
       next(e);
     }
-  }
+  },
 );
 
 router.patch(
@@ -306,7 +330,7 @@ router.patch(
     } catch (e) {
       next(e);
     }
-  }
+  },
 );
 
 router.get(
@@ -344,7 +368,7 @@ router.get(
     } catch (e) {
       next(e);
     }
-  }
+  },
 );
 
 router.patch(
@@ -373,7 +397,7 @@ router.patch(
     } catch (e) {
       next(e);
     }
-  }
+  },
 );
 
 router.get(
@@ -391,12 +415,7 @@ router.get(
       }
       const { limit, page, skip } = parsePagination(req);
       const [logs, total] = await Promise.all([
-        AdminAuditLog.find(filter)
-          .sort({ createdAt: -1 })
-          .skip(skip)
-          .limit(limit)
-          .populate("actorAdminId", "name email")
-          .lean(),
+        AdminAuditLog.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).populate("actorAdminId", "name email").lean(),
         AdminAuditLog.countDocuments(filter),
       ]);
       return res.json({
@@ -406,7 +425,7 @@ router.get(
     } catch (e) {
       next(e);
     }
-  }
+  },
 );
 
 router.get(
@@ -441,7 +460,7 @@ router.get(
     } catch (e) {
       next(e);
     }
-  }
+  },
 );
 
 router.get("/stats", async (req, res, next) => {
@@ -472,11 +491,7 @@ router.get("/stats", async (req, res, next) => {
       User.countDocuments({ driver_application_status: "pending" }),
       Transaction.countDocuments({ flagged: true }),
       User.countDocuments({ driver_application_status: "approved" }),
-      AdminAuditLog.find()
-        .sort({ createdAt: -1 })
-        .limit(8)
-        .populate("actorAdminId", "name email")
-        .lean(),
+      AdminAuditLog.find().sort({ createdAt: -1 }).limit(8).populate("actorAdminId", "name email").lean(),
       Ride.find()
         .sort({ createdAt: -1 })
         .limit(6)
@@ -557,7 +572,7 @@ router.post(
     } catch (e) {
       next(e);
     }
-  }
+  },
 );
 
 router.get(
@@ -578,38 +593,42 @@ router.get(
     } catch (e) {
       next(e);
     }
-  }
+  },
 );
 
-router.delete(
-  "/messages/:messageId",
-  docIdParam("messageId"),
-  validateRequest,
-  async (req, res, next) => {
-    try {
-      const { ObjectId } = await import("mongodb");
-      const db = getDb();
-      const mid = String(req.params.messageId);
-      let filter = { _id: mid };
-      let result = await db.collection("messages").deleteOne(filter);
-      if (!result.deletedCount) {
-        try { filter = { _id: new ObjectId(mid) }; result = await db.collection("messages").deleteOne(filter); }
-        catch { /* not a valid ObjectId hex string */ }
+router.delete("/messages/:messageId", docIdParam("messageId"), validateRequest, async (req, res, next) => {
+  try {
+    const { ObjectId } = await import("mongodb");
+    const db = getDb();
+    const mid = String(req.params.messageId);
+    let filter = { _id: mid };
+    let result = await db.collection("messages").deleteOne(filter);
+    if (!result.deletedCount) {
+      try {
+        filter = { _id: new ObjectId(mid) };
+        result = await db.collection("messages").deleteOne(filter);
+      } catch {
+        /* not a valid ObjectId hex string */
       }
-      if (!result.deletedCount) throw new AppError("Message not found", 404);
-      await audit(req, {
-        action: "message.delete",
-        targetType: "message",
-        targetId: req.params.messageId,
-        summary: `Deleted message ${req.params.messageId}`,
-      });
-      logAction({ req, action: "Admin deleted message", file: "routes/admin.js:messages_delete", extra: { messageId: req.params.messageId } });
-      return res.json({ ok: true });
-    } catch (e) {
-      logAction({ req, action: "Admin delete message failed", file: "routes/admin.js:messages_delete", error: e });
-      next(e);
     }
+    if (!result.deletedCount) throw new AppError("Message not found", 404);
+    await audit(req, {
+      action: "message.delete",
+      targetType: "message",
+      targetId: req.params.messageId,
+      summary: `Deleted message ${req.params.messageId}`,
+    });
+    logAction({
+      req,
+      action: "Admin deleted message",
+      file: "routes/admin.js:messages_delete",
+      extra: { messageId: req.params.messageId },
+    });
+    return res.json({ ok: true });
+  } catch (e) {
+    logAction({ req, action: "Admin delete message failed", file: "routes/admin.js:messages_delete", error: e });
+    next(e);
   }
-);
+});
 
 export default router;

@@ -6,8 +6,6 @@ class ApiEndpoints {
   static const authMe = '/auth/me';
   static const authGoogleConfig = '/auth/google-config';
   static const authGoogle = '/auth/google';
-  static const authPhoneOtp = '/auth/phone/otp';
-  static const authPhoneVerify = '/auth/phone/verify';
   static const authLogin = '/auth/login';
   static const authRegister = '/auth/register';
   static const authForgotPassword = '/auth/forgot-password';
@@ -26,6 +24,9 @@ class ApiEndpoints {
   static String driverCarSetActive(String id) => '/driver/cars/$id/set-active';
   static const driverToggleStatus = '/driver/toggle-status';
   static const driverLocationUpdate = '/driver/location-update';
+  static const driverBonuses = '/driver/bonuses';
+  static const driverHeatmap = '/driver/heatmap';
+  static const driverBreakMode = '/driver/break-mode';
 
   static const passengerLocationUpdate = '/passenger/location-update';
 
@@ -51,7 +52,9 @@ class ApiEndpoints {
   static String ridesCancel(String id) => '/rides/$id/cancel';
   static String ridesDriverCancel(String id) => '/rides/$id/driver-cancel';
   static const ridesRate = '/rides/rate';
+  static const ridesRatePassenger = '/rides/rate-passenger';
   static const ridesRatingsReceived = '/rides/ratings/received';
+  static const ridesRatingsGiven = '/rides/ratings/given';
 
   static const walletAccounts = '/wallet/accounts';
   static const walletDeposit = '/wallet/deposit';
@@ -59,6 +62,7 @@ class ApiEndpoints {
   static const walletWithdrawConfirm = '/wallet/withdraw/confirm';
   static const walletTransactions = '/wallet/transactions';
   static String walletAccountDelete(String id) => '/wallet/accounts/$id';
+  static String walletAccountDefault(String id) => '/wallet/accounts/$id/default';
 
   static const adminUsers = '/admin/users';
   static String adminUser(String id) => '/admin/users/$id';
@@ -71,13 +75,42 @@ class ApiEndpoints {
   static String adminTransactionFlag(String id) => '/admin/transactions/$id/flag';
 
   static const reports = '/reports';
+  static const disputes = '/disputes';
+  static const disputesMine = '/disputes/mine';
+  static String disputeMessages(String id) => '/disputes/$id/messages';
+  static const disputesAdmin = '/disputes/admin';
+  static String disputesAdminDetail(String id) => '/disputes/admin/$id';
+  static String disputesAdminStatus(String id) => '/disputes/admin/$id/status';
+  static const favoritesDrivers = '/favorites/drivers';
+  static String favoriteDriverCheck(String id) => '/favorites/drivers/$id/check';
+  static String favoriteDriverAdd(String id) => '/favorites/drivers/$id';
+  static String favoriteDriverRemove(String id) => '/favorites/drivers/$id';
+  static const carpoolsCreate = '/carpools/create';
+  static const carpoolsSearch = '/carpools/search';
+  static const carpoolsMine = '/carpools/mine';
+  static String carpoolBook(String id) => '/carpools/$id/book';
+  static String carpoolCancel(String id) => '/carpools/$id';
+  static const prefs = '/prefs';
+  static const promotions = '/promotions';
+  static const referrals = '/referrals';
   static const upload = '/upload';
 
   static const authRefresh = '/auth/refresh';
   static const authLogout = '/auth/logout';
-  static const authVerifyFirebasePhone = '/auth/verify-firebase-phone';
   static const authRegisterToken = '/auth/register-token';
   static const authEmailSendOtp = '/auth/email/send-otp';
   static const authEmailVerifyOtp = '/auth/email/verify-otp';
   static const authDeleteAccount = '/auth/delete-account';
+
+  static const safetyEmergency = '/safety/emergency';
+  static String safetyEmergencyResolve(String id) => '/safety/emergency/$id/resolve';
+  static const safetyTrustedContacts = '/safety/trusted-contacts';
+  static String safetyTrustedContact(String id) => '/safety/trusted-contacts/$id';
+  static const safetyBlocked = '/safety/blocked';
+  static String safetyBlock(String userId) => '/safety/block/$userId';
+  static String safetyShareTrip(String rideId) => '/safety/share-trip/$rideId';
+
+  static const places = '/places';
+  static String place(String id) => '/places/$id';
+  static String placeDefault(String id) => '/places/$id/default';
 }

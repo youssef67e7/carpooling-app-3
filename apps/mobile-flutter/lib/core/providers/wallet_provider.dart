@@ -122,7 +122,7 @@ class WalletNotifier extends StateNotifier<WalletState> {
     await fetchTransactions();
   }
 
-  Future<void> createAccount(String walletType, {String? phoneNumber, String? label}) async {
+  Future<void> createAccount(String walletType, {String? phoneNumber, String? label, String? cardLastFour, String? cardExpiry, String? cardHolder, String? cardBrand, bool? isDefault}) async {
     state = state.copyWith(loading: true);
     try {
       final api = await _api;
@@ -130,7 +130,24 @@ class WalletNotifier extends StateNotifier<WalletState> {
         'walletType': walletType,
         if (phoneNumber != null) 'phoneNumber': phoneNumber,
         if (label != null) 'label': label,
+        if (cardLastFour != null) 'cardLastFour': cardLastFour,
+        if (cardExpiry != null) 'cardExpiry': cardExpiry,
+        if (cardHolder != null) 'cardHolder': cardHolder,
+        if (cardBrand != null) 'cardBrand': cardBrand,
+        if (isDefault != null) 'isDefault': isDefault,
       });
+      await fetchAccounts();
+    } catch (e) {
+      state = state.copyWith(loading: false, error: e.toString());
+      rethrow;
+    }
+  }
+
+  Future<void> setDefaultAccount(String id) async {
+    state = state.copyWith(loading: true);
+    try {
+      final api = await _api;
+      await api.putJson(ApiEndpoints.walletAccountDefault(id));
       await fetchAccounts();
     } catch (e) {
       state = state.copyWith(loading: false, error: e.toString());

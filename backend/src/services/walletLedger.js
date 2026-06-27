@@ -12,7 +12,7 @@ async function getOrCreateCashWallet(userId) {
     const created = await WalletAccount.findOneAndUpdate(
       { userId, walletType: "cash" },
       { $setOnInsert: { userId, walletType: "cash", phoneNumber: "", balance: 0, label: "Ride earnings", isDefault: true } },
-      { upsert: true, new: true }
+      { upsert: true, new: true },
     );
     account = created ?? (await WalletAccount.findOne({ userId, walletType: "cash" }).sort({ createdAt: 1 }));
   }
@@ -39,10 +39,7 @@ export async function creditDriverForRide(driverId, rideId, amount) {
   if (await rideAlreadyPaid(rideId)) return null;
 
   const account = await getOrCreateCashWallet(driverId);
-  await getCollection("wallet_accounts").updateOne(
-    { _id: account._id },
-    { $inc: { balance: amt } }
-  );
+  await getCollection("wallet_accounts").updateOne({ _id: account._id }, { $inc: { balance: amt } });
 
   const tx = await Transaction.create({
     userId: driverId,
@@ -72,7 +69,7 @@ export async function debitPassengerForRide(passengerId, rideId, amount) {
   const updated = await WalletAccount.findOneAndUpdate(
     { _id: account._id, balance: { $gte: amt } },
     { $inc: { balance: -amt } },
-    { new: true }
+    { new: true },
   );
 
   if (!updated) {
@@ -118,10 +115,7 @@ export async function refundPassengerForRide(passengerId, rideId, amount) {
   if (!debit) return null;
 
   const account = await getOrCreateCashWallet(passengerId);
-  await getCollection("wallet_accounts").updateOne(
-    { _id: account._id },
-    { $inc: { balance: amt } }
-  );
+  await getCollection("wallet_accounts").updateOne({ _id: account._id }, { $inc: { balance: amt } });
 
   const tx = await Transaction.create({
     userId: passengerId,
@@ -144,10 +138,7 @@ export async function adminCreditUser(userId, rideId, amount, note) {
   if (!userId || !amt || Number.isNaN(amt) || amt <= 0) return null;
 
   const account = await getOrCreateCashWallet(userId);
-  await getCollection("wallet_accounts").updateOne(
-    { _id: account._id },
-    { $inc: { balance: amt } }
-  );
+  await getCollection("wallet_accounts").updateOne({ _id: account._id }, { $inc: { balance: amt } });
 
   const tx = await Transaction.create({
     userId,

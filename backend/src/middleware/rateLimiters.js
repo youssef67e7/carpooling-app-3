@@ -20,3 +20,13 @@ export const authWriteLimiter = rateLimit({
   legacyHeaders: false,
   validate: { xForwardedForHeader: false },
 });
+
+/** Dedicated limiter for continuous GPS location streams (keeps them off the shared global pool). */
+export const locationLimiter = rateLimit({
+  windowMs: Number(process.env.LOCATION_RATE_WINDOW_MS) || 15 * 60 * 1000,
+  max: Number(process.env.LOCATION_RATE_LIMIT) || 1200,
+  message: { message: "Too many location updates, try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
+});

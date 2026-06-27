@@ -30,9 +30,6 @@ import {
   loginSchema,
   requestResetOtpSchema,
   resetPasswordSchema,
-  sendOtpSchema,
-  verifyOtpSchema,
-  verifyFirebasePhoneSchema,
   sendEmailOtpSchema,
   verifyEmailOtpSchema,
 } from "../schemas/auth.schemas.js";
@@ -46,25 +43,15 @@ import {
 import { refreshTokenSchema } from "../schemas/auth.schemas.js";
 import { signUserToken } from "../utils/signUserToken.js";
 import { logAction } from "../utils/logger.js";
-import {
-  isGoogleOrFirebaseSignInConfigured,
-  resolveGoogleSignInToken,
-} from "../utils/resolveGoogleSignInToken.js";
+import { isGoogleOrFirebaseSignInConfigured, resolveGoogleSignInToken } from "../utils/resolveGoogleSignInToken.js";
 import { upsertUserFromGoogleSignIn } from "../utils/googleSignInUser.js";
-import { PhoneLoginOtp } from "../models/PhoneLoginOtp.js";
 import { EmailLoginOtp } from "../models/EmailLoginOtp.js";
 import { EmailPasswordResetOtp } from "../models/EmailPasswordResetOtp.js";
-import { normalizePhone, hashPhoneOtp, randomPhoneOtp6, syntheticEmailForPhone } from "../utils/phoneOtp.js";
 import { hashEmailOtp, randomEmailOtp6 } from "../utils/emailOtp.js";
-import { sendSms, buildLoginOtpMessage } from "../services/sendSms.js";
 import { sendEmail } from "../services/sendEmail.js";
-import { sendPhoneOtp, verifyPhoneOtp } from "../services/authNativeService.js";
-import { verifyFirebasePhoneToken } from "../services/firebasePhoneService.js";
 import { registerFcmTokenSchema } from "../schemas/misc.schemas.js";
 
 const router = Router();
-const PHONE_OTP_TTL_MS = 10 * 60 * 1000;
-const PHONE_OTP_MAX_ATTEMPTS = 5;
 const EMAIL_LOGIN_OTP_TTL_MS = 10 * 60 * 1000;
 const EMAIL_LOGIN_OTP_MAX_ATTEMPTS = 5;
 const EMAIL_RESET_OTP_TTL_MS = 15 * 60 * 1000;
@@ -129,8 +116,7 @@ router.post(
         if (e.code === "GOOGLE_NOT_CONFIGURED" || e.code === "AUTH_NOT_CONFIGURED") {
           throw new AppError("Google sign-in is not enabled on this server", 503);
         }
-        const devHint =
-          process.env.NODE_ENV !== "production" && e?.message ? String(e.message).slice(0, 200) : null;
+        const devHint = process.env.NODE_ENV !== "production" && e?.message ? String(e.message).slice(0, 200) : null;
         throw new AppError(devHint || "Google sign-in failed", 401);
       }
 
@@ -149,43 +135,7 @@ router.post(
       logAction({ req, action: "Google sign-in failed", file: "routes/auth.js:google", error: e });
       next(e);
     }
-  }
-);
-
-router.post(
-  "/login",
-  authWriteLimiter,
-  validate(loginSchema),
-  async (req, res, next) => {
-    try {
-      const { email, password } = req.body;
-      const normalizedEmail = normalizeAdminEmail(email);
-      if (!isFixedAdminEmail(normalizedEmail)) {
-        throw new AppError("Email not allowed", 403);
-      }
-      const account = await AdminAccount.findOne({ email: normalizedEmail });
-      if (!account) {
-        throw new AppError("Admin account not found", 401);
-      }
-      const valid = await bcrypt.compare(password, account.passwordHash);
-      if (!valid) {
-        throw new AppError("Invalid password", 401);
-      }
-      const user = await User.findOne({ email: normalizedEmail });
-      if (!user) {
-        throw new AppError("User not found", 401);
-      }
-      await finalizeUserForSession(user);
-      const fresh = await User.findById(user._id);
-      const accessToken = signUserToken(fresh);
-      const rawRefreshToken = generateRefreshToken();
-      await storeRefreshToken(fresh._id, rawRefreshToken);
-      logAction({ req, action: "Admin login", file: "routes/auth.js:login", extra: { email } });
-      return res.json({ accessToken, refreshToken: rawRefreshToken, user: fresh.toJSON() });
-    } catch (e) {
-      next(e);
-    }
-  }
+  },
 );
 
 router.post(
@@ -241,7 +191,7 @@ router.post(
       logAction({ req, action: "Register failed", file: "routes/auth.js:register", error: e });
       next(e);
     }
-  }
+  },
 );
 
 router.get("/me", authRequired, blockCheck, async (req, res, next) => {
@@ -271,17 +221,7 @@ router.patch(
   body("vehicleType")
     .optional()
     .trim()
-    .isIn([
-      "shipping",
-      "delivery",
-      "travel",
-      "motorcycle",
-      "car_standard",
-      "car_comfort",
-      "economy",
-      "xl",
-      "premium",
-    ]),
+    .isIn(["shipping", "delivery", "travel", "motorcycle", "car_standard", "car_comfort", "economy", "xl", "premium"]),
   validateRequest,
   async (req, res, next) => {
     try {
@@ -296,7 +236,7 @@ router.patch(
       if (typeof req.body.profileImageUrl === "string" && req.body.profileImageUrl.trim()) {
         user.profileImageUrl = req.body.profileImageUrl.trim().slice(0, 500);
       }
-      const mode = user.role === "admin" ? "admin" : (user.active_role || user.role || "passenger");
+      const mode = user.role === "admin" ? "admin" : user.active_role || user.role || "passenger";
       if (mode === "driver" && "vehicleType" in req.body && typeof req.body.vehicleType === "string") {
         user.vehicleType = String(req.body.vehicleType).toLowerCase().trim();
       }
@@ -307,114 +247,7 @@ router.patch(
       logAction({ req, action: "Profile update failed", file: "routes/auth.js:profile", error: e });
       next(e);
     }
-  }
-);
-
-router.post(
-  "/phone/otp",
-  authWriteLimiter,
-  body("phone").trim().notEmpty().isLength({ min: 8, max: 32 }),
-  body("forRegister").optional().isBoolean(),
-  validateRequest,
-  async (req, res, next) => {
-    try {
-      const phone = normalizePhone(req.body.phone);
-      if (!phone) throw new AppError("Invalid phone number", 400);
-      const forRegister = req.body.forRegister === true;
-      const existingUser = await User.findOne({ phone });
-      if (forRegister && existingUser) {
-        throw new AppError("Phone already registered. Use login instead.", 409);
-      }
-      const otp = randomPhoneOtp6();
-      const expiresAt = new Date(Date.now() + PHONE_OTP_TTL_MS);
-      await PhoneLoginOtp.deleteMany({ phone });
-      await PhoneLoginOtp.create({ phone, otpDigest: hashPhoneOtp(otp), expiresAt, attempts: 0 });
-
-      const sms = await sendSms({ to: phone, body: buildLoginOtpMessage(otp) });
-
-      return res.json({
-        ok: true,
-        phone,
-        accountExists: Boolean(existingUser),
-        message: sms.sent ? "OTP sent via SMS" : "OTP generated (check server log in dev)",
-        smsProvider: sms.provider,
-        _devOtp: sms.dev ? otp : undefined,
-      });
-    } catch (e) {
-      next(e);
-    }
-  }
-);
-
-router.post(
-  "/phone/verify",
-  authWriteLimiter,
-  body("phone").trim().notEmpty().isLength({ min: 8, max: 32 }),
-  body("otp").trim().isLength({ min: 4, max: 8 }),
-  body("name").optional().trim().isLength({ max: 80 }),
-  validateRequest,
-  async (req, res, next) => {
-    try {
-      const phone = normalizePhone(req.body.phone);
-      if (!phone) throw new AppError("Invalid phone number", 400);
-      const otp = String(req.body.otp || "").trim();
-      const record = await PhoneLoginOtp.findOne({ phone }).sort({ createdAt: -1 });
-      if (!record || record.expiresAt <= new Date()) {
-        throw new AppError("Code expired. Request a new one.", 400);
-      }
-      if (record.attempts >= PHONE_OTP_MAX_ATTEMPTS) {
-        throw new AppError("Too many attempts. Request a new code.", 429);
-      }
-      if (hashPhoneOtp(otp) !== record.otpDigest) {
-        record.attempts += 1;
-        await record.save();
-        throw new AppError("Invalid code", 401);
-      }
-      await PhoneLoginOtp.deleteMany({ phone });
-
-      let user = await User.findOne({ phone });
-      if (!user) {
-        const email = syntheticEmailForPhone(phone);
-        const existingEmail = await User.findOne({ email });
-        if (existingEmail) {
-          existingEmail.phone = phone;
-          user = existingEmail;
-          await user.save();
-        } else {
-          user = await User.create({
-            name: String(req.body.name || "").trim().slice(0, 80) || phone,
-            email,
-            password: await bcrypt.hash(randomBytes(32).toString("hex"), 12),
-            role: "passenger",
-            active_role: "passenger",
-            isOnline: false,
-            phone,
-            profileImageUrl: "",
-            is_verified: true,
-            is_blocked: false,
-            location: { lat: 24.7136, lng: 46.6753 },
-          });
-          await PassengerProfile.updateOne({ userId: user._id }, { $set: { userId: user._id } }, { upsert: true });
-        }
-      } else if (user.role === "admin") {
-        throw new AppError("Invalid credentials", 401);
-      } else if (!user.phone || user.phone !== phone) {
-        user.phone = phone;
-        await user.save();
-      }
-
-      await finalizeUserForSession(user);
-      const fresh = await User.findById(user._id);
-      const accessToken = signUserToken(fresh);
-      const rawRefreshToken = generateRefreshToken();
-      await storeRefreshToken(fresh._id, rawRefreshToken);
-      logAction({ req, action: "Phone OTP verify", file: "routes/auth.js:phone_verify", extra: { phone } });
-      return res.json({ accessToken, refreshToken: rawRefreshToken, user: fresh.toJSON() });
-    } catch (e) {
-      logAction({ req, action: "Phone OTP verify failed", file: "routes/auth.js:phone_verify", error: e });
-      next(e);
-    }
-  }
+  },
 );
 
 router.post(
@@ -508,7 +341,7 @@ router.post(
       logAction({ req, action: "Login failed", file: "routes/auth.js:login", error: e });
       next(e);
     }
-  }
+  },
 );
 
 router.post(
@@ -531,54 +364,54 @@ router.post(
     } catch (e) {
       next(e);
     }
-  }
+  },
 );
 
-router.post(
-  "/delete-account",
-  authRequired,
-  blockCheck,
-  async (req, res, next) => {
-    try {
-      const user = await User.findById(req.userId);
-      if (!user) throw new AppError("User not found", 401);
-      const uid = user._id;
+router.post("/delete-account", authRequired, blockCheck, async (req, res, next) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user) throw new AppError("User not found", 401);
+    const uid = user._id;
 
-      const { password } = req.body || {};
-      if (password) {
-        if (!user.password) {
-          if (user.googleSub) throw new AppError("This account uses Google sign-in; re-authenticate via Google to delete", 400);
-          throw new AppError("Password not set on this account", 400);
-        }
-        const ok = await bcrypt.compare(String(password), user.password);
-        if (!ok) throw new AppError("Invalid password", 401);
+    const { password } = req.body || {};
+    if (password) {
+      if (!user.password) {
+        if (user.googleSub) throw new AppError("This account uses Google sign-in; re-authenticate via Google to delete", 400);
+        throw new AppError("Password not set on this account", 400);
       }
-
-      await Promise.all([
-        DriverProfile.deleteMany({ userId: uid }),
-        DriverDocuments.deleteMany({ userId: uid }),
-        PassengerProfile.deleteMany({ userId: uid }),
-        WalletAccount.deleteMany({ userId: uid }),
-        Transaction.deleteMany({ userId: uid }),
-        FcmToken.deleteMany({ userId: uid }),
-        Notification.deleteMany({ userId: uid }),
-        WithdrawalRequest.deleteMany({ userId: uid }),
-        Report.deleteMany({ reporterId: uid }),
-        Report.deleteMany({ reportedUserId: uid }),
-        Message.deleteMany({ senderId: uid }),
-        Ride.updateMany({ passengerId: uid }, { $set: { passengerId: null } }),
-        Ride.updateMany({ driverId: uid }, { $set: { driverId: null } }),
-        Booking.deleteMany({ passengerId: uid }),
-      ]);
-
-      await User.deleteOne({ _id: uid });
-      logAction({ req, action: "User deleted own account", file: "routes/auth.js:delete_account", extra: { email: user.email, role: user.role } });
-      return res.json({ ok: true });
-    } catch (e) {
-      next(e);
+      const ok = await bcrypt.compare(String(password), user.password);
+      if (!ok) throw new AppError("Invalid password", 401);
     }
+
+    await Promise.all([
+      DriverProfile.deleteMany({ userId: uid }),
+      DriverDocuments.deleteMany({ userId: uid }),
+      PassengerProfile.deleteMany({ userId: uid }),
+      WalletAccount.deleteMany({ userId: uid }),
+      Transaction.deleteMany({ userId: uid }),
+      FcmToken.deleteMany({ userId: uid }),
+      Notification.deleteMany({ userId: uid }),
+      WithdrawalRequest.deleteMany({ userId: uid }),
+      Report.deleteMany({ reporterId: uid }),
+      Report.deleteMany({ reportedUserId: uid }),
+      Message.deleteMany({ senderId: uid }),
+      Ride.updateMany({ passengerId: uid }, { $set: { passengerId: null } }),
+      Ride.updateMany({ driverId: uid }, { $set: { driverId: null } }),
+      Booking.deleteMany({ passengerId: uid }),
+    ]);
+
+    await User.deleteOne({ _id: uid });
+    logAction({
+      req,
+      action: "User deleted own account",
+      file: "routes/auth.js:delete_account",
+      extra: { email: user.email, role: user.role },
+    });
+    return res.json({ ok: true });
+  } catch (e) {
+    next(e);
   }
-);
+});
 
 router.post(
   "/forgot-password",
@@ -620,7 +453,7 @@ router.post(
     } catch (e) {
       next(e);
     }
-  }
+  },
 );
 
 router.post(
@@ -628,13 +461,13 @@ router.post(
   authWriteLimiter,
   validate(resetPasswordSchema),
   body("email").isEmail().normalizeEmail(),
-  body("otp").trim().isLength({ min: 4, max: 8 }),
-  body("password").isLength({ min: 6, max: 128 }),
+  body("code").trim().isLength({ min: 4, max: 8 }),
+  body("newPassword").isLength({ min: 8, max: 128 }),
   validateRequest,
   async (req, res, next) => {
     try {
       const emailNorm = normalizeAdminEmail(req.body.email);
-      const otp = String(req.body.otp || "").trim();
+      const otp = String(req.body.code || "").trim();
       const user = await User.findOne({ email: emailNorm });
       if (!user || user.role === "admin") {
         throw new AppError("Invalid reset code", 400);
@@ -655,7 +488,7 @@ router.post(
         throw new AppError("Invalid reset code", 400);
       }
       await EmailPasswordResetOtp.deleteMany({ email: emailNorm });
-      user.password = await bcrypt.hash(req.body.password, 10);
+      user.password = await bcrypt.hash(req.body.newPassword, 10);
       await user.save();
       logAction({ req, action: "Password reset", file: "routes/auth.js:reset_password", extra: { email: emailNorm } });
       return res.json({ ok: true, message: "Password updated" });
@@ -663,63 +496,8 @@ router.post(
       logAction({ req, action: "Password reset failed", file: "routes/auth.js:reset_password", error: e });
       next(e);
     }
-  }
+  },
 );
-
-// --- V2 auth endpoints (native SMS OTP) ---
-
-router.post("/send-otp", validate(sendOtpSchema), async (req, res) => {
-  try {
-    const { phone } = req.body;
-    if (!phone) {
-      return res.status(400).json({ success: false, error: { code: "VALIDATION_ERROR", message: "Phone is required" } });
-    }
-    const result = await sendPhoneOtp(phone);
-    return res.status(200).json({ success: true, data: { message: "OTP sent", code: result.code } });
-  } catch (err) {
-    return res.status(500).json({ success: false, error: { code: "INTERNAL_ERROR", message: err.message } });
-  }
-});
-
-router.post("/verify-otp", validate(verifyOtpSchema), async (req, res) => {
-  try {
-    const { phone, code } = req.body;
-    if (!phone || !code) {
-      return res.status(400).json({ success: false, error: { code: "VALIDATION_ERROR", message: "Phone and code are required" } });
-    }
-    const result = await verifyPhoneOtp(phone, code);
-    return res.status(200).json({
-      success: true,
-      data: { token: result.token, accessToken: result.accessToken, refreshToken: result.refreshToken, user: result.user, isNewUser: result.isNewUser },
-    });
-  } catch (err) {
-    const msg = err.message;
-    if (msg.toLowerCase().includes("expired") || msg.toLowerCase().includes("not found")) {
-      return res.status(400).json({ success: false, error: { code: "AUTH_ERROR", message: msg } });
-    }
-    if (msg.toLowerCase().includes("attempts") || msg.toLowerCase().includes("invalid")) {
-      return res.status(401).json({ success: false, error: { code: "AUTH_ERROR", message: msg } });
-    }
-    return res.status(500).json({ success: false, error: { code: "INTERNAL_ERROR", message: msg } });
-  }
-});
-
-router.post("/verify-firebase-phone", validate(verifyFirebasePhoneSchema), async (req, res) => {
-  const { firebaseIdToken, name } = req.body;
-  if (!firebaseIdToken) {
-    return res.status(400).type("json").send(JSON.stringify({ success: false, error: { code: "VALIDATION_ERROR", message: "firebaseIdToken is required" } }));
-  }
-  try {
-    const result = await verifyFirebasePhoneToken(firebaseIdToken, name);
-    return res.status(200).type("json").send(JSON.stringify({ success: true, data: result }));
-  } catch (err) {
-    const msg = err.message || String(err);
-    if (msg.includes("Invalid Firebase token")) {
-      return res.status(401).type("json").send(JSON.stringify({ success: false, error: { code: "AUTH_ERROR", message: msg } }));
-    }
-    return res.status(500).type("json").send(JSON.stringify({ success: false, error: { code: "INTERNAL_ERROR", message: msg } }));
-  }
-});
 
 // --- Email OTP login ---
 
@@ -742,7 +520,11 @@ router.post("/email/send-otp", authWriteLimiter, validate(sendEmailOtpSchema), a
     });
     return res.json({
       success: true,
-      data: { message: "OTP sent", email: emailNorm, _devOtp: process.env.NODE_ENV !== "production" || process.env.EMAIL_CONSOLE_MODE ? otp : undefined },
+      data: {
+        message: "OTP sent",
+        email: emailNorm,
+        _devOtp: process.env.NODE_ENV !== "production" || process.env.EMAIL_CONSOLE_MODE ? otp : undefined,
+      },
     });
   } catch (err) {
     next(err);
@@ -755,11 +537,15 @@ router.post("/email/verify-otp", authWriteLimiter, validate(verifyEmailOtpSchema
     const code = String(req.body.code || "").trim();
     const record = await EmailLoginOtp.findOne({ email: emailNorm }).sort({ createdAt: -1 });
     if (!record || record.expiresAt <= new Date()) {
-      return res.status(400).json({ success: false, error: { code: "OTP_EXPIRED", message: "Code expired. Request a new one." } });
+      return res
+        .status(400)
+        .json({ success: false, error: { code: "OTP_EXPIRED", message: "Code expired. Request a new one." } });
     }
     if (record.attempts >= EMAIL_LOGIN_OTP_MAX_ATTEMPTS) {
       await EmailLoginOtp.deleteMany({ email: emailNorm });
-      return res.status(429).json({ success: false, error: { code: "OTP_MAX_ATTEMPTS", message: "Too many attempts. Request a new code." } });
+      return res
+        .status(429)
+        .json({ success: false, error: { code: "OTP_MAX_ATTEMPTS", message: "Too many attempts. Request a new code." } });
     }
     if (record.otpDigest !== hashEmailOtp(code)) {
       record.attempts += 1;
@@ -785,7 +571,12 @@ router.post("/email/verify-otp", authWriteLimiter, validate(verifyEmailOtpSchema
     const accessToken = signUserToken(fresh);
     const rawRefreshToken = generateRefreshToken();
     await storeRefreshToken(fresh._id, rawRefreshToken);
-    logAction({ req, action: "Email OTP login", file: "routes/auth.js:email_verify_otp", extra: { email: emailNorm, isNewUser } });
+    logAction({
+      req,
+      action: "Email OTP login",
+      file: "routes/auth.js:email_verify_otp",
+      extra: { email: emailNorm, isNewUser },
+    });
     return res.json({
       success: true,
       data: { accessToken, refreshToken: rawRefreshToken, user: fresh.toJSON(), isNewUser },
@@ -853,30 +644,25 @@ router.post("/logout", authRequired, async (req, res, next) => {
   }
 });
 
-router.post(
-  "/register-token",
-  authRequired,
-  validate(registerFcmTokenSchema),
-  async (req, res, next) => {
-    try {
-      const db = getDb();
-      const { token, platform } = req.body;
-      await db.collection("fcmTokens").updateOne(
-        { token },
-        {
-          $set: {
-            userId: req.userId,
-            platform,
-            createdAt: new Date(),
-          },
+router.post("/register-token", authRequired, validate(registerFcmTokenSchema), async (req, res, next) => {
+  try {
+    const db = getDb();
+    const { token, platform } = req.body;
+    await db.collection("fcmTokens").updateOne(
+      { token },
+      {
+        $set: {
+          userId: req.userId,
+          platform,
+          createdAt: new Date(),
         },
-        { upsert: true }
-      );
-      res.json({ success: true });
-    } catch (err) {
-      next(err);
-    }
+      },
+      { upsert: true },
+    );
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
   }
-);
+});
 
 export default router;

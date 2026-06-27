@@ -1,9 +1,4 @@
-import { User } from "../models/User.js";
-import { DriverProfile } from "../models/DriverProfile.js";
-import { DriverDocuments } from "../models/DriverDocuments.js";
-import { Ride } from "../models/Ride.js";
-import { Transaction } from "../models/Transaction.js";
-import { WalletAccount } from "../models/WalletAccount.js";
+import { nativeFind, nativeFindOne, nativeCount } from "../mongo/nativeQuery.js";
 import { verificationProgress } from "./driverVerification.js";
 import { MAX_DRIVER_CONCURRENT_RIDES } from "./driverRideCapacity.js";
 
@@ -13,20 +8,24 @@ function startOfToday() {
   return d;
 }
 
-/** Unified driver home data — all from MongoDB Atlas collections. */
 export async function getDriverDashboard(userId) {
   const uid = String(userId);
-  const user = await User.findById(uid).lean();
-  if (!user) return null;
 
-  const [profile, documents, accounts, sessionTxs, completedRides, activeRides] = await Promise.all([
-    DriverProfile.findOne({ userId: uid }).lean(),
-    DriverDocuments.findOne({ userId: uid }).lean(),
-    WalletAccount.find({ userId: uid }).sort({ createdAt: -1 }).lean(),
-    Transaction.find({ userId: uid, type: "ride_payment", createdAt: { $gte: startOfToday() } }).lean(),
-    Ride.find({ driverId: uid, status: "completed" }).sort({ completedAt: -1, updatedAt: -1 }).limit(500).lean(),
-    Ride.find({ driverId: uid, status: { $in: ["accepted", "ongoing"] } }).lean(),
+  const [user, profile, documents, accounts, sessionTxs, completedRides, activeRides] = await Promise.all([
+    nativeFindOne("users", { _id: uid }),
+    nativeFindOne("driver_profiles", { userId: uid }),
+    nativeFindOne("driver_documents", { userId: uid }),
+    nativeFind("wallet_accounts", { userId: uid }, { sort: { createdAt: -1 } }),
+    nativeFind("transactions", { userId: uid, type: "ride_payment", createdAt: { $gte: startOfToday() } }),
+    nativeFind(
+      "rides",
+      { driverId: uid, status: "completed" },
+      { sort: { completedAt: -1 }, limit: 500, projection: { agreedFare: 1, estimatedFare: 1, fare: 1, passengerRating: 1 } },
+    ),
+    nativeFind("rides", { driverId: uid, status: { $in: ["accepted", "ongoing"] } }, { projection: { _id: 1 } }),
   ]);
+
+  if (!user) return null;
 
   const sessionEarnings = sessionTxs.reduce((s, t) => s + (Number(t.amount) || 0), 0);
   let totalEarnings = 0;

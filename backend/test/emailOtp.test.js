@@ -2,6 +2,8 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { hashEmailOtp, randomEmailOtp6 } from "../src/utils/emailOtp.js";
 
+process.env.EMAIL_OTP_SECRET = "test-secret";
+
 describe("emailOtp utils", () => {
   it("hashEmailOtp is deterministic", () => {
     assert.equal(hashEmailOtp("123456"), hashEmailOtp("123456"));

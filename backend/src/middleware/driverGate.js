@@ -29,4 +29,3 @@ export async function requireApprovedDriver(req, _res, next) {
     return next(e);
   }
 }
-

@@ -1,0 +1,9 @@
+{
+  "name": "pdf-gen",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "marked": "^18.0.5",
+    "puppeteer": "^25.2.1"
+  }
+}

@@ -18,10 +18,7 @@ export async function countDriverAssignedRides(driverId, { excludeRideId } = {})
 export async function assertDriverCanTakeAnotherRide(driverId, { excludeRideId } = {}) {
   const n = await countDriverAssignedRides(driverId, { excludeRideId });
   if (n >= MAX_DRIVER_CONCURRENT_RIDES) {
-    throw new AppError(
-      `You can have at most ${MAX_DRIVER_CONCURRENT_RIDES} active rides at the same time`,
-      409
-    );
+    throw new AppError(`You can have at most ${MAX_DRIVER_CONCURRENT_RIDES} active rides at the same time`, 409);
   }
   return n;
 }

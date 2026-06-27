@@ -5,7 +5,7 @@ export async function migrateFcmTokens() {
 
   const usersWithToken = await db
     .collection("users")
-    .find({ fcmToken: { $exists: true, $ne: null, $ne: "" } })
+    .find({ fcmToken: { $exists: true, $nin: [null, ""] } })
     .toArray();
 
   if (usersWithToken.length === 0) {
@@ -22,11 +22,12 @@ export async function migrateFcmTokens() {
     createdAt: new Date(),
   }));
 
-  await db.collection("fcmTokens").insertMany(fcmDocs, { ordered: false }).catch(() => {});
-
   await db
-    .collection("users")
-    .updateMany({ fcmToken: { $exists: true } }, { $unset: { fcmToken: "" } });
+    .collection("fcmTokens")
+    .insertMany(fcmDocs, { ordered: false })
+    .catch(() => {});
+
+  await db.collection("users").updateMany({ fcmToken: { $exists: true } }, { $unset: { fcmToken: "" } });
 
   console.log("[migration] fcmToken migration complete");
 }

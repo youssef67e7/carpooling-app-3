@@ -6,17 +6,14 @@ export async function getMessagesByRideId(rideId, { before, limit = 30 } = {}) {
   if (before) {
     filter.created_at = { $lt: new Date(before) };
   }
-  const rows = await getCollection("messages")
-    .find(filter)
-    .sort({ created_at: -1 })
-    .limit(Math.min(limit, 300))
-    .toArray();
+  const rows = await getCollection("messages").find(filter).sort({ created_at: -1 }).limit(Math.min(limit, 300)).toArray();
   const userIds = [...new Set(rows.map((r) => String(r.sender_id)).filter(Boolean))];
-  const users = userIds.length > 0
-    ? await getCollection("users")
-        .find({ _id: { $in: userIds } }, { projection: { name: 1, role: 1 } })
-        .toArray()
-    : [];
+  const users =
+    userIds.length > 0
+      ? await getCollection("users")
+          .find({ _id: { $in: userIds } }, { projection: { name: 1, role: 1 } })
+          .toArray()
+      : [];
   const userMap = Object.fromEntries(users.map((u) => [String(u._id), { _id: String(u._id), name: u.name, role: u.role }]));
   const messages = rows.reverse().map((r) => ({
     _id: String(r._id),

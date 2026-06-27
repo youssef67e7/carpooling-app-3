@@ -19,6 +19,14 @@ import walletRoutes from "./routes/wallet.js";
 import driverApplicationRoutes from "./routes/driverApplication.js";
 import roleSwitchRoutes from "./routes/roleSwitch.js";
 import uploadV2Router from "./routes/upload.js";
+import safetyRoutes from "./routes/safety.js";
+import disputeRoutes from "./routes/disputes.js";
+import { router as favoriteRoutes } from "./routes/favorites.js";
+import { router as carpoolRoutes } from "./routes/carpools.js";
+import placesRoutes from "./routes/places.js";
+import prefsRoutes from "./routes/prefs.js";
+import promotionsRoutes from "./routes/promotions.js";
+import referralRoutes from "./routes/referrals.js";
 import { authRequired, blockCheck } from "./middleware/auth.js";
 import { AppError } from "./errors/AppError.js";
 import { User } from "./models/User.js";
@@ -40,10 +48,13 @@ export function createApp() {
   app.use(
     helmet({
       crossOriginResourcePolicy: { policy: "cross-origin" },
-    })
+    }),
   );
-  const corsOrigins = (process.env.CORS_ORIGINS || "").split(",").map((s) => s.trim()).filter(Boolean);
-  app.use(cors(corsOrigins.length ? { origin: corsOrigins } : {}));
+  const corsOrigins = (process.env.CORS_ORIGINS || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  app.use(cors(corsOrigins.length ? { origin: corsOrigins } : { origin: false }));
   app.use(express.json({ limit: "10mb" }));
 
   app.use(async (req, res, next) => {
@@ -119,30 +130,40 @@ export function createApp() {
   app.use(["/reports", "/api/reports"], reportRoutes);
   app.use(["/wallet", "/api/wallet"], walletRoutes);
   app.use(["/upload", "/api/upload"], uploadV2Router);
+  app.use(["/safety", "/api/safety"], safetyRoutes);
+  app.use(["/disputes", "/api/disputes"], disputeRoutes);
+  app.use(["/favorites", "/api/favorites"], favoriteRoutes);
+  app.use(["/carpools", "/api/carpools"], carpoolRoutes);
+  app.use(["/places", "/api/places"], placesRoutes);
+  app.use(["/prefs", "/api/prefs"], prefsRoutes);
+  app.use(["/promotions", "/api/promotions"], promotionsRoutes);
+  app.use(["/referrals", "/api/referrals"], referralRoutes);
 
   const uploadRoot = getUploadRoot();
-  app.use(
-    "/uploads/public",
-    express.static(path.join(uploadRoot, "public"), { index: false, redirect: false })
-  );
+  app.use("/uploads/public", express.static(path.join(uploadRoot, "public"), { index: false, redirect: false }));
 
-  app.get(["/uploads/private/:userId/:file", "/api/uploads/private/:userId/:file"], authRequired, blockCheck, async (req, res, next) => {
-    try {
-      const uid = String(req.params.userId);
-      const f = String(req.params.file);
-      const me = String(req.userId);
-      if (uid !== me) {
-        const u = await User.findById(req.userId).select("role").lean();
-        if (!u || u.role !== "admin") throw new AppError("Forbidden", 403);
+  app.get(
+    ["/uploads/private/:userId/:file", "/api/uploads/private/:userId/:file"],
+    authRequired,
+    blockCheck,
+    async (req, res, next) => {
+      try {
+        const uid = String(req.params.userId);
+        const f = String(req.params.file);
+        const me = String(req.userId);
+        if (uid !== me) {
+          const u = await User.findById(req.userId).select("role").lean();
+          if (!u || u.role !== "admin") throw new AppError("Forbidden", 403);
+        }
+        const privateRoot = path.resolve(uploadRoot, "private");
+        const abs = path.resolve(privateRoot, uid, f);
+        if (!abs.startsWith(privateRoot)) throw new AppError("Forbidden", 403);
+        return res.sendFile(abs);
+      } catch (e) {
+        return next(e);
       }
-      const privateRoot = path.resolve(uploadRoot, "private");
-      const abs = path.resolve(privateRoot, uid, f);
-      if (!abs.startsWith(privateRoot)) throw new AppError("Forbidden", 403);
-      return res.sendFile(abs);
-    } catch (e) {
-      return next(e);
-    }
-  });
+    },
+  );
 
   app.use(["/driver-application", "/api/driver-application"], driverApplicationRoutes);
 
@@ -154,10 +175,7 @@ export function createApp() {
     res.sendFile(adminIndex);
   });
   app.get("/admin-ui", (_req, res) => res.redirect(302, "/admin-ui/"));
-  app.use(
-    "/admin-ui",
-    express.static(adminWebPath, { index: false, redirect: false, extensions: ["html"] })
-  );
+  app.use("/admin-ui", express.static(adminWebPath, { index: false, redirect: false, extensions: ["html"] }));
 
   app.use(["/", "/api"], roleSwitchRoutes);
 

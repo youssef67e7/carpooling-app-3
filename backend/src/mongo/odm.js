@@ -2,6 +2,16 @@ import crypto from "crypto";
 import { ObjectId } from "mongodb";
 import { getCollection } from "./client.js";
 import { camelToSnake, collectionToTable, docToRow, rowToDoc, readField, snakeToCamel, syncFieldAliases } from "./fieldMap.js";
+import {
+  nativeFind,
+  nativeFindOne,
+  nativeCount,
+  nativeUpdateOne,
+  nativeUpdateMany,
+  nativeDeleteOne,
+  nativeDeleteMany,
+  nativeAggregate,
+} from "./nativeQuery.js";
 
 /** @type {Map<string, object>} */
 const MODEL_REGISTRY = new Map();
@@ -212,9 +222,7 @@ function sortDocs(docs, sortSpec) {
 }
 
 function projectFields(docs, selectStr) {
-  const fields = String(selectStr)
-    .split(/\s+/)
-    .filter(Boolean);
+  const fields = String(selectStr).split(/\s+/).filter(Boolean);
   const include = new Set(["_id", ...fields]);
   return docs.map((d) => {
     const src = d instanceof MongoDoc ? d.toObject() : { ...d };
@@ -287,12 +295,12 @@ async function runPopulateOne(docs, spec, parentModel) {
           const nested = await runPopulate(
             bookings.map((b) => b.toObject()),
             [spec.populate],
-            Booking
+            Booking,
           );
           bookings = nested.map((b) => (b instanceof MongoDoc ? b.toObject() : b));
         }
         return { ...doc, bookings };
-      })
+      }),
     );
   }
 
@@ -313,13 +321,13 @@ async function runPopulateOne(docs, spec, parentModel) {
         copy[path] = await fetchDocByPath(refModelName, copy[path], select);
       }
       return copy;
-    })
+    }),
   );
 }
 
 function guessRefModel(path) {
   const base = path.includes(".") ? path.split(".").pop() : path;
-  if (base === "senderId" || base.endsWith("Id") && base.includes("passenger") || base === "passengerId") return "User";
+  if (base === "senderId" || (base.endsWith("Id") && base.includes("passenger")) || base === "passengerId") return "User";
   if (base.endsWith("Id")) {
     const name = base.replace(/Id$/, "");
     const map = {
@@ -392,19 +400,52 @@ export class MongoQuery {
 
   async exec() {
     let docs;
+
+    const makeProjection = () => {
+      if (!this._select) return undefined;
+      const fields = String(this._select).split(/\s+/).filter(Boolean);
+      const proj = { _id: 1 };
+      for (const f of fields) proj[f] = f.startsWith("-") ? 0 : 1;
+      return proj;
+    };
+
     if (this._singleId) {
       const rawId = String(this._singleId);
       const queryId = /^[0-9a-f]{24}$/i.test(rawId) ? new ObjectId(rawId) : rawId;
-      const row = await getCollection(this._model.tableName).findOne({ _id: queryId });
-      docs = row ? [docFromRow(rowFromDoc(row), this._model)] : [];
+      if (this._populates.length) {
+        const row = await getCollection(this._model.tableName).findOne({ _id: queryId });
+        docs = row ? [docFromRow(rowFromDoc(row), this._model)] : [];
+      } else {
+        const proj = makeProjection();
+        const row = await nativeFindOne(this._model.tableName, { _id: rawId }, { raw: true, projection: proj });
+        docs = row ? [docFromRow(row, this._model)] : [];
+      }
+    } else if (!this._populates.length) {
+      const isSingle = this._singleId || this._findOne;
+      if (isSingle) {
+        const proj = makeProjection();
+        const row = await nativeFindOne(this._model.tableName, this._filter, {
+          raw: true,
+          projection: proj,
+          sort: this._sort || undefined,
+        });
+        docs = row ? [docFromRow(row, this._model)] : [];
+      } else {
+        const opts = {};
+        if (this._sort) opts.sort = this._sort;
+        if (this._skip) opts.skip = this._skip;
+        if (this._limit != null) opts.limit = this._limit;
+        opts.projection = makeProjection();
+        docs = await nativeFind(this._model.tableName, this._filter, { ...opts, raw: true });
+        docs = docs.map((row) => docFromRow(row, this._model));
+      }
     } else {
       docs = await loadCollectionDocs(this._model);
       docs = docs.filter((d) => matchesFilter(d.toObject(), this._filter));
+      if (this._sort) docs = sortDocs(docs, this._sort);
+      if (this._skip) docs = docs.slice(this._skip);
+      if (this._limit != null) docs = docs.slice(0, this._limit);
     }
-
-    if (this._sort) docs = sortDocs(docs, this._sort);
-    if (this._skip) docs = docs.slice(this._skip);
-    if (this._limit != null) docs = docs.slice(0, this._limit);
 
     if (this._populates.length) {
       const plain = docs.map((d) => d.toObject());
@@ -412,7 +453,7 @@ export class MongoQuery {
       docs = populated.map((p) => (p instanceof MongoDoc ? p : new MongoDoc(this._model, p)));
     }
 
-    if (this._select) docs = projectFields(docs, this._select);
+    if (this._select && this._populates.length) docs = projectFields(docs, this._select);
 
     if (this._lean) {
       const plain = docs.map((d) => (d instanceof MongoDoc ? d.toObject() : d));
@@ -425,17 +466,18 @@ export class MongoQuery {
   }
 }
 
+function escapeRegex(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 async function checkUniqueFields(model, data, excludeId = null) {
   for (const field of model.uniqueFields || []) {
     const val = data[field];
     if (val == null || val === "") continue;
-    const existing = await loadCollectionDocs(model);
-    const dup = existing.find((d) => {
-      const o = d.toObject();
-      if (excludeId && String(o._id) === String(excludeId)) return false;
-      return String(o[field]).toLowerCase() === String(val).toLowerCase();
-    });
-    if (dup) {
+    const filter = { [field]: { $regex: new RegExp("^" + escapeRegex(val) + "$", "i") } };
+    if (excludeId) filter._id = { $ne: excludeId };
+    const existing = await nativeFindOne(model.tableName, filter, { projection: { _id: 1 } });
+    if (existing) {
       const err = new Error(`Duplicate ${field}`);
       err.code = 11000;
       err.keyValue = { [field]: val };
@@ -480,39 +522,16 @@ export function createModel(collectionName, options = {}) {
     return doc;
   };
 
-  model.countDocuments = async (filter = {}) => {
-    const docs = await loadCollectionDocs(model);
-    return docs.filter((d) => matchesFilter(d.toObject(), filter)).length;
-  };
+  model.countDocuments = async (filter = {}) => nativeCount(model.tableName, filter);
 
   model.updateOne = async (filter, update, opts = {}) => {
     const id = filter._id ? String(filter._id) : null;
-
     if (id) {
-      const toSnakeKeys = (obj) => {
-        const out = {};
-        for (const [k, v] of Object.entries(obj)) {
-          out[camelToSnake(k)] = v;
-        }
-        return out;
-      };
-      const nativeFilter = toSnakeKeys(filter);
-      nativeFilter._id = /^[0-9a-f]{24}$/i.test(id) ? new ObjectId(id) : id;
-      const nativeUpdate = {};
-      for (const [op, fields] of Object.entries(update)) {
-        if (op === "$set" || op === "$inc" || op === "$unset") {
-          nativeUpdate[op] = toSnakeKeys(fields);
-        } else {
-          nativeUpdate[op] = fields;
-        }
-      }
-      const result = await getCollection(model.tableName).updateOne(nativeFilter, nativeUpdate, opts);
+      const result = await nativeUpdateOne(model.tableName, filter, update, opts);
       return { acknowledged: result.acknowledged, modifiedCount: result.modifiedCount, upsertedCount: result.upsertedCount ?? 0 };
     }
-
-    const docs = await loadCollectionDocs(model);
-    const matches = docs.filter((d) => matchesFilter(d.toObject(), filter));
-    if (!matches.length) {
+    const existing = await nativeFindOne(model.tableName, filter, { projection: { _id: 1 } });
+    if (!existing) {
       if (opts.upsert) {
         const base = filter.userId ? { userId: filter.userId } : { ...filter };
         applyUpdate(base, update);
@@ -521,57 +540,32 @@ export function createModel(collectionName, options = {}) {
       }
       return { acknowledged: true, modifiedCount: 0 };
     }
-    const doc = matches[0];
-    applyUpdate(doc, update);
-    await doc.save();
+    await nativeUpdateOne(model.tableName, filter, update);
     return { acknowledged: true, modifiedCount: 1 };
   };
 
   model.updateMany = async (filter, update) => {
-    const docs = await loadCollectionDocs(model);
-    let modifiedCount = 0;
-    for (const doc of docs) {
-      if (!matchesFilter(doc.toObject(), filter)) continue;
-      applyUpdate(doc, update);
-      await doc.save();
-      modifiedCount += 1;
-    }
-    return { acknowledged: true, modifiedCount };
+    const result = await nativeUpdateMany(model.tableName, filter, update);
+    return { acknowledged: result.acknowledged, modifiedCount: result.modifiedCount ?? 0 };
   };
 
-  model.deleteOne = async (filter) => {
-    const docs = await loadCollectionDocs(model);
-    const match = docs.find((d) => matchesFilter(d.toObject(), filter));
-    if (!match) return { deletedCount: 0 };
-    const id = String(match._id);
-    const queryId = /^[0-9a-f]{24}$/i.test(id) ? new ObjectId(id) : id;
-    await getCollection(model.tableName).deleteOne({ _id: queryId });
-    return { deletedCount: 1 };
-  };
+  model.deleteOne = async (filter) => nativeDeleteOne(model.tableName, filter);
 
-  model.deleteMany = async (filter) => {
-    const docs = await loadCollectionDocs(model);
-    let deletedCount = 0;
-    for (const doc of docs) {
-      if (!matchesFilter(doc.toObject(), filter)) continue;
-      const id = String(doc._id);
-      const queryId = /^[0-9a-f]{24}$/i.test(id) ? new ObjectId(id) : id;
-      await getCollection(model.tableName).deleteOne({ _id: queryId });
-      deletedCount += 1;
-    }
-    return { deletedCount };
-  };
+  model.deleteMany = async (filter) => nativeDeleteMany(model.tableName, filter);
 
   model.findOneAndUpdate = async (filter, update, opts = {}) => {
-    const id = filter._id ? String(filter._id) : null;
-
     const toSnakeKeys = (obj) => {
+      if (!obj || typeof obj !== "object") return obj;
       const out = {};
       for (const [k, v] of Object.entries(obj)) {
         out[camelToSnake(k)] = v;
       }
       return out;
     };
+
+    const id = filter._id ? String(filter._id) : null;
+    const nativeFilter = toSnakeKeys(filter);
+    if (id) nativeFilter._id = /^[0-9a-f]{24}$/i.test(id) ? new ObjectId(id) : id;
 
     const nativeUpdate = {};
     for (const [op, fields] of Object.entries(update)) {
@@ -581,39 +575,17 @@ export function createModel(collectionName, options = {}) {
         nativeUpdate[op] = fields;
       }
     }
+
     if (id) {
-      const nativeFilter = toSnakeKeys(filter);
-      nativeFilter._id = /^[0-9a-f]{24}$/i.test(id) ? new ObjectId(id) : id;
-
-      const row = await getCollection(model.tableName).findOneAndUpdate(
-        nativeFilter,
-        nativeUpdate,
-        { returnDocument: opts.new === false ? "before" : "after" }
-      );
-
-      if (row) {
-        const data = rowFromDoc(row);
-        return new MongoDoc(model, data);
-      }
-
-      if (!opts.upsert) return null;
-
-      const existing = await getCollection(model.tableName).findOne({ _id: id });
-      if (existing) return null;
-
-      const now = new Date();
-      const base = { ...filter, _id: id, createdAt: now, updatedAt: now };
-      delete base._id;
-      syncFieldAliases(base);
-      const payload = serializeForDb(base);
-      await getCollection(model.tableName).replaceOne({ _id: id }, { _id: id, ...payload }, { upsert: true });
-      const created = await getCollection(model.tableName).findOne({ _id: id });
-      return new MongoDoc(model, rowFromDoc(created));
+      const row = await getCollection(model.tableName).findOneAndUpdate(nativeFilter, nativeUpdate, {
+        returnDocument: opts.new === false ? "before" : "after",
+      });
+      if (row) return new MongoDoc(model, rowFromDoc(row));
+      return null;
     }
 
-    const docs = await loadCollectionDocs(model);
-    const match = docs.find((d) => matchesFilter(d.toObject(), filter));
-    if (!match) {
+    const existing = await nativeFindOne(model.tableName, filter, { projection: { _id: 1 } });
+    if (!existing) {
       if (opts.upsert) {
         const base = { ...filter };
         syncFieldAliases(base);
@@ -622,56 +594,32 @@ export function createModel(collectionName, options = {}) {
       }
       return null;
     }
-    const before = match.toObject();
-    applyUpdate(match, update);
-    await match.save();
-    return opts.new === false ? new MongoDoc(model, before) : match;
+    await nativeUpdateOne(model.tableName, filter, update);
+    return model.findOne(filter);
   };
 
   model.findByIdAndUpdate = (id, update, opts) => model.findOneAndUpdate({ _id: id }, update, opts);
 
   model.aggregate = async (pipeline) => {
-    const docs = await loadCollectionDocs(model);
-    const plain = docs.map((d) => d.toObject());
-    let rows = plain;
-    for (const stage of pipeline) {
-      if (stage.$match) {
-        rows = rows.filter((r) => matchesFilter(r, stage.$match));
-      } else if (stage.$group) {
-        const idField = stage.$group._id;
-        const groups = new Map();
-        for (const row of rows) {
-          let key;
-          if (typeof idField === "string" && idField.startsWith("$")) {
-            key = getNested(row, idField.slice(1));
-          } else {
-            key = idField;
-          }
-          if (!groups.has(key)) groups.set(key, []);
-          groups.get(key).push(row);
+    const convertStage = (stage) => {
+      if (stage.$group) {
+        const g = { _id: stage.$group._id };
+        for (const [key, val] of Object.entries(stage.$group)) {
+          if (key !== "_id") g[camelToSnake(key)] = val;
         }
-        rows = [];
-        for (const [key, items] of groups) {
-          const out = { _id: key };
-          for (const [field, expr] of Object.entries(stage.$group)) {
-            if (field === "_id") continue;
-            if (expr.$sum === 1) out[field.replace(/^\$/, "")] = items.length;
-            else if (typeof expr.$sum === "string" && expr.$sum.startsWith("$")) {
-              const f = expr.$sum.slice(1);
-              out[field] = items.reduce((s, it) => s + Number(getNested(it, f) || 0), 0);
-            }
-          }
-          if ("count" in stage.$group || stage.$group.count) {
-            out.count = items.length;
-          }
-          rows.push(out);
-        }
-        if (stage.$group.count?.$sum === 1) {
-          rows = rows.map((r) => ({ _id: r._id, count: r.count ?? 0 }));
-        }
+        return { $group: g };
       }
-    }
-    return rows;
+      if (stage.$match)
+        return {
+          $match: (() => {
+            const m = {};
+            for (const [k, v] of Object.entries(stage.$match)) m[camelToSnake(k)] = v;
+            return m;
+          })(),
+        };
+      return stage;
+    };
+    return nativeAggregate(model.tableName, pipeline.map(convertStage), { raw: true });
   };
 
   return model;

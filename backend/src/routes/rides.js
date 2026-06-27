@@ -23,6 +23,8 @@ import {
   acceptRideSchema,
 } from "../schemas/ride.schemas.js";
 import { applyDriverRatingFromRide } from "../services/driverRating.js";
+import { enrichRidesWithPassengerStats, getPassengerPublicStats } from "../services/passengerStats.js";
+import { applyPassengerRatingFromRide } from "../services/passengerRating.js";
 import { haversineKm, fareFromVehiclePricing } from "../utils/geo.js";
 import { buildRoutePath } from "../utils/directions.js";
 import { computeSeatUnits, roundSeatUnits } from "../utils/seatUnits.js";
@@ -42,12 +44,7 @@ import {
   notifyNewMessage,
   notifyPaymentReceived,
 } from "../services/notificationHelpers.js";
-import {
-  requestRide,
-  getRideStatus,
-  getRequestedRides,
-  acceptRide,
-} from "../services/rideNativeService.js";
+import { requestRide, getRideStatus, getRequestedRides, acceptRide } from "../services/rideNativeService.js";
 import { getMessagesByRideId, createMessage } from "../mongo/queries/messages.js";
 import { logAction } from "../utils/logger.js";
 
@@ -62,7 +59,9 @@ async function requireApprovedDriverUnlessAdmin(req, res, next) {
     const mode = user.active_role || user.role || "passenger";
     if (mode !== "driver") return res.status(403).json({ message: "Forbidden" });
     return requireApprovedDriver(req, res, next);
-  } catch (e) { next(e); }
+  } catch (e) {
+    next(e);
+  }
 }
 
 /* ── V2 endpoints (authenticated, role-gated) ── */
@@ -71,17 +70,24 @@ router.post("/", authRequired, blockCheck, roleRequired("passenger", "admin"), v
   try {
     const { pickup, dropoff, vehicleType } = req.body;
     if (!pickup || !dropoff || !vehicleType) {
-      return res.status(400).json({ success: false, error: { code: "RIDE_ERROR", message: "pickup, dropoff, and vehicleType are required" } });
+      return res
+        .status(400)
+        .json({ success: false, error: { code: "RIDE_ERROR", message: "pickup, dropoff, and vehicleType are required" } });
     }
-    const result = await requestRide(req.userId, {
-      latitude: pickup.lat,
-      longitude: pickup.lng,
-      address: pickup.address || '',
-    }, {
-      latitude: dropoff.lat,
-      longitude: dropoff.lng,
-      address: dropoff.address || '',
-    }, vehicleType);
+    const result = await requestRide(
+      req.userId,
+      {
+        latitude: pickup.lat,
+        longitude: pickup.lng,
+        address: pickup.address || "",
+      },
+      {
+        latitude: dropoff.lat,
+        longitude: dropoff.lng,
+        address: dropoff.address || "",
+      },
+      vehicleType,
+    );
     logAction({ req, action: "Ride created", file: "routes/rides.js:create", extra: { rideId: result.ride?._id, vehicleType } });
     return res.status(201).json({ success: true, data: { ride: result.ride, nearbyDrivers: result.nearbyDrivers.length } });
   } catch (err) {
@@ -91,34 +97,55 @@ router.post("/", authRequired, blockCheck, roleRequired("passenger", "admin"), v
   }
 });
 
-router.get("/requested", authRequired, blockCheck, roleRequired("driver", "admin"), requireApprovedDriverUnlessAdmin, async (req, res) => {
-  try {
-    const vehicleType = req.query.vehicleType;
-    const result = await getRequestedRides(vehicleType);
-    return res.status(200).json({ success: true, data: result });
-  } catch (err) {
-    return res.status(500).json({ success: false, error: { code: "RIDE_ERROR", message: err.message } });
-  }
-});
+router.get(
+  "/requested",
+  authRequired,
+  blockCheck,
+  roleRequired("driver", "admin"),
+  requireApprovedDriverUnlessAdmin,
+  async (req, res) => {
+    try {
+      const vehicleType = req.query.vehicleType;
+      const result = await getRequestedRides(vehicleType);
+      return res.status(200).json({ success: true, data: result });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: { code: "RIDE_ERROR", message: err.message } });
+    }
+  },
+);
 
-router.post("/:id/accept", authRequired, blockCheck, roleRequired("driver", "admin"), requireApprovedDriverUnlessAdmin, validate(acceptRideSchema), async (req, res) => {
-  try {
-    const { id } = req.params;
-    const driverId = req.userId;
-    await assertDriverCanTakeAnotherRide(driverId);
-    const result = await acceptRide(id, driverId);
-    logAction({ req, action: "Ride accepted by driver", file: "routes/rides.js:accept", extra: { rideId: id } });
-    return res.status(200).json({ success: true, data: result });
-  } catch (err) {
-    logAction({ req, action: "Ride accept failed", file: "routes/rides.js:accept", error: err, extra: { rideId: req.params.id } });
-    const msg = err.message.toLowerCase();
-    let status = 500;
-    if (msg.includes("not found")) status = 404;
-    else if (msg.includes("no longer available")) status = 409;
-    else if (msg.includes("at most") || msg.includes("active rides")) status = 409;
-    return res.status(status).json({ success: false, error: { code: "RIDE_ERROR", message: err.message } });
-  }
-});
+router.post(
+  "/:id/accept",
+  authRequired,
+  blockCheck,
+  roleRequired("driver", "admin"),
+  requireApprovedDriverUnlessAdmin,
+  validate(acceptRideSchema),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const driverId = req.userId;
+      await assertDriverCanTakeAnotherRide(driverId);
+      const result = await acceptRide(id, driverId);
+      logAction({ req, action: "Ride accepted by driver", file: "routes/rides.js:accept", extra: { rideId: id } });
+      return res.status(200).json({ success: true, data: result });
+    } catch (err) {
+      logAction({
+        req,
+        action: "Ride accept failed",
+        file: "routes/rides.js:accept",
+        error: err,
+        extra: { rideId: req.params.id },
+      });
+      const msg = err.message.toLowerCase();
+      let status = 500;
+      if (msg.includes("not found")) status = 404;
+      else if (msg.includes("no longer available")) status = 409;
+      else if (msg.includes("at most") || msg.includes("active rides")) status = 409;
+      return res.status(status).json({ success: false, error: { code: "RIDE_ERROR", message: err.message } });
+    }
+  },
+);
 
 router.get("/:id/status", authRequired, blockCheck, async (req, res) => {
   try {
@@ -138,65 +165,91 @@ router.get("/:id/status", authRequired, blockCheck, async (req, res) => {
   }
 });
 
-router.post("/:id/arriving", authRequired, blockCheck, roleRequired("driver", "admin"), requireApprovedDriverUnlessAdmin, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const updated = await Ride.findOneAndUpdate(
-      { _id: id, status: "accepted", $or: [{ driverId: req.userId }, { driver_id: req.userId }] },
-      { $set: { status: "driver_arriving", arrivingAt: new Date() } },
-      { new: true }
-    );
-    if (!updated) {
-      const ride = await Ride.findById(id);
-      if (!ride) return res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "Ride not found" } });
-      const isDriver = String(ride.driverId || ride.driver_id || "") === String(req.userId);
-      const caller = await User.findById(req.userId).select("role").lean();
-      if (!isDriver && caller?.role !== "admin") {
-        return res.status(403).json({ success: false, error: { code: "FORBIDDEN", message: "Not your ride" } });
+router.post(
+  "/:id/arriving",
+  authRequired,
+  blockCheck,
+  roleRequired("driver", "admin"),
+  requireApprovedDriverUnlessAdmin,
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updated = await Ride.findOneAndUpdate(
+        { _id: id, status: "accepted", $or: [{ driverId: req.userId }, { driver_id: req.userId }] },
+        { $set: { status: "driver_arriving", arrivingAt: new Date() } },
+        { new: true },
+      );
+      if (!updated) {
+        const ride = await Ride.findById(id);
+        if (!ride) return res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "Ride not found" } });
+        const isDriver = String(ride.driverId || ride.driver_id || "") === String(req.userId);
+        const caller = await User.findById(req.userId).select("role").lean();
+        if (!isDriver && caller?.role !== "admin") {
+          return res.status(403).json({ success: false, error: { code: "FORBIDDEN", message: "Not your ride" } });
+        }
+        if (ride.status === "driver_arriving") {
+          return res.status(200).json({ success: true, data: ride });
+        }
+        return res.status(400).json({ success: false, error: { code: "STATE_ERROR", message: "Ride must be accepted first" } });
       }
-      if (ride.status === "driver_arriving") {
-        return res.status(200).json({ success: true, data: ride });
-      }
-      return res.status(400).json({ success: false, error: { code: "STATE_ERROR", message: "Ride must be accepted first" } });
+      notifyDriverArrived(updated).catch(() => {});
+      logAction({ req, action: "Ride status → driver_arriving", file: "routes/rides.js:arriving", extra: { rideId: id } });
+      return res.status(200).json({ success: true, data: updated });
+    } catch (err) {
+      logAction({
+        req,
+        action: "Ride arriving failed",
+        file: "routes/rides.js:arriving",
+        error: err,
+        extra: { rideId: req.params.id },
+      });
+      return res.status(500).json({ success: false, error: { code: "SERVER_ERROR", message: err.message } });
     }
-    notifyDriverArrived(updated).catch(() => {});
-    logAction({ req, action: "Ride status → driver_arriving", file: "routes/rides.js:arriving", extra: { rideId: id } });
-    return res.status(200).json({ success: true, data: updated });
-  } catch (err) {
-    logAction({ req, action: "Ride arriving failed", file: "routes/rides.js:arriving", error: err, extra: { rideId: req.params.id } });
-    return res.status(500).json({ success: false, error: { code: "SERVER_ERROR", message: err.message } });
-  }
-});
+  },
+);
 
-router.post("/:id/onboard", authRequired, blockCheck, roleRequired("driver", "admin"), requireApprovedDriverUnlessAdmin, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const updated = await Ride.findOneAndUpdate(
-      { _id: id, status: "driver_arriving", $or: [{ driverId: req.userId }, { driver_id: req.userId }] },
-      { $set: { status: "passenger_onboard", onboardAt: new Date() } },
-      { new: true }
-    );
-    if (!updated) {
-      const ride = await Ride.findById(id);
-      if (!ride) return res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "Ride not found" } });
-      const isDriver = String(ride.driverId || ride.driver_id || "") === String(req.userId);
-      const caller = await User.findById(req.userId).select("role").lean();
-      if (!isDriver && caller?.role !== "admin") {
-        return res.status(403).json({ success: false, error: { code: "FORBIDDEN", message: "Not your ride" } });
+router.post(
+  "/:id/onboard",
+  authRequired,
+  blockCheck,
+  roleRequired("driver", "admin"),
+  requireApprovedDriverUnlessAdmin,
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updated = await Ride.findOneAndUpdate(
+        { _id: id, status: "driver_arriving", $or: [{ driverId: req.userId }, { driver_id: req.userId }] },
+        { $set: { status: "passenger_onboard", onboardAt: new Date() } },
+        { new: true },
+      );
+      if (!updated) {
+        const ride = await Ride.findById(id);
+        if (!ride) return res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "Ride not found" } });
+        const isDriver = String(ride.driverId || ride.driver_id || "") === String(req.userId);
+        const caller = await User.findById(req.userId).select("role").lean();
+        if (!isDriver && caller?.role !== "admin") {
+          return res.status(403).json({ success: false, error: { code: "FORBIDDEN", message: "Not your ride" } });
+        }
+        if (ride.status === "passenger_onboard") {
+          return res.status(200).json({ success: true, data: ride });
+        }
+        return res.status(400).json({ success: false, error: { code: "STATE_ERROR", message: "Driver must arrive first" } });
       }
-      if (ride.status === "passenger_onboard") {
-        return res.status(200).json({ success: true, data: ride });
-      }
-      return res.status(400).json({ success: false, error: { code: "STATE_ERROR", message: "Driver must arrive first" } });
+      notifyPassengerOnboard(updated).catch(() => {});
+      logAction({ req, action: "Ride status → passenger_onboard", file: "routes/rides.js:onboard", extra: { rideId: id } });
+      return res.status(200).json({ success: true, data: updated });
+    } catch (err) {
+      logAction({
+        req,
+        action: "Ride onboard failed",
+        file: "routes/rides.js:onboard",
+        error: err,
+        extra: { rideId: req.params.id },
+      });
+      return res.status(500).json({ success: false, error: { code: "SERVER_ERROR", message: err.message } });
     }
-    notifyPassengerOnboard(updated).catch(() => {});
-    logAction({ req, action: "Ride status → passenger_onboard", file: "routes/rides.js:onboard", extra: { rideId: id } });
-    return res.status(200).json({ success: true, data: updated });
-  } catch (err) {
-    logAction({ req, action: "Ride onboard failed", file: "routes/rides.js:onboard", error: err, extra: { rideId: req.params.id } });
-    return res.status(500).json({ success: false, error: { code: "SERVER_ERROR", message: err.message } });
-  }
-});
+  },
+);
 
 /* ── V2 Cancel endpoints (/:id style matching other V2 patterns) ── */
 
@@ -204,7 +257,9 @@ router.post("/:id/onboard", authRequired, blockCheck, roleRequired("driver", "ad
 router.post("/:id/cancel", authRequired, blockCheck, roleRequired("passenger"), async (req, res) => {
   try {
     const { id } = req.params;
-    const reason = String(req.body.reason || "").trim().slice(0, 300);
+    const reason = String(req.body.reason || "")
+      .trim()
+      .slice(0, 300);
     const updated = await Ride.findOneAndUpdate(
       {
         _id: id,
@@ -223,7 +278,7 @@ router.post("/:id/cancel", authRequired, blockCheck, roleRequired("passenger"), 
           preassignedFare: null,
         },
       },
-      { new: true }
+      { new: true },
     );
     if (!updated) {
       const ride = await Ride.findById(id);
@@ -234,14 +289,27 @@ router.post("/:id/cancel", authRequired, blockCheck, roleRequired("passenger"), 
       if (ride.status === "cancelled") {
         return res.status(200).json({ success: true, data: ride });
       }
-      return res.status(400).json({ success: false, error: { code: "STATE_ERROR", message: "Ride cannot be cancelled at this stage" } });
+      return res
+        .status(400)
+        .json({ success: false, error: { code: "STATE_ERROR", message: "Ride cannot be cancelled at this stage" } });
     }
     refundPassengerForRide(req.userId, updated._id, updated.agreedFare || updated.estimatedFare).catch(() => {});
     notifyRideCancelled(updated, req.userId, reason).catch(() => {});
-    logAction({ req, action: "Ride cancelled by passenger", file: "routes/rides.js:cancel_passenger", extra: { rideId: id, reason } });
+    logAction({
+      req,
+      action: "Ride cancelled by passenger",
+      file: "routes/rides.js:cancel_passenger",
+      extra: { rideId: id, reason },
+    });
     return res.status(200).json({ success: true, data: updated });
   } catch (err) {
-    logAction({ req, action: "Ride cancel by passenger failed", file: "routes/rides.js:cancel_passenger", error: err, extra: { rideId: req.params.id } });
+    logAction({
+      req,
+      action: "Ride cancel by passenger failed",
+      file: "routes/rides.js:cancel_passenger",
+      error: err,
+      extra: { rideId: req.params.id },
+    });
     return res.status(500).json({ success: false, error: { code: "SERVER_ERROR", message: err.message } });
   }
 });
@@ -250,7 +318,9 @@ router.post("/:id/cancel", authRequired, blockCheck, roleRequired("passenger"), 
 router.post("/:id/driver-cancel", authRequired, blockCheck, roleRequired("driver"), requireApprovedDriver, async (req, res) => {
   try {
     const { id } = req.params;
-    const reason = String(req.body.reason || "").trim().slice(0, 300);
+    const reason = String(req.body.reason || "")
+      .trim()
+      .slice(0, 300);
     const updated = await Ride.findOneAndUpdate(
       {
         _id: id,
@@ -269,7 +339,7 @@ router.post("/:id/driver-cancel", authRequired, blockCheck, roleRequired("driver
           preassignedFare: null,
         },
       },
-      { new: true }
+      { new: true },
     );
     if (!updated) {
       const ride = await Ride.findById(id);
@@ -280,14 +350,22 @@ router.post("/:id/driver-cancel", authRequired, blockCheck, roleRequired("driver
       if (ride.status === "cancelled") {
         return res.status(200).json({ success: true, data: ride });
       }
-      return res.status(400).json({ success: false, error: { code: "STATE_ERROR", message: "Ride cannot be cancelled at this stage" } });
+      return res
+        .status(400)
+        .json({ success: false, error: { code: "STATE_ERROR", message: "Ride cannot be cancelled at this stage" } });
     }
     refundPassengerForRide(updated.passengerId, updated._id, updated.agreedFare || updated.estimatedFare).catch(() => {});
     notifyRideCancelled(updated, updated.driverId, reason).catch(() => {});
     logAction({ req, action: "Ride cancelled by driver", file: "routes/rides.js:cancel_driver", extra: { rideId: id, reason } });
     return res.status(200).json({ success: true, data: updated });
   } catch (err) {
-    logAction({ req, action: "Ride cancel by driver failed", file: "routes/rides.js:cancel_driver", error: err, extra: { rideId: req.params.id } });
+    logAction({
+      req,
+      action: "Ride cancel by driver failed",
+      file: "routes/rides.js:cancel_driver",
+      error: err,
+      extra: { rideId: req.params.id },
+    });
     return res.status(500).json({ success: false, error: { code: "SERVER_ERROR", message: err.message } });
   }
 });
@@ -296,7 +374,9 @@ router.post("/:id/driver-cancel", authRequired, blockCheck, roleRequired("driver
 router.post("/:id/admin-cancel", authRequired, blockCheck, roleRequired("admin"), async (req, res) => {
   try {
     const { id } = req.params;
-    const reason = String(req.body.reason || "Admin action").trim().slice(0, 300);
+    const reason = String(req.body.reason || "Admin action")
+      .trim()
+      .slice(0, 300);
     const updated = await Ride.findOneAndUpdate(
       {
         _id: id,
@@ -314,7 +394,7 @@ router.post("/:id/admin-cancel", authRequired, blockCheck, roleRequired("admin")
           preassignedFare: null,
         },
       },
-      { new: true }
+      { new: true },
     );
     if (!updated) {
       const ride = await Ride.findById(id);
@@ -329,7 +409,13 @@ router.post("/:id/admin-cancel", authRequired, blockCheck, roleRequired("admin")
     logAction({ req, action: "Ride cancelled by admin", file: "routes/rides.js:cancel_admin", extra: { rideId: id, reason } });
     return res.status(200).json({ success: true, data: updated });
   } catch (err) {
-    logAction({ req, action: "Ride cancel by admin failed", file: "routes/rides.js:cancel_admin", error: err, extra: { rideId: req.params.id } });
+    logAction({
+      req,
+      action: "Ride cancel by admin failed",
+      file: "routes/rides.js:cancel_admin",
+      error: err,
+      extra: { rideId: req.params.id },
+    });
     return res.status(500).json({ success: false, error: { code: "SERVER_ERROR", message: err.message } });
   }
 });
@@ -365,8 +451,7 @@ async function getRideAndAssertParticipant(rideId, userId) {
   const uid = userId.toString();
   const isPassenger = String(ride.passengerId) === uid;
   const isAssignedDriver = ride.driverId && String(ride.driverId) === uid;
-  const isProposingDriver =
-    ride.driverProposal?.driverId && String(ride.driverProposal.driverId) === uid;
+  const isProposingDriver = ride.driverProposal?.driverId && String(ride.driverProposal.driverId) === uid;
   const preId = ride.preassignedDriverId && String(ride.preassignedDriverId);
   const isPreassignedDriver = ride.awaitingDriverConfirm && preId === uid;
   const isDriver = isAssignedDriver || isProposingDriver || isPreassignedDriver;
@@ -412,58 +497,65 @@ async function populatedRideById(id) {
   return Ride.findById(id).populate(ridePopulate).populate(bookingPopulate);
 }
 
-const rideIdValidators = [
-  docIdBody("rideId"),
-  validateRequest,
-];
+const rideIdValidators = [docIdBody("rideId"), validateRequest];
 
 /** Passenger: nearby online drivers (optionally filtered by vehicleType + radius from lat/lng) */
-router.get("/nearby-drivers", roleRequired("passenger", "admin"), validate(nearbyDriversSchema, "query"), async (req, res, next) => {
-  try {
-    const raw = req.query.vehicleType;
-    const vt = typeof raw === "string" && raw.trim() ? String(raw).toLowerCase().trim() : null;
-    const lat = Number(req.query.lat);
-    const lng = Number(req.query.lng);
-    const radiusKm = Number(req.query.radiusKm) || 15;
-    const q = { active_role: "driver", isOnline: true };
-    if (vt) q.vehicleType = vt;
-    let drivers = await User.find(q).select("name email location isOnline vehicleType").lean();
-    if (Number.isFinite(lat) && Number.isFinite(lng)) {
-      drivers = drivers
-        .filter((d) => d.location && Number.isFinite(d.location.lat) && Number.isFinite(d.location.lng))
-        .map((d) => ({
-          ...d,
-          distanceKm: Math.round(haversineKm(lat, lng, d.location.lat, d.location.lng) * 100) / 100,
-        }))
-        .filter((d) => d.distanceKm <= radiusKm)
-        .sort((a, b) => a.distanceKm - b.distanceKm);
+router.get(
+  "/nearby-drivers",
+  roleRequired("passenger", "admin"),
+  validate(nearbyDriversSchema, "query"),
+  async (req, res, next) => {
+    try {
+      const raw = req.query.vehicleType;
+      const vt = typeof raw === "string" && raw.trim() ? String(raw).toLowerCase().trim() : null;
+      const lat = Number(req.query.lat);
+      const lng = Number(req.query.lng);
+      const radiusKm = Number(req.query.radiusKm) || 15;
+      const q = { active_role: "driver", isOnline: true };
+      if (vt) q.vehicleType = vt;
+      let drivers = await User.find(q).select("name email location isOnline vehicleType").lean();
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        drivers = drivers
+          .filter((d) => d.location && Number.isFinite(d.location.lat) && Number.isFinite(d.location.lng))
+          .map((d) => ({
+            ...d,
+            distanceKm: Math.round(haversineKm(lat, lng, d.location.lat, d.location.lng) * 100) / 100,
+          }))
+          .filter((d) => d.distanceKm <= radiusKm)
+          .sort((a, b) => a.distanceKm - b.distanceKm);
+      }
+      return res.json({ drivers, vehicleType: vt, radiusKm: Number.isFinite(lat) ? radiusKm : null });
+    } catch (e) {
+      next(e);
     }
-    return res.json({ drivers, vehicleType: vt, radiusKm: Number.isFinite(lat) ? radiusKm : null });
-  } catch (e) {
-    next(e);
-  }
-});
+  },
+);
 
 /** Route preview for map (pickup → destination) before or during booking */
-router.get("/route-preview", roleRequired("passenger", "driver", "admin"), validate(routePreviewSchema, "query"), async (req, res, next) => {
-  try {
-    const fromLat = Number(req.query.fromLat);
-    const fromLng = Number(req.query.fromLng);
-    const toLat = Number(req.query.toLat);
-    const toLng = Number(req.query.toLng);
-    if (![fromLat, fromLng, toLat, toLng].every(Number.isFinite)) {
-      throw new AppError("fromLat, fromLng, toLat, toLng required", 400);
+router.get(
+  "/route-preview",
+  roleRequired("passenger", "driver", "admin"),
+  validate(routePreviewSchema, "query"),
+  async (req, res, next) => {
+    try {
+      const fromLat = Number(req.query.fromLat);
+      const fromLng = Number(req.query.fromLng);
+      const toLat = Number(req.query.toLat);
+      const toLng = Number(req.query.toLng);
+      if (![fromLat, fromLng, toLat, toLng].every(Number.isFinite)) {
+        throw new AppError("fromLat, fromLng, toLat, toLng required", 400);
+      }
+      const pickup = { lat: fromLat, lng: fromLng };
+      const dest = { lat: toLat, lng: toLng };
+      const routePath = await buildRoutePath(pickup, dest);
+      const distanceKm = Math.round(haversineKm(fromLat, fromLng, toLat, toLng) * 100) / 100;
+      const etaMinutes = Math.max(1, Math.ceil(distanceKm / 0.5));
+      return res.json({ routePath, distanceKm, etaMinutes });
+    } catch (e) {
+      next(e);
     }
-    const pickup = { lat: fromLat, lng: fromLng };
-    const dest = { lat: toLat, lng: toLng };
-    const routePath = await buildRoutePath(pickup, dest);
-    const distanceKm = Math.round(haversineKm(fromLat, fromLng, toLat, toLng) * 100) / 100;
-    const etaMinutes = Math.max(1, Math.ceil(distanceKm / 0.5));
-    return res.json({ routePath, distanceKm, etaMinutes });
-  } catch (e) {
-    next(e);
-  }
-});
+  },
+);
 
 /** Passenger: create ride */
 router.post(
@@ -501,19 +593,14 @@ router.post(
       }
 
       const passengerCount =
-        req.body.passengerCount != null && req.body.passengerCount !== ""
-          ? Number(req.body.passengerCount)
-          : 1;
+        req.body.passengerCount != null && req.body.passengerCount !== "" ? Number(req.body.passengerCount) : 1;
       const passengerSize = String(req.body.passengerSize || "MEDIUM")
         .toUpperCase()
         .trim();
       const seatUnits = computeSeatUnits(passengerCount, passengerSize);
       const cap = Number(vehicleDoc.capacity) || 4;
       if (seatUnits > cap) {
-        throw new AppError(
-          `This booking needs ${seatUnits} seat units but this vehicle capacity is ${cap} units`,
-          400
-        );
+        throw new AppError(`This booking needs ${seatUnits} seat units but this vehicle capacity is ${cap} units`, 400);
       }
       const availableSeatUnits = roundSeatUnits(cap - seatUnits);
       if (availableSeatUnits < 0) {
@@ -583,10 +670,7 @@ router.post(
           totalSeats: cap,
           availableSeatUnits,
           poolingEnabled: true,
-          passengerGenderPolicy:
-            req.body.passengerGenderPreference != null
-              ? String(req.body.passengerGenderPreference)
-              : "all",
+          passengerGenderPolicy: req.body.passengerGenderPreference != null ? String(req.body.passengerGenderPreference) : "all",
         });
         await Booking.create({
           rideId: createdRide._id,
@@ -594,8 +678,7 @@ router.post(
           passengerCount,
           passengerSize,
           seatsReserved: seatUnits,
-          passengerGender:
-            req.body.passengerGender != null ? String(req.body.passengerGender) : "unspecified",
+          passengerGender: req.body.passengerGender != null ? String(req.body.passengerGender) : "unspecified",
           status: "confirmed",
         });
       } catch (e) {
@@ -610,7 +693,7 @@ router.post(
     } catch (e) {
       next(e);
     }
-  }
+  },
 );
 
 function minDistanceToRouteKm(routePath, point) {
@@ -661,7 +744,9 @@ router.post(
     try {
       const vt = String(req.body.vehicleType).toLowerCase().trim();
       const passengerCount = req.body.passengerCount != null ? Number(req.body.passengerCount) : 1;
-      const passengerSize = String(req.body.passengerSize || "MEDIUM").toUpperCase().trim();
+      const passengerSize = String(req.body.passengerSize || "MEDIUM")
+        .toUpperCase()
+        .trim();
       const needUnits = computeSeatUnits(passengerCount, passengerSize);
       const passengerGender = String(req.body.passengerGender || "unspecified");
 
@@ -699,7 +784,7 @@ router.post(
     } catch (e) {
       next(e);
     }
-  }
+  },
 );
 
 /** Passenger: join an accepted pooled ride (atomic seat decrement; prevents overbooking). */
@@ -715,7 +800,9 @@ router.post(
     try {
       const rideId = String(req.body.rideId);
       const passengerCount = req.body.passengerCount != null ? Number(req.body.passengerCount) : 1;
-      const passengerSize = String(req.body.passengerSize || "MEDIUM").toUpperCase().trim();
+      const passengerSize = String(req.body.passengerSize || "MEDIUM")
+        .toUpperCase()
+        .trim();
       const seatUnits = computeSeatUnits(passengerCount, passengerSize);
       const passengerGender = String(req.body.passengerGender || "unspecified");
 
@@ -740,7 +827,7 @@ router.post(
           availableSeatUnits: { $gte: seatUnits },
         },
         { $inc: { availableSeatUnits: -seatUnits } },
-        { new: true }
+        { new: true },
       );
       if (!updated) throw new AppError("No seats left", 409);
 
@@ -766,7 +853,7 @@ router.post(
     } catch (e) {
       next(e);
     }
-  }
+  },
 );
 
 /** Driver: pending rides (excludes other drivers' proposals; excludes rides awaiting another driver's confirmation) */
@@ -781,16 +868,10 @@ router.get("/available", roleRequired("driver"), requireApprovedDriver, async (r
       vehicleType: vt,
       $and: [
         {
-          $or: [
-            { awaitingDriverConfirm: { $ne: true } },
-            { awaitingDriverConfirm: true, preassignedDriverId: req.userId },
-          ],
+          $or: [{ awaitingDriverConfirm: { $ne: true } }, { awaitingDriverConfirm: true, preassignedDriverId: req.userId }],
         },
         {
-          $or: [
-            { driverProposal: null },
-            { "driverProposal.driverId": req.userId },
-          ],
+          $or: [{ driverProposal: null }, { "driverProposal.driverId": req.userId }],
         },
       ],
     })
@@ -862,8 +943,7 @@ router.post(
       const driverProfile = await DriverProfile.findOne({ userId: req.userId }).lean();
       const cars = Array.isArray(driverProfile.cars) ? driverProfile.cars : [];
       const selectedId = driverProfile.selectedCarId ? String(driverProfile.selectedCarId) : null;
-      const selectedCar =
-        (selectedId && cars.find((c) => String(c?._id) === selectedId)) || cars[0] || null;
+      const selectedCar = (selectedId && cars.find((c) => String(c?._id) === selectedId)) || cars[0] || null;
       const dType = driver?.vehicleType || "delivery";
       if (String(ride.vehicleType || "delivery") !== String(dType)) {
         throw new AppError("This ride requires a different vehicle class", 403);
@@ -873,10 +953,7 @@ router.post(
         throw new AppError("Another driver already has a pending offer on this ride", 409);
       }
       const base = Number(ride.estimatedFare) || 0;
-      let proposed =
-        req.body.proposedFare != null && req.body.proposedFare !== ""
-          ? Number(req.body.proposedFare)
-          : base;
+      let proposed = req.body.proposedFare != null && req.body.proposedFare !== "" ? Number(req.body.proposedFare) : base;
       if (Number.isNaN(proposed) || proposed <= 0) {
         throw new AppError("Invalid proposed fare", 400);
       }
@@ -895,7 +972,8 @@ router.post(
           profileImageUrl: driver?.profileImageUrl || "",
           carImageUrl: selectedCar?.imageUrl || driverProfile?.carImageUrl || "",
           carColor: selectedCar?.color || driverProfile?.carColor || "",
-          carSpec: `${selectedCar?.brand || driverProfile?.carBrand || ""} ${selectedCar?.model || driverProfile?.carModel || ""}`.trim(),
+          carSpec:
+            `${selectedCar?.brand || driverProfile?.carBrand || ""} ${selectedCar?.model || driverProfile?.carModel || ""}`.trim(),
           availableSeats: selectedCar?.seats ?? driverProfile?.numberOfSeats ?? null,
         },
       };
@@ -905,7 +983,7 @@ router.post(
     } catch (e) {
       next(e);
     }
-  }
+  },
 );
 
 /** Driver: withdraw your pending offer (while ride is pending). */
@@ -933,7 +1011,7 @@ router.post(
     } catch (e) {
       next(e);
     }
-  }
+  },
 );
 
 /** Passenger: accept or reject driver's price */
@@ -989,7 +1067,7 @@ router.post(
     } catch (e) {
       next(e);
     }
-  }
+  },
 );
 
 /** Passenger: update minimum fare while pending (≥ suggested; not while waiting for driver confirm) */
@@ -1024,7 +1102,7 @@ router.post(
     } catch (e) {
       next(e);
     }
-  }
+  },
 );
 
 /** Driver: after passenger accepted your price — confirm or reject the trip */
@@ -1074,7 +1152,7 @@ router.post(
     } catch (e) {
       next(e);
     }
-  }
+  },
 );
 
 /** Driver: cancel an accepted ride before it starts (accepted only). */
@@ -1088,7 +1166,9 @@ router.post(
   async (req, res, next) => {
     try {
       const { rideId } = req.body;
-      const reason = String(req.body.reason || "").trim().slice(0, 300);
+      const reason = String(req.body.reason || "")
+        .trim()
+        .slice(0, 300);
       const updated = await Ride.findOneAndUpdate(
         {
           _id: rideId,
@@ -1107,7 +1187,7 @@ router.post(
             preassignedFare: null,
           },
         },
-        { new: true }
+        { new: true },
       );
       if (!updated) {
         const ride = await Ride.findById(rideId);
@@ -1126,7 +1206,7 @@ router.post(
     } catch (e) {
       next(e);
     }
-  }
+  },
 );
 
 router.post("/start", roleRequired("driver"), requireApprovedDriver, ...rideIdValidators, async (req, res, next) => {
@@ -1135,7 +1215,7 @@ router.post("/start", roleRequired("driver"), requireApprovedDriver, ...rideIdVa
     const updated = await Ride.findOneAndUpdate(
       { _id: rideId, driverId: req.userId, status: { $in: ["accepted", "passenger_onboard"] } },
       { $set: { status: "ongoing", startedAt: new Date() } },
-      { new: true }
+      { new: true },
     );
     if (!updated) {
       const ride = await Ride.findById(rideId);
@@ -1166,7 +1246,7 @@ router.post("/end", roleRequired("driver"), requireApprovedDriver, ...rideIdVali
     const updated = await Ride.findOneAndUpdate(
       { _id: rideId, driverId: req.userId, status: "ongoing" },
       { $set: { status: "completed", completedAt: new Date() } },
-      { new: true }
+      { new: true },
     );
 
     if (!updated) {
@@ -1184,9 +1264,7 @@ router.post("/end", roleRequired("driver"), requireApprovedDriver, ...rideIdVali
 
     const agreed = updated.agreedFare != null ? Number(updated.agreedFare) : null;
     updated.fare =
-      agreed != null && !Number.isNaN(agreed)
-        ? agreed
-        : Number(updated.passengerMinFare ?? updated.estimatedFare) || 0;
+      agreed != null && !Number.isNaN(agreed) ? agreed : Number(updated.passengerMinFare ?? updated.estimatedFare) || 0;
     await updated.save();
 
     try {
@@ -1229,7 +1307,9 @@ router.post(
   async (req, res, next) => {
     try {
       const { rideId } = req.body;
-      const reason = String(req.body.reason || "").trim().slice(0, 300);
+      const reason = String(req.body.reason || "")
+        .trim()
+        .slice(0, 300);
       const updated = await Ride.findOneAndUpdate(
         {
           _id: rideId,
@@ -1248,7 +1328,7 @@ router.post(
             preassignedFare: null,
           },
         },
-        { new: true }
+        { new: true },
       );
       if (!updated) {
         const ride = await Ride.findById(rideId);
@@ -1263,13 +1343,24 @@ router.post(
       refundPassengerForRide(req.userId, updated._id, updated.agreedFare || updated.estimatedFare).catch(() => {});
       const populated = await populatedRideById(updated._id);
       notifyRideCancelled(populated, req.userId, reason).catch(() => {});
-      logAction({ req, action: "Ride cancelled by passenger (V1)", file: "routes/rides.js:cancel_v1", extra: { rideId, reason } });
+      logAction({
+        req,
+        action: "Ride cancelled by passenger (V1)",
+        file: "routes/rides.js:cancel_v1",
+        extra: { rideId, reason },
+      });
       return res.json({ ride: populated });
     } catch (e) {
-      logAction({ req, action: "Ride cancel (V1) failed", file: "routes/rides.js:cancel_v1", error: e, extra: { rideId: req.body?.rideId } });
+      logAction({
+        req,
+        action: "Ride cancel (V1) failed",
+        file: "routes/rides.js:cancel_v1",
+        error: e,
+        extra: { rideId: req.body?.rideId },
+      });
       next(e);
     }
-  }
+  },
 );
 
 /** Passenger: rate driver after completed ride (once) */
@@ -1303,8 +1394,67 @@ router.post(
     } catch (e) {
       next(e);
     }
-  }
+  },
 );
+
+/** Driver: rate passenger after completed ride (once) */
+router.post(
+  "/rate-passenger",
+  roleRequired("driver"),
+  validate(rateRideSchema),
+  docIdBody("rideId"),
+  body("rating").isInt({ min: 1, max: 5 }).withMessage("Rating 1–5"),
+  body("review").optional().isString().isLength({ max: 300 }),
+  validateRequest,
+  async (req, res, next) => {
+    try {
+      const { rideId, rating, review } = req.body;
+      const ride = await Ride.findById(rideId);
+      if (!ride || String(ride.driverId) !== String(req.userId)) {
+        throw new AppError("Not found", 404);
+      }
+      if (ride.status !== "completed") {
+        throw new AppError("Ride not completed", 400);
+      }
+      if (ride.driverRating != null) {
+        throw new AppError("Already rated", 400);
+      }
+      ride.driverRating = Number(rating);
+      ride.driverReview = typeof review === "string" ? review.slice(0, 300) : "";
+      await ride.save();
+      await applyPassengerRatingFromRide(ride);
+      const populated = await populatedRideById(ride._id);
+      return res.json({ ride: populated });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+/** Passenger: ratings given by drivers */
+router.get("/ratings/given", roleRequired("passenger"), async (req, res, next) => {
+  try {
+    const rides = await Ride.find({ passengerId: req.userId, status: "completed" })
+      .sort({ updatedAt: -1 })
+      .limit(60)
+      .populate("driverId", "name profileImageUrl");
+    const ratings = rides
+      .filter((r) => r.driverRating != null)
+      .map((r) => {
+        const o = r.toJSON ? r.toJSON() : r;
+        return {
+          rideId: o._id,
+          rating: o.driverRating,
+          review: o.driverReview || "",
+          completedAt: o.completedAt || o.updatedAt,
+          driver: o.driverId,
+        };
+      });
+    return res.json({ ratings, summary: { averageRating: null, ratingCount: ratings.length } });
+  } catch (e) {
+    next(e);
+  }
+});
 
 /** Driver: ratings received from passengers */
 router.get("/ratings/received", roleRequired("driver"), async (req, res, next) => {
@@ -1349,7 +1499,7 @@ router.get(
       const user = await User.findById(req.userId);
       if (!user) throw new AppError("User not found", 401);
       const filter = {};
-      const mode = user.role === "admin" ? "admin" : (user.active_role || user.role || "passenger");
+      const mode = user.role === "admin" ? "admin" : user.active_role || user.role || "passenger";
       if (mode === "passenger") filter.passengerId = req.userId;
       else if (mode === "driver") filter.driverId = req.userId;
       else if (mode !== "admin") throw new AppError("Forbidden", 403);
@@ -1372,7 +1522,7 @@ router.get(
     } catch (e) {
       next(e);
     }
-  }
+  },
 );
 
 router.get(
@@ -1390,7 +1540,7 @@ router.get(
     } catch (e) {
       next(e);
     }
-  }
+  },
 );
 
 router.post(
@@ -1416,8 +1566,7 @@ router.post(
       }
       const messages = await getMessagesByRideId(req.params.rideId, { limit: 1 });
       const populated = messages.length > 0 ? messages[messages.length - 1] : { _id: result._id };
-      const recipientId =
-        String(req.userId) === String(ride.passengerId) ? ride.driverId : ride.passengerId;
+      const recipientId = String(req.userId) === String(ride.passengerId) ? ride.driverId : ride.passengerId;
       if (recipientId) {
         const senderName = populated?.senderId?.name || "";
         notifyNewMessage(req.params.rideId, req.userId, senderName, text, recipientId).catch(() => {});
@@ -1426,46 +1575,39 @@ router.post(
     } catch (e) {
       next(e);
     }
-  }
+  },
 );
 
-router.get(
-  "/:rideId",
-  docIdParam("rideId"),
-  validateRequest,
-  async (req, res, next) => {
-    try {
-      const ride = await Ride.findById(req.params.rideId).populate(ridePopulate);
-      if (!ride) throw new AppError("Not found", 404);
-      const uid = req.userId.toString();
-      const isPassenger = ride.passengerId?._id?.toString() === uid;
-      const isAssignedDriver = ride.driverId?._id?.toString() === uid;
-      const propDriverId =
-        ride.driverProposal?.driverId?._id?.toString() || ride.driverProposal?.driverId?.toString();
-      const isProposingDriver = propDriverId === uid;
-      const preId =
-        ride.preassignedDriverId?._id?.toString() || ride.preassignedDriverId?.toString();
-      const isPreassignedDriver = ride.awaitingDriverConfirm && preId === uid;
-      const isDriver = isAssignedDriver || isProposingDriver || isPreassignedDriver;
-      const user = await User.findById(req.userId);
-      const isAvailablePending =
-        user?.active_role === "driver" &&
-        ride.status === "pending" &&
-        !ride.driverId &&
-        String(ride.vehicleType || "") === String(user?.vehicleType || "");
-      if (!isPassenger && !isDriver && !isAvailablePending && user?.role !== "admin") {
-        throw new AppError("Forbidden", 403);
-      }
-      const row = ride?.toObject ? ride.toObject() : ride;
-      if (row.passengerId?._id || row.passengerId) {
-        const pid = row.passengerId?._id || row.passengerId;
-        row.passengerStats = await getPassengerPublicStats(pid);
-      }
-      return res.json({ ride: row });
-    } catch (e) {
-      next(e);
+router.get("/:rideId", docIdParam("rideId"), validateRequest, async (req, res, next) => {
+  try {
+    const ride = await Ride.findById(req.params.rideId).populate(ridePopulate);
+    if (!ride) throw new AppError("Not found", 404);
+    const uid = req.userId.toString();
+    const isPassenger = ride.passengerId?._id?.toString() === uid;
+    const isAssignedDriver = ride.driverId?._id?.toString() === uid;
+    const propDriverId = ride.driverProposal?.driverId?._id?.toString() || ride.driverProposal?.driverId?.toString();
+    const isProposingDriver = propDriverId === uid;
+    const preId = ride.preassignedDriverId?._id?.toString() || ride.preassignedDriverId?.toString();
+    const isPreassignedDriver = ride.awaitingDriverConfirm && preId === uid;
+    const isDriver = isAssignedDriver || isProposingDriver || isPreassignedDriver;
+    const user = await User.findById(req.userId);
+    const isAvailablePending =
+      user?.active_role === "driver" &&
+      ride.status === "pending" &&
+      !ride.driverId &&
+      String(ride.vehicleType || "") === String(user?.vehicleType || "");
+    if (!isPassenger && !isDriver && !isAvailablePending && user?.role !== "admin") {
+      throw new AppError("Forbidden", 403);
     }
+    const row = ride?.toObject ? ride.toObject() : ride;
+    if (row.passengerId?._id || row.passengerId) {
+      const pid = row.passengerId?._id || row.passengerId;
+      row.passengerStats = await getPassengerPublicStats(pid);
+    }
+    return res.json({ ride: row });
+  } catch (e) {
+    next(e);
   }
-);
+});
 
 export default router;

@@ -26,8 +26,7 @@ export async function simulateDriverMovement() {
     const ride = rides.find((r) => r.status === "ongoing") || rides[0];
     let next = { ...driver.location };
     if (ride) {
-      const target =
-        ride.status === "ongoing" ? ride.destinationLocation : ride.pickupLocation;
+      const target = ride.status === "ongoing" ? ride.destinationLocation : ride.pickupLocation;
       next = stepToward(driver.location.lat, driver.location.lng, target.lat, target.lng, 0.15);
       if (distSq(next, target) < 1e-8) {
         next = { lat: target.lat, lng: target.lng };

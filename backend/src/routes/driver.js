@@ -2,6 +2,7 @@ import { Router } from "express";
 import { body } from "express-validator";
 import { User } from "../models/User.js";
 import { Ride } from "../models/Ride.js";
+import { DriverBonus } from "../models/DriverBonus.js";
 import { DriverProfile } from "../models/DriverProfile.js";
 import { authRequired, blockCheck } from "../middleware/auth.js";
 import { validateRequest } from "../middleware/validateRequest.js";
@@ -9,9 +10,12 @@ import { validate } from "../middleware/validate.js";
 import { AppError } from "../errors/AppError.js";
 import { newDocId } from "../mongo/odm.js";
 import { requireApprovedDriver } from "../middleware/driverGate.js";
+import { locationLimiter } from "../middleware/rateLimiters.js";
 import { driverLocationSchema } from "../schemas/driver.schemas.js";
 import { getDriverDashboard } from "../services/driverDashboard.js";
+import { haversineKm } from "../utils/geo.js";
 import { logAction } from "../utils/logger.js";
+import { nativeCount, nativeAggregate, nativeFind, nativeFindOne } from "../mongo/nativeQuery.js";
 
 const router = Router();
 
@@ -75,8 +79,16 @@ router.get("/dashboard", async (req, res, next) => {
 
 router.get("/earnings-summary", async (req, res, next) => {
   try {
-    const user = await User.findById(req.userId).lean();
-    const prof = await DriverProfile.findOne({ userId: req.userId }).lean();
+    const [user, prof, completedRides, activeCount] = await Promise.all([
+      nativeFindOne("users", { _id: req.userId }, { projection: { driver_application_status: 1 } }),
+      nativeFindOne("driver_profiles", { userId: req.userId }),
+      nativeFind(
+        "rides",
+        { driverId: req.userId, status: "completed" },
+        { sort: { completedAt: -1 }, limit: 500, projection: { agreedFare: 1, estimatedFare: 1, fare: 1, passengerRating: 1 } },
+      ),
+      nativeCount("rides", { driverId: req.userId, status: { $in: ["accepted", "ongoing"] } }),
+    ]);
     const approved = user?.driver_application_status === "approved" && prof?.status === "approved";
     if (!approved) {
       return res.json({
@@ -88,26 +100,18 @@ router.get("/earnings-summary", async (req, res, next) => {
         sessionEarnings: 0,
       });
     }
-    const rides = await Ride.find({ driverId: req.userId, status: "completed" })
-      .sort({ completedAt: -1, updatedAt: -1 })
-      .limit(500)
-      .lean();
     let totalEarnings = 0;
     let rated = 0;
     let ratingSum = 0;
-    for (const r of rides) {
-      totalEarnings += Number(r.agreedFare ?? r.estimatedFare ?? 0) || 0;
+    for (const r of completedRides) {
+      totalEarnings += Number(r.agreedFare ?? r.estimatedFare ?? r.fare ?? 0) || 0;
       if (r.passengerRating != null) {
-        rated += 1;
+        rated++;
         ratingSum += Number(r.passengerRating) || 0;
       }
     }
-    const activeCount = await Ride.countDocuments({
-      driverId: req.userId,
-      status: { $in: ["accepted", "ongoing"] },
-    });
     return res.json({
-      completedTrips: rides.length,
+      completedTrips: completedRides.length,
       totalEarnings: Math.round(totalEarnings * 100) / 100,
       averageRating: rated ? Math.round((ratingSum / rated) * 10) / 10 : null,
       ratedTrips: rated,
@@ -175,13 +179,18 @@ router.post(
       prof.cars.push(car);
       if (!prof.selectedCarId) prof.selectedCarId = car._id;
       await prof.save();
-      logAction({ req, action: "Car added", file: "routes/driver.js:cars_add", extra: { brand: car.brand, model: car.model, plateNumber: car.plateNumber } });
+      logAction({
+        req,
+        action: "Car added",
+        file: "routes/driver.js:cars_add",
+        extra: { brand: car.brand, model: car.model, plateNumber: car.plateNumber },
+      });
       return res.status(201).json({ profile: prof.toJSON() });
     } catch (e) {
       logAction({ req, action: "Car add failed", file: "routes/driver.js:cars_add", error: e });
       next(e);
     }
-  }
+  },
 );
 
 router.patch(
@@ -215,7 +224,7 @@ router.patch(
       logAction({ req, action: "Car update failed", file: "routes/driver.js:cars_update", error: e });
       next(e);
     }
-  }
+  },
 );
 
 router.delete("/cars/:carId", async (req, res, next) => {
@@ -266,6 +275,7 @@ router.patch("/cars/:carId/set-active", async (req, res, next) => {
 router.post(
   "/location-update",
   requireApprovedDriver,
+  locationLimiter,
   validate(driverLocationSchema),
   body("lat").isFloat({ min: -90, max: 90 }),
   body("lng").isFloat({ min: -180, max: 180 }),
@@ -276,15 +286,214 @@ router.post(
       const user = await User.findById(req.userId);
       if (!user) throw new AppError("Not found", 404);
       assertNotAdmin(user);
-      user.location = { lat: Number(lat), lng: Number(lng) };
+      const existing = user.location;
+      const newLat = Number(lat);
+      const newLng = Number(lng);
+      if (
+        existing &&
+        Number.isFinite(existing.lat) &&
+        Number.isFinite(existing.lng) &&
+        haversineKm(existing.lat, existing.lng, newLat, newLng) * 1000 < 10
+      ) {
+        return res.json({ location: { lat: newLat, lng: newLng } });
+      }
+      user.location = { lat: newLat, lng: newLng };
       await user.save();
-      logAction({ req, action: "Location updated", file: "routes/driver.js:location_update", extra: { lat: Number(lat), lng: Number(lng) } });
+      logAction({
+        req,
+        action: "Location updated",
+        file: "routes/driver.js:location_update",
+        extra: { lat: newLat, lng: newLng },
+      });
       return res.json({ location: user.location });
     } catch (e) {
       logAction({ req, action: "Location update failed", file: "routes/driver.js:location_update", error: e });
       next(e);
     }
-  }
+  },
 );
+
+// ─── Driver Bonus ────────────────────────────────────────────────────────────
+
+router.get("/bonuses", async (req, res, next) => {
+  try {
+    const driverId = req.userId;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const weekStart = new Date(today);
+    weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+
+    const [completedToday, completedThisWeek, bonusRecords] = await Promise.all([
+      nativeCount("rides", { driverId, status: "completed", completedAt: { $gte: today } }),
+      nativeCount("rides", { driverId, status: "completed", completedAt: { $gte: weekStart } }),
+      nativeFind("driver_bonuses", { driverId }, { sort: { createdAt: -1 }, limit: 20 }),
+    ]);
+
+    const streakThreshold = 5;
+    const thirtyDaysAgo = new Date(today);
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const streakData = await nativeAggregate("rides", [
+      { $match: { driverId, status: "completed", completedAt: { $gte: thirtyDaysAgo, $lte: today } } },
+      { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$completed_at" } }, count: { $sum: 1 } } },
+      { $sort: { _id: -1 } },
+    ]);
+    const dayCounts = new Map(streakData.map((d) => [d._id, d.count]));
+    let currentStreak = 0;
+    const check = new Date(today);
+    for (let i = 0; i < 30; i++) {
+      const key = check.toISOString().slice(0, 10);
+      if ((dayCounts.get(key) || 0) >= streakThreshold) {
+        currentStreak++;
+        check.setDate(check.getDate() - 1);
+      } else break;
+    }
+
+    const bonuses = [];
+    if (completedToday >= 5)
+      bonuses.push({
+        type: "daily_5",
+        label: "5 trips today",
+        amount: 15,
+        achieved: true,
+        progress: Math.min(completedToday, 10),
+      });
+    else
+      bonuses.push({ type: "daily_5", label: "5 trips today", amount: 15, achieved: false, progress: completedToday, target: 5 });
+    if (completedThisWeek >= 20)
+      bonuses.push({
+        type: "weekly_20",
+        label: "20 trips this week",
+        amount: 50,
+        achieved: true,
+        progress: Math.min(completedThisWeek, 30),
+      });
+    else
+      bonuses.push({
+        type: "weekly_20",
+        label: "20 trips this week",
+        amount: 50,
+        achieved: false,
+        progress: completedThisWeek,
+        target: 20,
+      });
+    if (currentStreak >= 3)
+      bonuses.push({
+        type: "streak_3",
+        label: `${currentStreak}-day streak`,
+        amount: 30,
+        achieved: true,
+        progress: currentStreak,
+        target: 3,
+      });
+    else if (currentStreak > 0)
+      bonuses.push({ type: "streak_3", label: "3-day streak", amount: 30, achieved: false, progress: currentStreak, target: 3 });
+    else bonuses.push({ type: "streak_3", label: "3-day streak", amount: 30, achieved: false, progress: 0, target: 3 });
+
+    return res.json({
+      todayTrips: completedToday,
+      weekTrips: completedThisWeek,
+      currentStreak,
+      streakGoal: streakThreshold,
+      bonuses,
+      history: bonusRecords,
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// ─── Driver Heatmap ──────────────────────────────────────────────────────────
+
+router.get("/heatmap", async (req, res, next) => {
+  try {
+    const now = new Date();
+    const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+    const zones = await nativeAggregate("rides", [
+      {
+        $match: {
+          status: { $in: ["completed", "accepted", "ongoing"] },
+          updatedAt: { $gte: twoHoursAgo },
+          "pickupLocation.lat": { $ne: null },
+          "pickupLocation.lng": { $ne: null },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            lat: { $round: [{ $toDouble: "$pickup_location.lat" }, 1] },
+            lng: { $round: [{ $toDouble: "$pickup_location.lng" }, 1] },
+          },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { count: -1 } },
+      { $limit: 50 },
+    ]);
+
+    const zoneList = zones.map((z) => ({ lat: z._id.lat, lng: z._id.lng, count: z.count }));
+
+    return res.json({
+      generatedAt: now.toISOString(),
+      periodMinutes: 120,
+      totalRides: zoneList.reduce((s, z) => s + z.count, 0),
+      zones: zoneList,
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// ─── Break Mode ──────────────────────────────────────────────────────────────
+
+router.get("/break-mode", async (req, res, next) => {
+  try {
+    const user = await User.findById(req.userId).select("breakModeUntil isOnline").lean();
+    if (!user) throw new AppError("Not found", 404);
+    const now = new Date();
+    const onBreak = !!user.breakModeUntil && new Date(user.breakModeUntil) > now;
+    return res.json({
+      onBreak,
+      breakModeUntil: user.breakModeUntil || null,
+      isOnline: user.isOnline,
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post("/break-mode", async (req, res, next) => {
+  try {
+    const { durationMinutes } = req.body;
+    const user = await User.findById(req.userId);
+    if (!user) throw new AppError("Not found", 404);
+    assertNotAdmin(user);
+
+    const now = new Date();
+    const currentlyOnBreak = !!user.breakModeUntil && new Date(user.breakModeUntil) > now;
+
+    if (currentlyOnBreak) {
+      user.breakModeUntil = null;
+      user.isOnline = true;
+      await user.save();
+      logAction({ req, action: "Break mode ended", file: "routes/driver.js:break_mode_end" });
+      return res.json({ onBreak: false, breakModeUntil: null, isOnline: true });
+    }
+
+    const mins = Math.max(5, Math.min(120, Number(durationMinutes) || 30));
+    const until = new Date(now.getTime() + mins * 60 * 1000);
+    user.breakModeUntil = until;
+    user.isOnline = false;
+    await user.save();
+    logAction({
+      req,
+      action: "Break mode started",
+      file: "routes/driver.js:break_mode_start",
+      extra: { durationMinutes: mins, until: until.toISOString() },
+    });
+    return res.json({ onBreak: true, breakModeUntil: until.toISOString(), isOnline: false, durationMinutes: mins });
+  } catch (e) {
+    next(e);
+  }
+});
 
 export default router;

@@ -4,7 +4,7 @@ import '../../core/theme/auth_flow.dart';
 import '../../core/theme/weret_tokens.dart';
 import 'custom_button.dart';
 
-/// One registration path (passenger or driver) with account + phone options.
+/// One registration path (passenger or driver) with email option.
 class AuthRolePathCard extends StatelessWidget {
   const AuthRolePathCard({
     super.key,
@@ -13,7 +13,6 @@ class AuthRolePathCard extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onEmailRegister,
-    required this.onPhoneRegister,
   });
 
   final AuthFlow flow;
@@ -21,7 +20,6 @@ class AuthRolePathCard extends StatelessWidget {
   final String title;
   final String subtitle;
   final VoidCallback onEmailRegister;
-  final VoidCallback onPhoneRegister;
 
   @override
   Widget build(BuildContext context) {
@@ -69,13 +67,6 @@ class AuthRolePathCard extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           CustomButton(title: flow == AuthFlow.driver ? 'registerDriverCreate'.tr() : 'registerPassengerCreate'.tr(), onPressed: onEmailRegister),
-          const SizedBox(height: 8),
-          CustomButton(
-            title: flow == AuthFlow.driver ? 'registerDriverPhone'.tr() : 'registerPassengerPhone'.tr(),
-            variant: 'outline',
-            icon: Icons.phone_outlined,
-            onPressed: onPhoneRegister,
-          ),
         ],
       ),
     );

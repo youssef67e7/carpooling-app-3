@@ -74,11 +74,7 @@ export async function seedVehicles() {
   await Vehicle.updateMany({ typeKey: { $nin: keys } }, { $set: { active: false } });
 
   for (const v of DEFAULTS) {
-    await Vehicle.findOneAndUpdate(
-      { typeKey: v.typeKey },
-      { $set: { ...v, active: true } },
-      { upsert: true, new: true }
-    );
+    await Vehicle.findOneAndUpdate({ typeKey: v.typeKey }, { $set: { ...v, active: true } }, { upsert: true, new: true });
   }
   console.log("Vehicle types seeded (shipping, delivery, travel, motorcycle, car_standard, car_comfort)");
 }

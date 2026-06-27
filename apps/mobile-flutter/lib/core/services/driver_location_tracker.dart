@@ -25,18 +25,39 @@ class DriverLocationTracker {
     _sub = null;
   }
 
+  LocationSettings get _settings {
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      return AndroidSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 12,
+        foregroundNotificationConfig: const ForegroundNotificationConfig(
+          notificationText: 'Driver location tracking active',
+          notificationTitle: 'WERET',
+          enableWakeLock: true,
+        ),
+      );
+    }
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      return AppleSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 12,
+        allowBackgroundLocationUpdates: true,
+        showBackgroundLocationIndicator: true,
+      );
+    }
+    return const LocationSettings(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: 12,
+    );
+  }
+
   Future<void> _startStream() async {
     try {
       var perm = await Geolocator.checkPermission();
       if (perm == LocationPermission.denied) perm = await Geolocator.requestPermission();
       if (perm == LocationPermission.denied || perm == LocationPermission.deniedForever) return;
 
-      const settings = LocationSettings(
-        accuracy: LocationAccuracy.high,
-        distanceFilter: 12,
-      );
-
-      _sub = Geolocator.getPositionStream(locationSettings: settings).listen(
+      _sub = Geolocator.getPositionStream(locationSettings: _settings).listen(
         (pos) async {
           _ref.read(driverGpsProvider.notifier).state = LatLng(pos.latitude, pos.longitude);
           await _ref.read(rideProvider.notifier).updateDriverLocation(pos.latitude, pos.longitude);

@@ -21,6 +21,9 @@ class RideState {
     this.adminStats,
     this.driverRatings = const [],
     this.driverRatingSummary,
+    this.passengerRatings = const [],
+    this.passengerRatingSummary,
+    this.ratingsLoading = false,
     this.driverAssignedCount = 0,
     this.driverMaxConcurrent = kMaxDriverConcurrentRides,
     this.driverCanTakeMore = true,
@@ -38,6 +41,9 @@ class RideState {
   final Map<String, dynamic>? adminStats;
   final List<Map<String, dynamic>> driverRatings;
   final Map<String, dynamic>? driverRatingSummary;
+  final List<Map<String, dynamic>> passengerRatings;
+  final Map<String, dynamic>? passengerRatingSummary;
+  final bool ratingsLoading;
   final int driverAssignedCount;
   final int driverMaxConcurrent;
   final bool driverCanTakeMore;
@@ -57,6 +63,9 @@ class RideState {
     Map<String, dynamic>? adminStats,
     List<Map<String, dynamic>>? driverRatings,
     Map<String, dynamic>? driverRatingSummary,
+    List<Map<String, dynamic>>? passengerRatings,
+    Map<String, dynamic>? passengerRatingSummary,
+    bool? ratingsLoading,
     int? driverAssignedCount,
     int? driverMaxConcurrent,
     bool? driverCanTakeMore,
@@ -75,6 +84,9 @@ class RideState {
       adminStats: adminStats ?? this.adminStats,
       driverRatings: driverRatings ?? this.driverRatings,
       driverRatingSummary: driverRatingSummary ?? this.driverRatingSummary,
+      passengerRatings: passengerRatings ?? this.passengerRatings,
+      passengerRatingSummary: passengerRatingSummary ?? this.passengerRatingSummary,
+      ratingsLoading: ratingsLoading ?? this.ratingsLoading,
       driverAssignedCount: driverAssignedCount ?? this.driverAssignedCount,
       driverMaxConcurrent: driverMaxConcurrent ?? this.driverMaxConcurrent,
       driverCanTakeMore: driverCanTakeMore ?? this.driverCanTakeMore,
@@ -364,6 +376,12 @@ class RideNotifier extends StateNotifier<RideState> {
     await fetchHistory();
   }
 
+  Future<void> ratePassenger(String rideId, int rating, {String? review}) async {
+    final api = await _api;
+    await api.postJson(ApiEndpoints.ridesRatePassenger, {'rideId': rideId, 'rating': rating, 'review': review ?? ''});
+    await fetchHistory();
+  }
+
   Future<void> fetchDriverRatings() async {
     final api = await _api;
     final data = await api.getJson(ApiEndpoints.ridesRatingsReceived);
@@ -371,6 +389,21 @@ class RideNotifier extends StateNotifier<RideState> {
       driverRatings: (data['ratings'] as List? ?? []).map((e) => Map<String, dynamic>.from(e as Map)).toList(),
       driverRatingSummary: data['summary'] != null ? Map<String, dynamic>.from(data['summary'] as Map) : null,
     );
+  }
+
+  Future<void> fetchPassengerRatings() async {
+    state = state.copyWith(ratingsLoading: true);
+    try {
+      final api = await _api;
+      final data = await api.getJson(ApiEndpoints.ridesRatingsGiven);
+      state = state.copyWith(
+        passengerRatings: (data['ratings'] as List? ?? []).map((e) => Map<String, dynamic>.from(e as Map)).toList(),
+        passengerRatingSummary: data['summary'] != null ? Map<String, dynamic>.from(data['summary'] as Map) : null,
+        ratingsLoading: false,
+      );
+    } catch (e) {
+      state = state.copyWith(ratingsLoading: false, error: '$e');
+    }
   }
 
   Future<void> toggleDriverOnline() async {

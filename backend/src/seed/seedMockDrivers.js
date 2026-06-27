@@ -31,7 +31,7 @@ export async function seedMockDrivers() {
     } else {
       await User.updateOne(
         { email: d.email },
-        { $set: { location: { lat: d.lat, lng: d.lng }, vehicleType: d.vehicleType, isOnline: true } }
+        { $set: { location: { lat: d.lat, lng: d.lng }, vehicleType: d.vehicleType, isOnline: true } },
       );
     }
   }

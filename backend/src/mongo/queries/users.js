@@ -59,7 +59,7 @@ export async function updateById(userId, updateData) {
     .findOneAndUpdate(
       { _id: new ObjectId(userId) },
       { $set: updateData },
-      { returnDocument: "after", projection: { password_hash: 0 } }
+      { returnDocument: "after", projection: { password_hash: 0 } },
     );
   return result;
 }

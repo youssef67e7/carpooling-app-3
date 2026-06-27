@@ -54,7 +54,12 @@ router.get("/me", async (req, res, next) => {
       DriverDocuments.findOne({ userId: req.userId }).lean(),
     ]);
     const verification = verificationProgress(user, profile);
-    return res.json({ profile, documents: docs, verification, user: user ? { driver_application_status: user.driver_application_status } : null });
+    return res.json({
+      profile,
+      documents: docs,
+      verification,
+      user: user ? { driver_application_status: user.driver_application_status } : null,
+    });
   } catch (e) {
     next(e);
   }
@@ -69,11 +74,15 @@ router.post(
 
   body("criminalRecordFrontUrl").isString().trim().isLength({ min: 4, max: 1000 }),
   body("criminalRecordBackUrl").isString().trim().isLength({ min: 4, max: 1000 }),
-  body("nationalIdNumber").custom((v) => isValidIdNumber(v)).withMessage("Invalid national id number"),
+  body("nationalIdNumber")
+    .custom((v) => isValidIdNumber(v))
+    .withMessage("Invalid national id number"),
 
   body("licenseImageUrl").isString().trim().isLength({ min: 4, max: 1000 }),
   body("licenseNumber").trim().notEmpty().isLength({ max: 64 }),
-  body("licenseExpiry").custom((v) => !!parseDateOrNull(v)).withMessage("Invalid expiry date"),
+  body("licenseExpiry")
+    .custom((v) => !!parseDateOrNull(v))
+    .withMessage("Invalid expiry date"),
 
   // Car (single) OR cars[] (multi)
   body("carImageUrl").optional({ values: "falsy" }).isString().trim().isLength({ min: 4, max: 1000 }),
@@ -117,10 +126,7 @@ router.post(
         req.body.carImageUrl,
       ]);
       if (Array.isArray(req.body.cars)) {
-        assertOwnedUploadUrls(
-          uid,
-          req.body.cars.map((c) => c?.imageUrl).filter(Boolean)
-        );
+        assertOwnedUploadUrls(uid, req.body.cars.map((c) => c?.imageUrl).filter(Boolean));
       }
 
       u.name = String(req.body.fullName).trim().slice(0, 80);
@@ -149,7 +155,7 @@ router.post(
             nationalIdNumber: String(req.body.nationalIdNumber).trim().slice(0, 32),
           },
         },
-        { upsert: true }
+        { upsert: true },
       );
 
       const exp = parseDateOrNull(req.body.licenseExpiry);
@@ -163,11 +169,21 @@ router.post(
         if (!seats) throw new AppError("Invalid seats", 400);
         cars = [
           {
-            imageUrl: String(req.body.carImageUrl || "").trim().slice(0, 500),
-            brand: String(req.body.carBrand || "").trim().slice(0, 80),
-            model: String(req.body.carModel || "").trim().slice(0, 80),
-            color: String(req.body.carColor || "").trim().slice(0, 40),
-            plateNumber: String(req.body.carPlateNumber || "").trim().slice(0, 24),
+            imageUrl: String(req.body.carImageUrl || "")
+              .trim()
+              .slice(0, 500),
+            brand: String(req.body.carBrand || "")
+              .trim()
+              .slice(0, 80),
+            model: String(req.body.carModel || "")
+              .trim()
+              .slice(0, 80),
+            color: String(req.body.carColor || "")
+              .trim()
+              .slice(0, 40),
+            plateNumber: String(req.body.carPlateNumber || "")
+              .trim()
+              .slice(0, 24),
             seats,
             carCategory: "sedan",
           },
@@ -233,7 +249,7 @@ router.post(
     } catch (e) {
       next(e);
     }
-  }
+  },
 );
 
 export default router;

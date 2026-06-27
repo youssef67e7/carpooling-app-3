@@ -36,17 +36,18 @@ export async function blockCheck(req, res, next) {
     if (!user) return res.status(401).json({ success: false, error: { code: "USER_NOT_FOUND", message: "User not found" } });
     const now = new Date();
     if (user.is_blocked && user.blocked_until && user.blocked_until <= now) {
-      await User.updateOne(
-        { _id: user._id },
-        { $set: { is_blocked: false, blocked_until: null, block_reason: "" } }
-      );
+      await User.updateOne({ _id: user._id }, { $set: { is_blocked: false, blocked_until: null, block_reason: "" } });
       return next();
     }
     if (user.is_blocked) {
       if (user.blocked_until && user.blocked_until > now) {
         return res.status(403).json({
           success: false,
-          error: { code: "ACCOUNT_SUSPENDED", message: "Account suspended", details: { until: user.blocked_until.toISOString() } },
+          error: {
+            code: "ACCOUNT_SUSPENDED",
+            message: "Account suspended",
+            details: { until: user.blocked_until.toISOString() },
+          },
         });
       }
       return res.status(403).json({ success: false, error: { code: "ACCOUNT_BLOCKED", message: "Account blocked" } });
@@ -54,6 +55,45 @@ export async function blockCheck(req, res, next) {
     next();
   } catch (e) {
     next(e);
+  }
+}
+
+/**
+ * Authenticate and attach full user object to req.user.
+ * Combines resolveAuth + user fetch + blockCheck.
+ */
+export async function authenticate(req, res, next) {
+  try {
+    const header = req.headers.authorization || "";
+    const token = header.startsWith("Bearer ") ? header.slice(7).trim() : null;
+    if (!token) {
+      return res.status(401).json({ success: false, error: { code: "TOKEN_MISSING", message: "Missing token" } });
+    }
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    req.userId = String(payload.sub);
+    const user = await User.findById(req.userId).lean();
+    if (!user) return res.status(401).json({ success: false, error: { code: "USER_NOT_FOUND", message: "User not found" } });
+    const now = new Date();
+    if (user.is_blocked && user.blocked_until && user.blocked_until <= now) {
+      await User.updateOne({ _id: user._id }, { $set: { is_blocked: false, blocked_until: null, block_reason: "" } });
+    } else if (user.is_blocked) {
+      if (user.blocked_until && user.blocked_until > now) {
+        return res
+          .status(403)
+          .json({
+            success: false,
+            error: { code: "ACCOUNT_SUSPENDED", message: "Account suspended", details: { until: user.blocked_until } },
+          });
+      }
+      return res.status(403).json({ success: false, error: { code: "ACCOUNT_BLOCKED", message: "Account blocked" } });
+    }
+    req.user = user;
+    next();
+  } catch (err) {
+    if (err.name === "TokenExpiredError") {
+      return res.status(401).json({ success: false, error: { code: "TOKEN_EXPIRED", message: "Access token expired" } });
+    }
+    return res.status(401).json({ success: false, error: { code: "TOKEN_INVALID", message: "Invalid access token" } });
   }
 }
 

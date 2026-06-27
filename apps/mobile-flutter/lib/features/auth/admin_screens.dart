@@ -1,8 +1,9 @@
-import 'dart:async';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../core/providers/admin_provider.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/theme/weret_tokens.dart';
@@ -14,6 +15,9 @@ import '../../shared/widgets/admin/admin_pulsing_shield.dart';
 import '../../shared/widgets/admin/admin_search_header.dart';
 import '../../shared/widgets/admin/admin_status_badge.dart';
 import '../../shared/widgets/admin_cards.dart';
+
+const _pad = 16.0;
+const _sm = 8.0;
 
 // ─── Dashboard ───────────────────────────────────────────────────────────────
 
@@ -34,6 +38,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   }
 
   Future<void> _loadStats() async {
+    HapticFeedback.mediumImpact();
     await ref.read(adminProvider.notifier).fetchStats();
     if (mounted) setState(() => _lastStatsAt = DateTime.now());
   }
@@ -60,34 +65,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
               SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const WeretLogo.chip(),
-                      const SizedBox(height: 6),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('adminDashboardTitle'.tr(), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 26, letterSpacing: -0.5)),
-                                const SizedBox(height: 6),
-                                Text('adminDashboardSubtitle'.tr(), style: const TextStyle(color: WeretTokens.textSecondary, fontSize: 13, height: 1.4)),
-                              ],
-                            ),
-                          ),
-                          const AdminPulsingShield(size: 44),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: WeretTokens.brand)),
-                    ],
-                  ),
-                ),
+                child: _DashboardHeader(name: name),
               ),
               if (admin.statsLoading && stats.isEmpty)
                 const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator(strokeWidth: 2))))
@@ -107,84 +85,48 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     updatedAt: _lastStatsAt,
                   ),
                 ),
-                SliverToBoxAdapter(
-                  child: SizedBox(
-                    height: 92,
-                    child: ListView(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                      children: [
-                        AdminKpiCard(label: 'totalUsers'.tr(), value: '${stats['totalUsers'] ?? '—'}', icon: Icons.people_alt_outlined),
-                        const SizedBox(width: 10),
-                        AdminKpiCard(label: 'totalRides'.tr(), value: '${stats['totalRides'] ?? '—'}', icon: Icons.route_outlined),
-                        const SizedBox(width: 10),
-                        AdminKpiCard(label: 'driversOnline'.tr(), value: '${stats['driversOnline'] ?? '—'}', icon: Icons.sensors_outlined, tone: AdminKpiTone.green),
-                        const SizedBox(width: 10),
-                        AdminKpiCard(label: 'activeRides'.tr(), value: '${stats['activeRides'] ?? '—'}', icon: Icons.local_taxi_outlined, tone: AdminKpiTone.green),
-                      ],
-                    ),
-                  ),
+                _KpiRow(
+                  items: [
+                    _KpiItem(label: 'totalUsers'.tr(), value: '${stats['totalUsers'] ?? '—'}', icon: Icons.people_alt_outlined),
+                    _KpiItem(label: 'totalRides'.tr(), value: '${stats['totalRides'] ?? '—'}', icon: Icons.route_outlined),
+                    _KpiItem(label: 'driversOnline'.tr(), value: '${stats['driversOnline'] ?? '—'}', icon: Icons.sensors_outlined, tone: AdminKpiTone.green),
+                    _KpiItem(label: 'activeRides'.tr(), value: '${stats['activeRides'] ?? '—'}', icon: Icons.local_taxi_outlined, tone: AdminKpiTone.green),
+                  ],
                 ),
-                SliverToBoxAdapter(
-                  child: SizedBox(
-                    height: 92,
-                    child: ListView(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-                      children: [
-                        AdminKpiCard(label: 'adminCompletedRides'.tr(), value: '${stats['completedRides'] ?? '—'}', icon: Icons.check_circle_outline, tone: AdminKpiTone.gray),
-                        const SizedBox(width: 10),
-                        AdminKpiCard(label: 'adminAvgRating'.tr(), value: '${stats['averageRating'] ?? '—'}', icon: Icons.star_outline),
-                        const SizedBox(width: 10),
-                        AdminKpiCard(label: 'adminTotalRatings'.tr(), value: '${stats['totalRatings'] ?? '—'}', icon: Icons.rate_review_outlined),
-                        const SizedBox(width: 10),
-                        AdminKpiCard(label: 'adminOpenReports'.tr(), value: '$openReports', icon: Icons.flag_outlined, tone: AdminKpiTone.green, alert: openReports > 0),
-                        const SizedBox(width: 10),
-                        AdminKpiCard(label: 'adminPendingDrivers'.tr(), value: '$pendingDrivers', icon: Icons.badge_outlined, alert: pendingDrivers > 0),
-                        const SizedBox(width: 10),
-                        AdminKpiCard(label: 'adminFlaggedTx'.tr(), value: '$flaggedTx', icon: Icons.warning_amber_outlined, tone: AdminKpiTone.gray, alert: flaggedTx > 0),
-                        const SizedBox(width: 10),
-                        AdminKpiCard(label: 'adminTotalDrivers'.tr(), value: '${stats['totalDrivers'] ?? '—'}', icon: Icons.airport_shuttle_outlined, tone: AdminKpiTone.green),
-                      ],
-                    ),
-                  ),
+                _KpiRow(
+                  paddingTop: 10,
+                  items: [
+                    _KpiItem(label: 'adminCompletedRides'.tr(), value: '${stats['completedRides'] ?? '—'}', icon: Icons.check_circle_outline, tone: AdminKpiTone.gray),
+                    _KpiItem(label: 'adminAvgRating'.tr(), value: '${stats['averageRating'] ?? '—'}', icon: Icons.star_outline),
+                    _KpiItem(label: 'adminTotalRatings'.tr(), value: '${stats['totalRatings'] ?? '—'}', icon: Icons.rate_review_outlined),
+                    _KpiItem(label: 'adminOpenReports'.tr(), value: '$openReports', icon: Icons.flag_outlined, tone: AdminKpiTone.green, alert: openReports > 0),
+                    _KpiItem(label: 'adminPendingDrivers'.tr(), value: '$pendingDrivers', icon: Icons.badge_outlined, alert: pendingDrivers > 0),
+                    _KpiItem(label: 'adminFlaggedTx'.tr(), value: '$flaggedTx', icon: Icons.warning_amber_outlined, tone: AdminKpiTone.gray, alert: flaggedTx > 0),
+                    _KpiItem(label: 'adminTotalDrivers'.tr(), value: '${stats['totalDrivers'] ?? '—'}', icon: Icons.airport_shuttle_outlined, tone: AdminKpiTone.green),
+                  ],
                 ),
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
+                    padding: const EdgeInsets.fromLTRB(_pad, 18, _pad, _sm),
                     child: Text('adminStats'.tr(), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
                   ),
                 ),
                 SliverToBoxAdapter(child: AdminRideStatusChart(ridesByStatus: statusMap)),
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
+                    padding: const EdgeInsets.fromLTRB(_pad, 18, _pad, _sm),
                     child: Text('adminCommandDeck'.tr(), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
                   ),
                 ),
-                SliverToBoxAdapter(
-                  child: SizedBox(
-                    height: 118,
-                    child: ListView(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      children: [
-                        AdminQuickChip(icon: Icons.people_outline, label: 'adminUsers'.tr(), badge: pendingDrivers > 0 ? pendingDrivers : null, onTap: () => context.go('/admin/users')),
-                        const SizedBox(width: 10),
-                        AdminQuickChip(icon: Icons.map_outlined, label: 'adminRides'.tr(), badge: _intStat(stats, 'activeRides') > 0 ? _intStat(stats, 'activeRides') : null, onTap: () => context.go('/admin/rides')),
-                        const SizedBox(width: 10),
-                        AdminQuickChip(icon: Icons.flag_outlined, label: 'adminReportsTitle'.tr(), badge: openReports > 0 ? openReports : null, onTap: () => context.push('/admin/more/reports')),
-                        const SizedBox(width: 10),
-                        AdminQuickChip(icon: Icons.receipt_long_outlined, label: 'adminTransactionsTitle'.tr(), badge: flaggedTx > 0 ? flaggedTx : null, onTap: () => context.push('/admin/more/transactions')),
-                        const SizedBox(width: 10),
-                        AdminQuickChip(icon: Icons.list_alt_outlined, label: 'adminAuditTitle'.tr(), onTap: () => context.push('/admin/more/audit')),
-                      ],
-                    ),
-                  ),
+                _QuickChipsRow(
+                  pendingDrivers: pendingDrivers,
+                  activeRides: _intStat(stats, 'activeRides'),
+                  openReports: openReports,
+                  flaggedTx: flaggedTx,
                 ),
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
+                    padding: const EdgeInsets.fromLTRB(_pad, 18, _pad, _sm),
                     child: Text('adminRecentActivity'.tr(), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
                   ),
                 ),
@@ -198,6 +140,129 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
               const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Dashboard extracted widgets ────────────────────────────────────────────
+
+class _DashboardHeader extends StatelessWidget {
+  const _DashboardHeader({required this.name});
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(_pad, 20, _pad, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const WeretLogo.chip(),
+          const SizedBox(height: 6),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('adminDashboardTitle'.tr(), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 26, letterSpacing: -0.5)),
+                    const SizedBox(height: 6),
+                    Text('adminDashboardSubtitle'.tr(), style: const TextStyle(color: WeretTokens.textSecondary, fontSize: 13, height: 1.4)),
+                  ],
+                ),
+              ),
+              const AdminPulsingShield(size: 44),
+            ],
+          ),
+          const SizedBox(height: _sm),
+          Text(name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: WeretTokens.brand)),
+        ],
+      ),
+    );
+  }
+}
+
+class _KpiItem {
+  const _KpiItem({
+    required this.label,
+    required this.value,
+    required this.icon,
+    this.tone = AdminKpiTone.gray,
+    this.alert = false,
+  });
+  final String label;
+  final String value;
+  final IconData icon;
+  final AdminKpiTone tone;
+  final bool alert;
+}
+
+class _KpiRow extends StatelessWidget {
+  const _KpiRow({required this.items, this.paddingTop = _pad});
+  final List<_KpiItem> items;
+  final double paddingTop;
+
+  @override
+  Widget build(BuildContext context) {
+    return SliverToBoxAdapter(
+      child: SizedBox(
+        height: 92,
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          padding: EdgeInsets.fromLTRB(_pad, paddingTop, _pad, 0),
+          children: List.generate(items.length, (i) {
+            final item = items[i];
+            return Padding(
+              padding: EdgeInsets.only(left: i > 0 ? 10 : 0),
+              child: AdminKpiCard(
+                label: item.label,
+                value: item.value,
+                icon: item.icon,
+                tone: item.tone,
+                alert: item.alert,
+              ),
+            );
+          }),
+        ),
+      ),
+    );
+  }
+}
+
+class _QuickChipsRow extends StatelessWidget {
+  const _QuickChipsRow({
+    required this.pendingDrivers,
+    required this.activeRides,
+    required this.openReports,
+    required this.flaggedTx,
+  });
+  final int pendingDrivers;
+  final int activeRides;
+  final int openReports;
+  final int flaggedTx;
+
+  @override
+  Widget build(BuildContext context) {
+    return SliverToBoxAdapter(
+      child: SizedBox(
+        height: 118,
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: _pad),
+          children: [
+            AdminQuickChip(icon: Icons.people_outline, label: 'adminUsers'.tr(), badge: pendingDrivers > 0 ? pendingDrivers : null, onTap: () => context.go('/admin/users')),
+            const SizedBox(width: 10),
+            AdminQuickChip(icon: Icons.map_outlined, label: 'adminRides'.tr(), badge: activeRides > 0 ? activeRides : null, onTap: () => context.go('/admin/rides')),
+            const SizedBox(width: 10),
+            AdminQuickChip(icon: Icons.flag_outlined, label: 'adminReportsTitle'.tr(), badge: openReports > 0 ? openReports : null, onTap: () => context.push('/admin/more/reports')),
+            const SizedBox(width: 10),
+            AdminQuickChip(icon: Icons.receipt_long_outlined, label: 'adminTransactionsTitle'.tr(), badge: flaggedTx > 0 ? flaggedTx : null, onTap: () => context.push('/admin/more/transactions')),
+            const SizedBox(width: 10),
+            AdminQuickChip(icon: Icons.list_alt_outlined, label: 'adminAuditTitle'.tr(), onTap: () => context.push('/admin/more/audit')),
+          ],
         ),
       ),
     );
@@ -565,10 +630,10 @@ class AdminToolsScreen extends ConsumerWidget {
       appBar: AppBar(title: Text('adminToolsTitle'.tr().split('·').last.trim())),
       body: WeretAmbientBackground(
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(_pad),
           children: [
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(_pad),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(18),
                 gradient: LinearGradient(colors: [WeretTokens.brand, WeretTokens.brand.withValues(alpha: 0.82)]),
@@ -585,7 +650,7 @@ class AdminToolsScreen extends ConsumerWidget {
             const SizedBox(height: 14),
             if (stats != null) ...[
               Text('adminStats'.tr(), style: const TextStyle(fontWeight: FontWeight.w800)),
-              const SizedBox(height: 8),
+              const SizedBox(height: _sm),
               _ToolStatRow(label: 'totalUsers'.tr(), value: '${stats['totalUsers'] ?? 0}'),
               _ToolStatRow(label: 'activeRides'.tr(), value: '${stats['activeRides'] ?? 0}'),
               _ToolStatRow(label: 'driversOnline'.tr(), value: '${stats['driversOnline'] ?? 0}'),
@@ -607,7 +672,7 @@ class _ToolStatRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: _sm),
       child: Row(
         children: [
           Expanded(child: Text(label)),
@@ -663,7 +728,7 @@ class WeretAdminListScaffold extends StatelessWidget {
             ),
             if (slice.error != null)
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: _pad, vertical: 4),
                 child: Text(slice.error!, style: const TextStyle(color: WeretTokens.error, fontSize: 12)),
               ),
             Expanded(
@@ -674,7 +739,7 @@ class WeretAdminListScaffold extends StatelessWidget {
                       : RefreshIndicator(
                           onRefresh: () async => onRefresh(),
                           child: ListView.builder(
-                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                            padding: const EdgeInsets.fromLTRB(_pad, _sm, _pad, 0),
                             itemCount: slice.items.length,
                             itemBuilder: itemBuilder,
                           ),

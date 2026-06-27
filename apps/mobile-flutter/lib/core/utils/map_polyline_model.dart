@@ -40,3 +40,11 @@ class WeretMapScene {
   final int? etaMinutes;
   final String? legendKey;
 }
+
+/// A heatmap zone returned from the backend driver heatmap API.
+class HeatmapZone {
+  const HeatmapZone({required this.center, required this.count});
+
+  final LatLng center;
+  final int count;
+}

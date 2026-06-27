@@ -7,7 +7,12 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "hash-admin-password": "node src/scripts/hashAdminPassword.js",
-    "test": "node --test test/**/*.test.js",
+    "test": "node --test test/authIntegration.test.js test/emailOtp.test.js test/fixedAdmins.test.js test/googleAuth.test.js",
+    "test:all": "node --test test/**/*.test.js",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "format": "prettier --check src/",
+    "format:fix": "prettier --write src/",
     "test:smoke": "node scripts/smoke-api.js",
     "migrate:ids": "node src/scripts/migrateObjectIdsToUuid.js",
     "mongo:verify": "node scripts/verify-mongo-crud.js",
@@ -31,5 +36,11 @@
     "nodemailer": "^9.0.1",
     "undici": "^7.0.0",
     "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.6.0",
+    "globals": "^17.7.0",
+    "prettier": "^3.8.5"
   }
 }

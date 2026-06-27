@@ -6,14 +6,18 @@ export const toggleStatusSchema = z.object({
 });
 
 export const driverLocationSchema = z.object({
-  latitude: z.number().min(-90).max(90),
-  longitude: z.number().min(-180).max(180),
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
 });
 
 export const carSchema = z.object({
   make: z.string().min(1, "Make is required"),
   model: z.string().min(1, "Model is required"),
-  year: z.number().int().min(1990).max(new Date().getFullYear() + 1),
+  year: z
+    .number()
+    .int()
+    .min(1990)
+    .max(new Date().getFullYear() + 1),
   color: z.string().min(1, "Color is required"),
   plateNumber: z.string().min(1, "Plate number is required"),
   type: z.string().min(1, "Vehicle type is required"),

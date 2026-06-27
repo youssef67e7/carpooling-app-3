@@ -37,10 +37,7 @@ export async function sendPush(userIds, notification, data = {}, options = {}) {
         body: notification.body || "",
       },
       data: Object.fromEntries(
-        Object.entries({ ...data, click_action: "FLUTTER_NOTIFICATION_CLICK" }).map(([k, v]) => [
-          k,
-          String(v ?? ""),
-        ])
+        Object.entries({ ...data, click_action: "FLUTTER_NOTIFICATION_CLICK" }).map(([k, v]) => [k, String(v ?? "")]),
       ),
     };
 
@@ -74,20 +71,14 @@ export async function sendPush(userIds, notification, data = {}, options = {}) {
     results.forEach((r, i) => {
       if (r.error) {
         const code = r.error.code || r.error.status || "";
-        if (
-          code.includes("UNREGISTERED") ||
-          code.includes("NOT_FOUND") ||
-          code.includes("invalid-registration")
-        ) {
+        if (code.includes("UNREGISTERED") || code.includes("NOT_FOUND") || code.includes("invalid-registration")) {
           invalidTokens.push(tokenStrings[i]);
         }
       }
     });
 
     if (invalidTokens.length > 0) {
-      await db
-        .collection("fcmTokens")
-        .deleteMany({ token: { $in: invalidTokens } });
+      await db.collection("fcmTokens").deleteMany({ token: { $in: invalidTokens } });
       console.log(`[FCM] Cleaned up ${invalidTokens.length} invalid tokens`);
     }
   } catch (err) {

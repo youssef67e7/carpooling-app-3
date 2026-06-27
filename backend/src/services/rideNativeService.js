@@ -1,4 +1,10 @@
-import { createRide, findRideById, findActiveRideByPassenger, updateRideStatus, findNearbyAvailableDrivers } from "../mongo/queries/rides.js";
+import {
+  createRide,
+  findRideById,
+  findActiveRideByPassenger,
+  updateRideStatus,
+  findNearbyAvailableDrivers,
+} from "../mongo/queries/rides.js";
 import { findById } from "../mongo/queries/users.js";
 import { getDb } from "../mongo/nativeClient.js";
 
@@ -39,18 +45,15 @@ export async function getRideStatus(rideId) {
 
 export async function getRequestedRides(vehicleType) {
   const db = await getDb();
-  return db
-    .collection("rides")
-    .find({ status: "pending" })
-    .sort({ created_at: -1 })
-    .limit(20)
-    .toArray();
+  return db.collection("rides").find({ status: "pending" }).sort({ created_at: -1 }).limit(20).toArray();
 }
 
 export async function acceptRide(rideId, driverId) {
-  const { matched } = await updateRideStatus(rideId, "accepted",
+  const { matched } = await updateRideStatus(
+    rideId,
+    "accepted",
     { driver_id: driverId, driverId, accepted_at: new Date() },
-    { currentStatus: "pending" }
+    { currentStatus: "pending" },
   );
   if (!matched) {
     const ride = await findRideById(rideId);

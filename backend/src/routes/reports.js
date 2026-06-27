@@ -44,7 +44,7 @@ router.post(
     } catch (e) {
       next(e);
     }
-  }
+  },
 );
 
 export default router;

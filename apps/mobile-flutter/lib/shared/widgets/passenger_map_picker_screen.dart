@@ -113,6 +113,12 @@ class _PassengerMapPickerScreenState extends ConsumerState<PassengerMapPickerScr
   }
 
   @override
+  void dispose() {
+    _map.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final scene = buildPassengerMapScene(
       pickup: _pickup,

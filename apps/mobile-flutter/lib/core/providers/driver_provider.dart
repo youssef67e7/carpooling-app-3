@@ -104,6 +104,24 @@ class DriverNotifier extends StateNotifier<DriverState> {
     final api = await _api;
     await api.postJson(ApiEndpoints.driverLocationUpdate, {'lat': lat, 'lng': lng});
   }
+
+  Future<Map<String, dynamic>> fetchBonuses() async {
+    final api = await _api;
+    final data = await api.getJson(ApiEndpoints.driverBonuses);
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  Future<Map<String, dynamic>> fetchBreakModeStatus() async {
+    final api = await _api;
+    final data = await api.getJson(ApiEndpoints.driverBreakMode);
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  Future<Map<String, dynamic>> toggleBreakMode({int durationMinutes = 30}) async {
+    final api = await _api;
+    final data = await api.postJson(ApiEndpoints.driverBreakMode, {'durationMinutes': durationMinutes});
+    return Map<String, dynamic>.from(data as Map);
+  }
 }
 
 final driverProvider = StateNotifierProvider<DriverNotifier, DriverState>((ref) => DriverNotifier(ref));

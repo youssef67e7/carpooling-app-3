@@ -20,9 +20,17 @@ class PassengerMoreMenuScreen extends ConsumerWidget {
     ('becomeDriverTitle', 'becomeDriverSubtitle', Icons.directions_car, '/passenger/more/driver-onboarding'),
     ('featureRideTips', 'featureRideTipsSubtitle', Icons.map, '/passenger/more/ride-tips'),
     ('featureSavedPlaces', 'featureSavedPlacesSubtitle', Icons.bookmark, '/passenger/more/saved-places'),
+    ('featurePaymentMethods', 'featurePaymentMethodsSubtitle', Icons.credit_card, '/passenger/more/payment-methods'),
+    ('featurePromotions', 'featurePromotionsSubtitle', Icons.local_offer, '/passenger/more/promotions'),
+    ('driverMenuInvite', 'featureReferralSubtitle', Icons.person_add, '/passenger/more/referral'),
     ('featureNotifications', 'featureNotificationsSubtitle', Icons.notifications, '/passenger/more/notifications'),
+    ('featureFavoriteDrivers', 'featureFavoriteDriversSubtitle', Icons.favorite, '/passenger/more/favorite-drivers'),
+    ('featureCarpoolFind', 'featureCarpoolFindSubtitle', Icons.directions_car, '/passenger/more/find-carpool'),
+    ('featureCarpoolMy', 'featureCarpoolMySubtitle', Icons.event_seat, '/passenger/more/my-carpools'),
+    ('featureRatingHistory', 'featureRatingHistorySubtitle', Icons.star_half, '/ratings'),
     ('featureHelp', 'featureHelpSubtitle', Icons.help, '/passenger/more/help'),
     ('featureSafety', 'featureSafetySubtitle', Icons.shield, '/passenger/more/safety'),
+    ('featureDisputes', 'featureDisputesSubtitle', Icons.gavel, '/passenger/more/disputes'),
     ('featureAbout', 'featureAboutSubtitle', Icons.info, '/passenger/more/about'),
   ];
 

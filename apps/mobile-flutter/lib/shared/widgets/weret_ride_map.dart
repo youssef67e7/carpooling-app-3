@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../../core/theme/weret_tokens.dart';
+import '../../core/utils/clustering_utils.dart';
 import '../../core/utils/map_polyline_model.dart';
+import '../../core/utils/map_provider.dart';
 import '../../core/utils/map_scene_builder.dart';
 import 'map/driver_map_marker.dart';
 
@@ -26,6 +28,8 @@ class WeretRideMap extends StatefulWidget {
     this.fitPoints = const [],
     this.autoFit = true,
     this.interactive = false,
+    this.heatmapZones = const [],
+    this.enableClustering = true,
   });
 
   final LatLng center;
@@ -44,6 +48,8 @@ class WeretRideMap extends StatefulWidget {
   final List<LatLng> fitPoints;
   final bool autoFit;
   final bool interactive;
+  final List<HeatmapZone> heatmapZones;
+  final bool enableClustering;
 
   @override
   State<WeretRideMap> createState() => _WeretRideMapState();
@@ -60,6 +66,8 @@ class _WeretRideMapState extends State<WeretRideMap> with SingleTickerProviderSt
   Animation<double>? _tween;
   LatLng? _fromDriver;
   LatLng? _toDriver;
+  LatLngBounds? _visibleBounds;
+  double _currentZoom = 13;
 
   @override
   void initState() {
@@ -120,10 +128,52 @@ class _WeretRideMapState extends State<WeretRideMap> with SingleTickerProviderSt
   LatLng? get _destination => widget.scene?.destination ?? widget.destination;
   List<LatLng> get _nearby => widget.scene?.nearbyDrivers ?? widget.nearbyDrivers;
 
+  /// Cull nearby markers to those within visible bounds.
+  List<LatLng> get _culledNearby {
+    final all = _nearby;
+    if (all.isEmpty || _visibleBounds == null) return all;
+    return all.where((p) => _visibleBounds!.contains(p) && p.latitude.isFinite && p.longitude.isFinite).toList();
+  }
+
+  /// Clustered view of culled nearby markers.
+  List<DriverCluster> get _clusteredNearby {
+    final culled = _culledNearby;
+    if (culled.isEmpty) return const [];
+    if (!widget.enableClustering) return culled.map((p) => DriverCluster(centroid: p, points: [p])).toList();
+    return clusterDrivers(culled, _currentZoom);
+  }
+
+  /// Cull polylines — keep entire polyline if any point is visible.
+  List<WeretMapPolyline> get _culledPolylines {
+    final all = _polylines;
+    if (all.isEmpty || _visibleBounds == null) return all;
+    return all.where((poly) {
+      if (poly.points.isEmpty) return false;
+      // Keep polyline if any point is visible (avoids broken segments).
+      return poly.points.any((p) => _visibleBounds!.contains(p) && p.latitude.isFinite && p.longitude.isFinite);
+    }).toList();
+  }
+
   void _maybeFit() {
     if (!widget.autoFit) return;
     final pts = _fitPoints.where((p) => p.latitude.isFinite && p.longitude.isFinite).toList();
     if (pts.length >= 2) fitMapToPoints(widget.controller, pts);
+  }
+
+  void _onMapEvent(MapEvent event) {
+    if (event is MapEventMoveEnd) {
+      final cam = widget.controller?.camera;
+      if (cam != null) {
+        final bounds = cam.visibleBounds;
+        final zoom = cam.zoom;
+        if (_visibleBounds != bounds || _currentZoom != zoom) {
+          setState(() {
+            _visibleBounds = bounds;
+            _currentZoom = zoom;
+          });
+        }
+      }
+    }
   }
 
   LatLng? _animatedDriver() {
@@ -141,8 +191,11 @@ class _WeretRideMapState extends State<WeretRideMap> with SingleTickerProviderSt
     _anim?.removeListener(_onAnim);
     _anim?.addListener(_onAnim);
 
-    final flags = widget.interactive ? InteractiveFlag.all : InteractiveFlag.all;
+    final flags = widget.interactive ? InteractiveFlag.all : InteractiveFlag.none;
     final driverPoint = _animatedDriver() ?? _driverPoint;
+    final polylines = _culledPolylines;
+    final clusters = _clusteredNearby;
+    final zones = widget.heatmapZones;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(WeretTokens.cardRadius),
@@ -156,15 +209,17 @@ class _WeretRideMapState extends State<WeretRideMap> with SingleTickerProviderSt
                   initialCenter: _sanitize(widget.center),
                   initialZoom: 13,
                   interactionOptions: InteractionOptions(flags: flags),
+                  onMapEvent: _onMapEvent,
                 ),
               children: [
                 TileLayer(
-                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  urlTemplate: MapProvider.tileUrlTemplate,
                   userAgentPackageName: 'com.weret.mobile',
+                  tileProvider: MapProvider.tileProvider,
                 ),
-                if (_polylines.isNotEmpty)
+                if (polylines.isNotEmpty)
                   PolylineLayer(
-                    polylines: _polylines
+                    polylines: polylines
                         .where((p) => p.points.length >= 2)
                         .map(
                           (p) => Polyline(
@@ -176,11 +231,55 @@ class _WeretRideMapState extends State<WeretRideMap> with SingleTickerProviderSt
                         )
                         .toList(),
                   ),
-                if (_nearby.isNotEmpty)
+                if (zones.isNotEmpty)
                   MarkerLayer(
-                    markers: _nearby
-                        .map((p) => Marker(point: _sanitize(p), width: 28, height: 28, child: const NearbyDriverMarker()))
-                        .toList(),
+                    markers: zones.map((z) {
+                      final intensity = (z.count / 20.0).clamp(0.0, 1.0);
+                      final r = (255 * (1 - intensity)).round();
+                      final g = (255 * (1 - intensity * 0.6)).round();
+                      final size = (12.0 + intensity * 20).clamp(12.0, 32.0);
+                      return Marker(
+                        point: _sanitize(z.center),
+                        width: size + 6,
+                        height: size + 6,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Color.fromARGB((180 * intensity).round().clamp(60, 180), r, g, 60),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.6), width: 1.5),
+                          ),
+                          child: Center(
+                            child: Text(
+                              '${z.count}',
+                              style: TextStyle(
+                                fontSize: (size * 0.4).clamp(7.0, 13.0),
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                if (clusters.isNotEmpty)
+                  MarkerLayer(
+                    markers: clusters.map((c) {
+                      if (c.count > 1) {
+                        return Marker(
+                          point: _sanitize(c.centroid),
+                          width: 40,
+                          height: 40,
+                          child: _ClusterMarker(count: c.count),
+                        );
+                      }
+                      return Marker(
+                        point: _sanitize(c.centroid),
+                        width: 28,
+                        height: 28,
+                        child: const NearbyDriverMarker(),
+                      );
+                    }).toList(),
                   ),
                 if (driverPoint != null)
                   MarkerLayer(
@@ -261,6 +360,31 @@ class _WeretRideMapState extends State<WeretRideMap> with SingleTickerProviderSt
   }
 }
 
+class _ClusterMarker extends StatelessWidget {
+  const _ClusterMarker({required this.count});
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: WeretTokens.brand,
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 2.5),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.28), blurRadius: 8, offset: const Offset(0, 2))],
+      ),
+      child: Center(
+        child: Text(
+          '$count',
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13),
+        ),
+      ),
+    );
+  }
+}
+
 class _MapChip extends StatelessWidget {
   const _MapChip({required this.icon, required this.label, this.expanded = false});
   final IconData icon;
@@ -315,6 +439,8 @@ class WeretRideMapWithExpand extends StatelessWidget {
     required this.onExpand,
     this.onRecenter,
     this.onFitRoute,
+    this.heatmapZones = const [],
+    this.enableClustering = true,
   });
 
   final LatLng center;
@@ -333,6 +459,8 @@ class WeretRideMapWithExpand extends StatelessWidget {
   final VoidCallback onExpand;
   final VoidCallback? onRecenter;
   final VoidCallback? onFitRoute;
+  final List<HeatmapZone> heatmapZones;
+  final bool enableClustering;
 
   @override
   Widget build(BuildContext context) {
@@ -352,6 +480,8 @@ class WeretRideMapWithExpand extends StatelessWidget {
           fitPoints: fitPoints,
           autoFit: autoFit,
           interactive: true,
+          heatmapZones: heatmapZones,
+          enableClustering: enableClustering,
         ),
         if (onRecenter != null)
           Positioned(

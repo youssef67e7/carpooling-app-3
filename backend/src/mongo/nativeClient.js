@@ -32,9 +32,7 @@ export async function getDb() {
   if (db) return db;
 
   if (!URI) {
-    throw new Error(
-      "MONGODB_URI is not set. Provide it in backend/.env or set MONGODB_FALLBACK_MEMORY=1 for local dev."
-    );
+    throw new Error("MONGODB_URI is not set. Provide it in backend/.env or set MONGODB_FALLBACK_MEMORY=1 for local dev.");
   }
 
   client = new MongoClient(URI, OPTIONS);

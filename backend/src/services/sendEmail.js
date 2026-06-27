@@ -41,18 +41,12 @@ export async function sendEmail({ to, subject, text, html }) {
     }
   }
 
-  const allowConsole =
-    process.env.EMAIL_CONSOLE_MODE ||
-    process.env.NODE_ENV !== "production" ||
-    process.env.NODE_ENV == null;
+  const allowConsole = process.env.EMAIL_CONSOLE_MODE || process.env.NODE_ENV !== "production" || process.env.NODE_ENV == null;
 
   if (allowConsole) {
     console.log(`[email] (console — no SMTP) To ${to}: ${subject} — ${text}`);
     return { provider: "console", sent: false, dev: true };
   }
 
-  throw new AppError(
-    "Email is not configured on the server. Set SMTP_HOST, SMTP_USER, and SMTP_PASS.",
-    503
-  );
+  throw new AppError("Email is not configured on the server. Set SMTP_HOST, SMTP_USER, and SMTP_PASS.", 503);
 }

@@ -1,19 +1,5 @@
 import { z } from "zod";
 
-export const sendOtpSchema = z.object({
-  phone: z.string().regex(/^\+?[1-9]\d{6,14}$/, "Invalid phone number format"),
-});
-
-export const verifyOtpSchema = z.object({
-  phone: z.string().regex(/^\+?[1-9]\d{6,14}$/, "Invalid phone number format"),
-  code: z.string().length(6, "OTP must be 6 digits"),
-});
-
-export const verifyFirebasePhoneSchema = z.object({
-  firebaseIdToken: z.string().min(1, "Firebase ID token is required"),
-  name: z.string().optional(),
-});
-
 export const googleAuthSchema = z.object({
   idToken: z.string().min(1, "Google ID token is required"),
 });

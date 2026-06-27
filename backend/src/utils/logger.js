@@ -8,8 +8,17 @@ const LOG_DIR = join(__dirname, "../../logs");
 const MAX_LOG_AGE_DAYS = 14;
 
 const SENSITIVE_FIELDS = new Set([
-  "password", "token", "accessToken", "refreshToken", "otp", "otpDigest",
-  "secret", "authorization", "cookie", "idToken", "firebaseIdToken",
+  "password",
+  "token",
+  "accessToken",
+  "refreshToken",
+  "otp",
+  "otpDigest",
+  "secret",
+  "authorization",
+  "cookie",
+  "idToken",
+  "firebaseIdToken",
 ]);
 
 function sanitize(obj) {
@@ -96,7 +105,7 @@ export async function cleanupOldLogs() {
     for (const f of files) {
       if (!f.startsWith("app-") || !f.endsWith(".log")) continue;
       const filePath = join(LOG_DIR, f);
-      const stat = await import("fs/promises").then(m => m.stat(filePath));
+      const stat = await import("fs/promises").then((m) => m.stat(filePath));
       const ageDays = (now - stat.mtimeMs) / (1000 * 60 * 60 * 24);
       if (ageDays > MAX_LOG_AGE_DAYS) {
         await rm(filePath).catch(() => {});

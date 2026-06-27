@@ -93,7 +93,7 @@ function isTlsOrNetworkError(err) {
 }
 
 function normalizeAtlasUri(raw) {
-  let uri = String(raw || "").trim();
+  const uri = String(raw || "").trim();
   if (!uri || !uri.startsWith("mongodb+srv://")) return uri;
   const dbName = resolveMongoDbName();
   try {

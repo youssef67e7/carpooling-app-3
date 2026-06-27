@@ -271,39 +271,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await api.postJson(ApiEndpoints.authVerifyPassword, {'password': password});
   }
 
-  Future<Map<String, dynamic>> requestPhoneOtp(String phone, {bool forRegister = false}) async {
-    state = state.copyWith(clearError: true);
-    try {
-      final api = await _api;
-      return await api.postJson(ApiEndpoints.authPhoneOtp, {
-        'phone': phone,
-        if (forRegister) 'forRegister': true,
-      });
-    } catch (e) {
-      state = state.copyWith(error: localizedApiError(e, fallbackKey: 'error'));
-      rethrow;
-    }
-  }
-
-  Future<void> verifyPhoneOtp(String phone, String otp, {String? name}) async {
-    state = state.copyWith(loading: true, clearError: true);
-    try {
-      final api = await _api;
-      final data = await api.postJson(ApiEndpoints.authPhoneVerify, {
-        'phone': phone,
-        'otp': otp,
-        if (name != null && name.isNotEmpty) 'name': name,
-      });
-      final token = '${data['accessToken'] ?? data['token'] ?? ''}';
-      final refreshToken = '${data['refreshToken'] ?? ''}';
-      final user = WeretUser.fromJson(data['user'] as Map<String, dynamic>);
-      await applySession(token: token, refreshToken: refreshToken, user: user);
-    } catch (e) {
-      state = state.copyWith(loading: false, error: localizedApiError(e, fallbackKey: 'error'));
-      rethrow;
-    }
-  }
-
   Future<Map<String, dynamic>> requestPasswordResetOtp(String email) async {
     state = state.copyWith(clearError: true);
     try {
@@ -356,24 +323,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
         final user = WeretUser.fromJson(data['data']['user'] as Map<String, dynamic>);
         await applySession(token: token, refreshToken: refreshToken, user: user);
       }
-    } catch (e) {
-      state = state.copyWith(loading: false, error: localizedApiError(e, fallbackKey: 'error'));
-      rethrow;
-    }
-  }
-
-  Future<void> verifyFirebasePhone(String firebaseIdToken, {String? name}) async {
-    state = state.copyWith(loading: true, clearError: true);
-    try {
-      final api = await _api;
-      final data = await api.postJson(ApiEndpoints.authVerifyFirebasePhone, {
-        'firebaseIdToken': firebaseIdToken,
-        if (name != null && name.isNotEmpty) 'name': name,
-      });
-      final token = '${data['data']['accessToken']}';
-      final refreshToken = '${data['data']['refreshToken'] ?? ''}';
-      final user = WeretUser.fromJson(data['data']['user'] as Map<String, dynamic>);
-      await applySession(token: token, refreshToken: refreshToken, user: user);
     } catch (e) {
       state = state.copyWith(loading: false, error: localizedApiError(e, fallbackKey: 'error'));
       rethrow;

@@ -5,17 +5,9 @@ export function verificationProgress(user, profile) {
   const profStatus = profile?.status || "none";
   const steps = {
     personalInfo: appStatus === "none" ? "pending" : "completed",
-    identityDocs: profile?.licenseImageUrl
-      ? profStatus === "approved"
-        ? "verified"
-        : "under_review"
-      : "pending",
+    identityDocs: profile?.licenseImageUrl ? (profStatus === "approved" ? "verified" : "under_review") : "pending",
     vehicleReg:
-      Array.isArray(profile?.cars) && profile.cars.length
-        ? profStatus === "approved"
-          ? "verified"
-          : "under_review"
-        : "pending",
+      Array.isArray(profile?.cars) && profile.cars.length ? (profStatus === "approved" ? "verified" : "under_review") : "pending",
     backgroundCheck: profStatus === "approved" ? "verified" : "pending",
   };
   const done = Object.values(steps).filter((s) => s === "completed" || s === "verified").length;

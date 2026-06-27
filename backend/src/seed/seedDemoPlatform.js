@@ -38,7 +38,7 @@ async function ensureDemoPassenger(p) {
           phone: p.phone,
           location: { lat: p.lat, lng: p.lng },
         },
-      }
+      },
     );
   }
 
@@ -96,7 +96,7 @@ async function ensureDriverProfiles() {
           driver_application_status: "approved",
           active_role: "driver",
         },
-      }
+      },
     );
     await DriverProfile.updateOne(
       { userId: d._id },
@@ -118,7 +118,7 @@ async function ensureDriverProfiles() {
           ],
         },
       },
-      { upsert: true }
+      { upsert: true },
     );
     await ensureWallet(d, { balance: 120, label: "Driver earnings" });
   }
@@ -153,7 +153,7 @@ export async function seedDemoPlatform() {
       ],
       note: "All data lives in MongoDB via backend API.",
     },
-    { upsert: true }
+    { upsert: true },
   );
 
   console.log("[seed] Demo platform data (passengers, wallets, driver profiles) applied");

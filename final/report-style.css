@@ -1,0 +1,201 @@
+/* Professional Report Styling for md-to-pdf */
+
+@page {
+  size: A4;
+  margin: 2.5cm 2cm 2.5cm 2cm;
+  @bottom-center {
+    content: counter(page);
+    font-size: 10pt;
+    color: #666;
+  }
+}
+
+body {
+  font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  font-size: 11pt;
+  line-height: 1.6;
+  color: #1a1a1a;
+  counter-reset: h2-counter;
+}
+
+/* Cover Page */
+h1:first-of-type {
+  page-break-before: avoid;
+  margin-top: 6cm;
+  font-size: 28pt;
+  color: #1a3a5c;
+  text-align: center;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+h1:first-of-type + p {
+  text-align: center;
+  font-size: 14pt;
+  color: #555;
+  margin-top: 1cm;
+}
+
+h1:first-of-type + p + p {
+  text-align: center;
+  font-size: 11pt;
+  color: #888;
+  margin-top: 0.5cm;
+}
+
+/* Page break before each chapter */
+h2 {
+  page-break-before: always;
+  font-size: 18pt;
+  color: #1a3a5c;
+  border-bottom: 3px solid #1a3a5c;
+  padding-bottom: 8px;
+  margin-top: 1cm;
+  counter-increment: h2-counter;
+}
+
+h2:first-of-type {
+  page-break-before: avoid;
+}
+
+h3 {
+  font-size: 14pt;
+  color: #2a5a8c;
+  margin-top: 0.8cm;
+  border-bottom: 1px solid #cde0f0;
+  padding-bottom: 4px;
+}
+
+h4 {
+  font-size: 12pt;
+  color: #3a6a9c;
+  margin-top: 0.5cm;
+}
+
+/* Tables */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.5cm 0;
+  font-size: 9.5pt;
+  page-break-inside: avoid;
+}
+
+th {
+  background-color: #1a3a5c;
+  color: white;
+  padding: 8px 10px;
+  text-align: left;
+  font-weight: 600;
+}
+
+td {
+  padding: 6px 10px;
+  border-bottom: 1px solid #ddd;
+}
+
+tr:nth-child(even) td {
+  background-color: #f5f8fb;
+}
+
+tr:hover td {
+  background-color: #e8f0f8;
+}
+
+/* Code blocks */
+code {
+  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  font-size: 9pt;
+  background-color: #f0f4f8;
+  padding: 2px 5px;
+  border-radius: 3px;
+  color: #2a5a8c;
+}
+
+pre {
+  background-color: #1a1a2e;
+  color: #e0e0e0;
+  padding: 12px 15px;
+  border-radius: 6px;
+  font-size: 8.5pt;
+  line-height: 1.5;
+  overflow-x: auto;
+  page-break-inside: avoid;
+  border-left: 4px solid #2a5a8c;
+}
+
+pre code {
+  background: none;
+  color: #e0e0e0;
+  padding: 0;
+  font-size: 8.5pt;
+}
+
+/* Blockquotes for status badges */
+blockquote {
+  border-left: 4px solid #2a5a8c;
+  padding: 8px 15px;
+  margin: 0.5cm 0;
+  background-color: #f0f6fb;
+  font-size: 10pt;
+}
+
+/* Lists */
+ul, ol {
+  margin: 0.3cm 0;
+  padding-left: 1.2cm;
+}
+
+li {
+  margin-bottom: 4px;
+}
+
+/* Horizontal rules */
+hr {
+  border: none;
+  border-top: 2px solid #1a3a5c;
+  margin: 1cm 0;
+}
+
+/* Links */
+a {
+  color: #1a5a8c;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* Strong emphasis */
+strong {
+  color: #1a3a5c;
+}
+
+/* Image placeholders for diagrams */
+img {
+  max-width: 100%;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  margin: 0.5cm auto;
+  display: block;
+}
+
+/* TOC styling */
+ul:first-of-type {
+  background: #f0f6fb;
+  padding: 15px 15px 15px 2cm;
+  border-radius: 6px;
+  border-left: 4px solid #1a3a5c;
+  font-size: 11pt;
+  line-height: 1.8;
+}
+
+/* Badge styling for status indicators */
+p code {
+  background-color: #1a3a5c;
+  color: white;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 8pt;
+}

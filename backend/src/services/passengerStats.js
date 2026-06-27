@@ -1,34 +1,38 @@
-import { Ride } from "../models/Ride.js";
+import { nativeCount } from "../mongo/nativeQuery.js";
 
-const statsCache = new Map();
-const CACHE_MS = 60_000;
+const cache = new Map();
+const CACHE_TTL = 60_000;
 
-/** Passenger public stats from MongoDB rides collection. */
 export async function getPassengerPublicStats(passengerId) {
-  const id = String(passengerId || "");
-  if (!id || id === "null" || id === "undefined") {
-    return { completedRides: 0, averageRating: null };
-  }
+  const key = String(passengerId);
+  const cached = cache.get(key);
+  if (cached && Date.now() - cached.ts < CACHE_TTL) return cached.data;
 
-  const cached = statsCache.get(id);
-  if (cached && Date.now() - cached.at < CACHE_MS) return cached.data;
+  const [totalRides, completedRides] = await Promise.all([
+    nativeCount("rides", { passengerId: key }),
+    nativeCount("rides", { passengerId: key, status: "completed" }),
+  ]);
 
-  const completedRides = await Ride.countDocuments({ passengerId: id, status: "completed" });
-  const data = { completedRides, averageRating: completedRides > 0 ? null : null };
-  statsCache.set(id, { at: Date.now(), data });
-  return data;
+  const result = { totalRides, completedRides };
+  cache.set(key, { data: result, ts: Date.now() });
+  if (cache.size > 1000) cache.clear();
+  return result;
 }
 
 export async function enrichRidesWithPassengerStats(rides) {
-  const list = Array.isArray(rides) ? rides : [];
-  const out = [];
-  for (const ride of list) {
-    const row = ride?.toObject ? ride.toObject() : { ...ride };
-    const pid = row.passengerId?._id || row.passengerId;
-    if (pid) {
-      row.passengerStats = await getPassengerPublicStats(pid);
-    }
-    out.push(row);
-  }
-  return out;
+  if (!rides.length) return rides;
+  const ids = [...new Set(rides.map((r) => String(r.passengerId || r.passenger_id || "")).filter(Boolean))];
+  if (!ids.length) return rides;
+
+  const statsMap = new Map();
+  await Promise.all(
+    ids.map(async (id) => {
+      statsMap.set(id, await getPassengerPublicStats(id));
+    }),
+  );
+
+  return rides.map((ride) => ({
+    ...ride,
+    passengerStats: statsMap.get(String(ride.passengerId || ride.passenger_id)) || { totalRides: 0, completedRides: 0 },
+  }));
 }

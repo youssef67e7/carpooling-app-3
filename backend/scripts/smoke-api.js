@@ -63,20 +63,6 @@ async function main() {
   if (ok("google-config has enabled flag", typeof google.body?.enabled === "boolean")) passed++;
   else failed++;
 
-  const badPhone = await post("/auth/phone/otp", { phone: "12" });
-  if (ok("POST /auth/phone/otp invalid → 400", badPhone.status === 400)) passed++;
-  else failed++;
-
-  const goodPhone = await post("/auth/phone/otp", { phone: "01012345678" });
-  if (ok("POST /auth/phone/otp valid → 200", goodPhone.status === 200)) passed++;
-  else failed++;
-
-  if (ok("phone OTP returns phone", goodPhone.body?.phone === "+201012345678")) passed++;
-  else failed++;
-
-  if (ok("phone OTP returns accountExists flag", typeof goodPhone.body?.accountExists === "boolean")) passed++;
-  else failed++;
-
   const forgot = await post("/auth/forgot-password", { email: "missing-user@example.com" });
   if (ok("POST /auth/forgot-password → 200", forgot.status === 200)) passed++;
   else failed++;

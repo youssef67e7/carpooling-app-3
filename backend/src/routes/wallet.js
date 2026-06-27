@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { Router } from "express";
 import { body, param, query } from "express-validator";
-import { WalletAccount, WALLET_TYPES } from "../models/WalletAccount.js";
+import { WalletAccount, WALLET_TYPES, CARD_BRANDS } from "../models/WalletAccount.js";
 import { Transaction } from "../models/Transaction.js";
 import { WithdrawalRequest } from "../models/WithdrawalRequest.js";
 import { User } from "../models/User.js";
@@ -18,7 +18,8 @@ const router = Router();
 router.use(authRequired, blockCheck, roleRequired("passenger", "driver"));
 
 function hashOtp(otp) {
-  const secret = process.env.WITHDRAW_OTP_SECRET || "dev-withdraw-secret-change-me";
+  const secret = process.env.WITHDRAW_OTP_SECRET;
+  if (!secret) throw new Error("WITHDRAW_OTP_SECRET must be set");
   return crypto.createHash("sha256").update(`${otp}:${secret}`).digest("hex");
 }
 
@@ -41,27 +42,61 @@ router.post(
   body("walletType").isIn(WALLET_TYPES),
   body("phoneNumber").optional().trim().isLength({ max: 32 }),
   body("label").optional().trim().isLength({ max: 80 }),
+  body("cardLastFour").optional().isString().isLength({ min: 4, max: 4 }),
+  body("cardExpiry")
+    .optional()
+    .isString()
+    .matches(/^\d{2}\/\d{2}$/),
+  body("cardHolder").optional().trim().isLength({ max: 100 }),
+  body("cardBrand").optional().isIn(CARD_BRANDS),
+  body("isDefault").optional().isBoolean(),
   validateRequest,
   async (req, res, next) => {
     try {
-      const { walletType, phoneNumber, label } = req.body;
-      const phone = typeof phoneNumber === "string" ? phoneNumber.trim() : "";
-      if (walletType !== "cash" && !phone) {
-        throw new AppError("phoneNumber required for this wallet type", 400);
+      const { walletType, phoneNumber, label, cardLastFour, cardExpiry, cardHolder, cardBrand, isDefault } = req.body;
+      if (walletType === "card") {
+        if (!cardLastFour || !cardExpiry) {
+          throw new AppError("cardLastFour and cardExpiry required for card type", 400);
+        }
+      } else {
+        const phone = typeof phoneNumber === "string" ? phoneNumber.trim() : "";
+        if (walletType !== "cash" && !phone) {
+          throw new AppError("phoneNumber required for this wallet type", 400);
+        }
+      }
+      if (isDefault) {
+        await WalletAccount.updateOne({ userId: req.userId }, { $set: { isDefault: false } });
       }
       const acc = await WalletAccount.create({
         userId: req.userId,
         walletType,
-        phoneNumber: phone,
+        phoneNumber: walletType === "card" ? "" : typeof phoneNumber === "string" ? phoneNumber.trim() : "",
         label: typeof label === "string" ? label.trim().slice(0, 80) : "",
+        cardLastFour: walletType === "card" ? String(cardLastFour).trim() : null,
+        cardExpiry: walletType === "card" ? String(cardExpiry).trim() : null,
+        cardHolder: walletType === "card" ? (typeof cardHolder === "string" ? cardHolder.trim() : "") : null,
+        cardBrand: walletType === "card" ? cardBrand || "other" : null,
+        isDefault: Boolean(isDefault),
         balance: 0,
       });
       return res.status(201).json({ account: acc.toJSON() });
     } catch (e) {
       next(e);
     }
-  }
+  },
 );
+
+router.put("/accounts/:id/default", docIdParam("id"), validateRequest, async (req, res, next) => {
+  try {
+    const acc = await WalletAccount.findOne({ _id: req.params.id, userId: req.userId });
+    if (!acc) throw new AppError("Not found", 404);
+    await WalletAccount.updateOne({ userId: req.userId }, { $set: { isDefault: false } });
+    await WalletAccount.updateOne({ _id: req.params.id }, { $set: { isDefault: true } });
+    return res.json({ ok: true });
+  } catch (e) {
+    next(e);
+  }
+});
 
 router.delete("/accounts/:id", docIdParam("id"), validateRequest, async (req, res, next) => {
   try {
@@ -89,7 +124,7 @@ router.post(
       const updated = await WalletAccount.findOneAndUpdate(
         { _id: walletAccountId, userId: req.userId },
         { $inc: { balance: amt } },
-        { new: true }
+        { new: true },
       );
       if (!updated) throw new AppError("Wallet not found", 404);
       const tx = await Transaction.create({
@@ -100,13 +135,18 @@ router.post(
         status: "success",
         note: "Simulated deposit",
       });
-      logAction({ req, action: "Wallet deposit", file: "routes/wallet.js:deposit", extra: { amount: amt, accountId: walletAccountId } });
+      logAction({
+        req,
+        action: "Wallet deposit",
+        file: "routes/wallet.js:deposit",
+        extra: { amount: amt, accountId: walletAccountId },
+      });
       return res.json({ account: updated.toJSON(), transaction: tx.toJSON() });
     } catch (e) {
       logAction({ req, action: "Wallet deposit failed", file: "routes/wallet.js:deposit", error: e });
       next(e);
     }
-  }
+  },
 );
 
 router.post(
@@ -124,7 +164,7 @@ router.post(
 
       await WithdrawalRequest.updateMany(
         { userId: req.userId, status: "pending", expiresAt: { $gt: new Date() } },
-        { $set: { status: "expired" } }
+        { $set: { status: "expired" } },
       );
 
       const otp = randomOtp6();
@@ -142,7 +182,12 @@ router.post(
         console.log(`[wallet] Simulated withdraw OTP for ${req.user.email || req.userId}: ${otp} (request ${wr._id})`);
       }
 
-      logAction({ req, action: "Withdraw request created", file: "routes/wallet.js:withdraw_request", extra: { amount: amt, requestId: wr._id } });
+      logAction({
+        req,
+        action: "Withdraw request created",
+        file: "routes/wallet.js:withdraw_request",
+        extra: { amount: amt, requestId: wr._id },
+      });
       return res.status(201).json({
         requestId: wr._id.toString(),
         expiresAt: expiresAt.toISOString(),
@@ -153,7 +198,7 @@ router.post(
       logAction({ req, action: "Withdraw request failed", file: "routes/wallet.js:withdraw_request", error: e });
       next(e);
     }
-  }
+  },
 );
 
 router.post(
@@ -182,7 +227,7 @@ router.post(
       const updated = await WalletAccount.findOneAndUpdate(
         { _id: wr.walletAccountId, userId: req.userId, balance: { $gte: wr.amount } },
         { $inc: { balance: -wr.amount } },
-        { new: true }
+        { new: true },
       );
       if (!updated) {
         wr.status = "failed";
@@ -201,13 +246,18 @@ router.post(
         note: "Simulated payout to linked wallet",
       });
 
-      logAction({ req, action: "Withdraw confirmed", file: "routes/wallet.js:withdraw_confirm", extra: { amount: wr.amount, requestId: requestId } });
+      logAction({
+        req,
+        action: "Withdraw confirmed",
+        file: "routes/wallet.js:withdraw_confirm",
+        extra: { amount: wr.amount, requestId: requestId },
+      });
       return res.json({ account: updated.toJSON(), transaction: tx.toJSON() });
     } catch (e) {
       logAction({ req, action: "Withdraw confirm failed", file: "routes/wallet.js:withdraw_confirm", error: e });
       next(e);
     }
-  }
+  },
 );
 
 router.get(
@@ -239,7 +289,7 @@ router.get(
     } catch (e) {
       next(e);
     }
-  }
+  },
 );
 
 export default router;

@@ -2,9 +2,10 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../core/providers/ride_provider.dart';
 import '../../core/theme/weret_tokens.dart';
+import 'cancel_ride_dialog.dart';
 import 'report_user_modal.dart';
+import 'favorite_driver_button.dart';
 
 class ActiveRidePanel extends ConsumerWidget {
   const ActiveRidePanel({super.key, required this.ride, this.compact = false});
@@ -91,7 +92,13 @@ class ActiveRidePanel extends ConsumerWidget {
           ],
           if (driver != null) ...[
             const SizedBox(height: 8),
-            Text('${'driver'.tr()}: $driver', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+            Row(
+              children: [
+                Expanded(child: Text('${'driver'.tr()}: $driver', style: const TextStyle(color: Colors.white70, fontSize: 13))),
+                if (driverId != null && '$driverId'.isNotEmpty)
+                  FavoriteDriverButton(driverId: '$driverId'),
+              ],
+            ),
           ],
           if (!compact) ...[
             const SizedBox(height: 12),
@@ -109,22 +116,7 @@ class ActiveRidePanel extends ConsumerWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: OutlinedButton.icon(
-                      onPressed: () async {
-                        final confirm = await showDialog<bool>(
-                          context: context,
-                          builder: (ctx) => AlertDialog(
-                            title: Text('cancelRideTitle'.tr()),
-                            content: Text('cancelRideConfirm'.tr()),
-                            actions: [
-                              TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text('no'.tr())),
-                              FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: Text('yesCancel'.tr())),
-                            ],
-                          ),
-                        );
-                        if (confirm == true) {
-                          await ref.read(rideProvider.notifier).cancelRide(rideId);
-                        }
-                      },
+                      onPressed: () => showCancelRideDialog(context, ref, rideId),
                       icon: const Icon(Icons.cancel_outlined, size: 18),
                       label: Text('cancelRide'.tr()),
                       style: OutlinedButton.styleFrom(foregroundColor: Colors.white70, side: const BorderSide(color: Colors.white38)),
@@ -133,19 +125,43 @@ class ActiveRidePanel extends ConsumerWidget {
                 ],
               ],
             ),
-            if (driverId != null && '$driverId'.isNotEmpty) ...[
+              if (driverId != null && '$driverId'.isNotEmpty && const {'accepted', 'driver_arriving', 'passenger_onboard', 'ongoing'}.contains(status)) ...[
               const SizedBox(height: 8),
-              OutlinedButton.icon(
-                onPressed: () => showReportUserModal(
-                  context,
-                  ref,
-                  reportedUserId: '$driverId',
-                  rideId: rideId,
-                  reportedName: driver?.toString(),
-                ),
-                icon: const Icon(Icons.flag_outlined, size: 18),
-                label: Text('reportUserTitle'.tr()),
-                style: OutlinedButton.styleFrom(foregroundColor: Colors.white70, side: const BorderSide(color: Colors.white38)),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => context.push('/safety/verify-driver'),
+                      icon: const Icon(Icons.verified_user, size: 18),
+                      label: Text('verifyDriverTitle'.tr()),
+                      style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: Colors.white54)),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => context.push('/safety/share-trip'),
+                      icon: const Icon(Icons.share, size: 18),
+                      label: Text('shareTripTitle'.tr()),
+                      style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: Colors.white54)),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => showReportUserModal(
+                        context,
+                        ref,
+                        reportedUserId: '$driverId',
+                        rideId: rideId,
+                        reportedName: driver?.toString(),
+                      ),
+                      icon: const Icon(Icons.flag_outlined, size: 18),
+                      label: Text('reportUserTitle'.tr()),
+                      style: OutlinedButton.styleFrom(foregroundColor: Colors.white70, side: const BorderSide(color: Colors.white38)),
+                    ),
+                  ),
+                ],
               ),
             ],
           ],

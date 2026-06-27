@@ -42,10 +42,7 @@ export async function rotateRefreshToken(userId, oldRawToken) {
     throw error;
   }
 
-  const user = await db.collection("users").findOne(
-    { _id: userId },
-    { projection: { role: 1, active_role: 1 } }
-  );
+  const user = await db.collection("users").findOne({ _id: userId }, { projection: { role: 1, active_role: 1 } });
 
   if (!user) {
     const error = new Error("User not found");

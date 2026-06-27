@@ -1,10 +1,11 @@
 import 'dart:async';
 
 import 'package:easy_localization/easy_localization.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../core/providers/auth_provider.dart';
 import '../../core/theme/weret_tokens.dart';
 import '../../core/theme/app_styles.dart';
@@ -12,9 +13,11 @@ import '../../core/utils/api_error_message.dart';
 import '../../core/utils/auth_navigation.dart';
 import '../../core/utils/auth_validators.dart';
 import '../../core/utils/google_o_auth_errors.dart';
-import '../../shared/widgets/weret_logo.dart';
-import '../../shared/widgets/country_code_picker.dart';
 import '../../shared/widgets/otp_input.dart';
+import '../../shared/widgets/ui/form_error_callout.dart';
+import '../../shared/widgets/weret_logo.dart';
+
+enum _LoginStep { welcome, email, emailOtp }
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -25,35 +28,81 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
-  String _step = 'welcome';
-  final _phone = TextEditingController();
-  final _otp = TextEditingController();
+  static const _xs = 8.0;
+  static const _sm = 12.0;
+  static const _md = 16.0;
+  static const _lg = 24.0;
+  static const _xl = 32.0;
+  static const _xxl = 60.0;
+  static const _cooldownSec = 60;
+  static const _transitionMs = 350;
+  static const _otpLength = 6;
+
+  _LoginStep _step = _LoginStep.welcome;
+
+  final _identifier = TextEditingController();
   final _email = TextEditingController();
-  final _password = TextEditingController();
   final _emailOtp = TextEditingController();
-  final _phoneFormKey = GlobalKey<FormState>();
-  final _otpFormKey = GlobalKey<FormState>();
+
+  final _identifierFocus = FocusNode();
+  final _emailFocus = FocusNode();
+
   final _emailFormKey = GlobalKey<FormState>();
   final _emailOtpFormKey = GlobalKey<FormState>();
-  String? _devOtpHint;
-  String? _normalizedPhone;
+
   String? _normalizedEmail;
-  bool _sendingOtp = false;
   int _resendSeconds = 0;
   Timer? _resendTimer;
-  String? _verificationId;
-  bool _firebaseLoading = false;
-  CountryCode _countryCode = kDefaultCountries[2]; // EG +20
+
+  bool _emailOtpLoading = false;
+  String? _localError;
+  bool _errorDismissed = false;
+
+  bool get _anyLoading => _emailOtpLoading || ref.read(authProvider).loading;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _identifierFocus.requestFocus();
+    });
+  }
 
   @override
   void dispose() {
     _resendTimer?.cancel();
-    _phone.dispose();
-    _otp.dispose();
-    _email.dispose();
-    _password.dispose();
-    _emailOtp.dispose();
+    for (final c in [_identifier, _email, _emailOtp]) {
+      c.dispose();
+    }
+    for (final f in [_identifierFocus, _emailFocus]) {
+      f.dispose();
+    }
     super.dispose();
+  }
+
+  void _goTo(_LoginStep next) {
+    setState(() {
+      _step = next;
+      _localError = null;
+      _errorDismissed = false;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final focus = switch (next) {
+        _LoginStep.welcome => _identifierFocus,
+        _LoginStep.email => _emailFocus,
+        _LoginStep.emailOtp => null,
+      };
+      focus?.requestFocus();
+    });
+  }
+
+  void _goBack() {
+    final prev = switch (_step) {
+      _LoginStep.emailOtp => _LoginStep.email,
+      _LoginStep.email || _LoginStep.welcome => null,
+    };
+    if (prev != null && !_anyLoading) _goTo(prev);
   }
 
   void _goHome() {
@@ -61,563 +110,590 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     context.go(AuthNavigation.homeForUser(user));
   }
 
-  void _startResendCooldown() {
+  void _setError(String? e) {
+    if (e == null || e.isEmpty) return;
+    HapticFeedback.heavyImpact();
+    setState(() {
+      _localError = e;
+      _errorDismissed = false;
+    });
+  }
+
+  void _dismissError() => setState(() => _errorDismissed = true);
+
+  String? _displayError(String? providerError) {
+    if (_errorDismissed) return null;
+    return _localError ?? providerError;
+  }
+
+  void _startCooldown() {
     _resendTimer?.cancel();
-    setState(() => _resendSeconds = 60);
+    setState(() => _resendSeconds = _cooldownSec);
     _resendTimer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted) {
         t.cancel();
         return;
       }
-      if (_resendSeconds <= 1) {
-        t.cancel();
-        setState(() => _resendSeconds = 0);
-      } else {
-        setState(() => _resendSeconds -= 1);
-      }
+      setState(() {
+        if (_resendSeconds <= 1) {
+          t.cancel();
+          _resendSeconds = 0;
+        } else {
+          _resendSeconds--;
+        }
+      });
     });
   }
 
-  Future<void> _google() async {
-    final auth = ref.read(authProvider);
-    if (!auth.googleSignInEnabled) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('weretGoogleNotConfigured'.tr())));
+  String _maskEmail(String email) {
+    final parts = email.split('@');
+    if (parts.length != 2 || parts[0].isEmpty) return email;
+    final name = parts[0];
+    final masked = name.length > 2
+        ? '${name[0]}${'*' * (name.length - 2)}${name[name.length - 1]}'
+        : '**';
+    return '$masked@${parts[1]}';
+  }
+
+  void _continueFromWelcome() {
+    HapticFeedback.selectionClick();
+    final input = _identifier.text.trim();
+    if (input.isEmpty) {
+      _setError('Please enter your email address');
       return;
     }
+    _email.text = input;
+    _goTo(_LoginStep.email);
+  }
+
+  Future<void> _googleSignIn() async {
+    final auth = ref.read(authProvider);
+    if (!auth.googleSignInEnabled) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('weretGoogleNotConfigured'.tr())),
+      );
+      return;
+    }
+    HapticFeedback.mediumImpact();
     ref.read(authProvider.notifier).clearError();
     try {
-      final google = ref.read(authProvider.notifier).googleSignIn;
-      final account = await google.signIn();
+      final account =
+          await ref.read(authProvider.notifier).googleSignIn.signIn();
       if (account == null) return;
-      final gAuth = await account.authentication;
-      final idToken = gAuth.idToken;
-      if (idToken == null) throw Exception('No Google ID token');
-      await ref.read(authProvider.notifier).signInWithGoogle(idToken, accessToken: gAuth.accessToken);
-      if (mounted) _goHome();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(mapGoogleSignInError(e))));
-      }
-    }
-  }
-
-  Future<void> _sendOtp() async {
-    if (_phoneFormKey.currentState == null || !_phoneFormKey.currentState!.validate()) return;
-    setState(() => _sendingOtp = true);
-    ref.read(authProvider.notifier).clearError();
-    try {
-      final phone = _phone.text.trim();
-      final e164 = phone.startsWith('+') ? phone : '+20${phone.replaceFirst(RegExp(r'^0+'), '')}';
-      setState(() => _normalizedPhone = e164);
-      await _sendRealSmsOtp(e164);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(localizedApiError(e))));
-      }
-    } finally {
-      if (mounted) setState(() => _sendingOtp = false);
-    }
-  }
-
-  Future<void> _verifyOtp() async {
-    if (_otpFormKey.currentState == null || !_otpFormKey.currentState!.validate()) return;
-    ref.read(authProvider.notifier).clearError();
-    try {
-      await _verifyRealSmsOtp(_otp.text.trim());
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(localizedApiError(e))));
-      }
-    }
-  }
-
-  Future<void> _sendRealSmsOtp(String phoneNumber) async {
-    setState(() => _firebaseLoading = true);
-    try {
-      await FirebaseAuth.instance.verifyPhoneNumber(
-        phoneNumber: phoneNumber,
-        verificationCompleted: (PhoneAuthCredential credential) async {
-          final userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
-          final idToken = await userCredential.user?.getIdToken();
-          if (idToken != null) {
-            await _sendTokenToBackend(idToken);
-          }
-        },
-        verificationFailed: (FirebaseAuthException e) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message ?? 'Verification failed')));
-          }
-        },
-        codeSent: (String verificationId, int? resendToken) {
-          if (!mounted) return;
-          setState(() {
-            _verificationId = verificationId;
-            _step = 'phoneOtp';
-          });
-          _startResendCooldown();
-        },
-        codeAutoRetrievalTimeout: (String verificationId) {},
+      final g = await account.authentication;
+      if (g.idToken == null) throw Exception('No Google ID token');
+      await ref.read(authProvider.notifier).signInWithGoogle(
+        g.idToken!,
+        accessToken: g.accessToken,
       );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
-      }
-    } finally {
-      if (mounted) setState(() => _firebaseLoading = false);
-    }
-  }
-
-  Future<void> _verifyRealSmsOtp(String smsCode) async {
-    if (_verificationId == null) return;
-    try {
-      final credential = PhoneAuthProvider.credential(
-        verificationId: _verificationId!,
-        smsCode: smsCode,
-      );
-      final userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
-      final idToken = await userCredential.user?.getIdToken();
-      if (idToken != null) {
-        await _sendTokenToBackend(idToken);
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
-      }
-    }
-  }
-
-  Future<void> _sendTokenToBackend(String firebaseIdToken) async {
-    ref.read(authProvider.notifier).clearError();
-    try {
-      await ref.read(authProvider.notifier).verifyFirebasePhone(firebaseIdToken);
       if (mounted) _goHome();
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(localizedApiError(e))));
-      }
+      if (mounted) _setError(mapGoogleSignInError(e));
     }
   }
-
-  Future<void> _emailLogin() async {
-    if (_emailFormKey.currentState == null || !_emailFormKey.currentState!.validate()) return;
-    ref.read(authProvider.notifier).clearError();
-    try {
-      await ref.read(authProvider.notifier).loginEmail(_email.text.trim(), _password.text);
-      if (mounted) _goHome();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(ref.read(authProvider).error ?? localizedApiError(e))),
-        );
-      }
-    }
-  }
-
-  bool _emailOtpLoading = false;
 
   Future<void> _sendEmailOtp() async {
-    if (_emailFormKey.currentState == null || !_emailFormKey.currentState!.validate()) return;
+    if (_emailFormKey.currentState?.validate() != true) return;
+    HapticFeedback.mediumImpact();
     setState(() => _emailOtpLoading = true);
     ref.read(authProvider.notifier).clearError();
     try {
       final email = _email.text.trim();
-      setState(() => _normalizedEmail = email);
       await ref.read(authProvider.notifier).requestEmailOtp(email);
-      setState(() => _step = 'emailOtp');
-      _startResendCooldown();
+      if (!mounted) return;
+      setState(() => _normalizedEmail = email);
+      _goTo(_LoginStep.emailOtp);
+      _startCooldown();
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(localizedApiError(e))));
-      }
+      if (mounted) _setError(localizedApiError(e));
     } finally {
       if (mounted) setState(() => _emailOtpLoading = false);
     }
   }
 
   Future<void> _verifyEmailOtp() async {
-    if (_emailOtpFormKey.currentState == null || !_emailOtpFormKey.currentState!.validate()) return;
+    if (_emailOtpFormKey.currentState?.validate() != true) return;
+    HapticFeedback.mediumImpact();
     ref.read(authProvider.notifier).clearError();
     try {
-      await ref.read(authProvider.notifier).verifyEmailOtp(_normalizedEmail!, _emailOtp.text.trim());
+      final code = _emailOtp.text.trim();
+      await ref.read(authProvider.notifier)
+          .verifyEmailOtp(_normalizedEmail!, code);
       if (mounted) _goHome();
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(localizedApiError(e))));
-      }
+      if (mounted) _setError(localizedApiError(e));
     }
-  }
-
-  void _back() {
-    setState(() {
-      _step = switch (_step) {
-        'phoneOtp' => 'phone',
-        'emailOtp' => 'email',
-        'phone' || 'email' => 'welcome',
-        _ => 'welcome',
-      };
-    });
-  }
-
-  Widget _errorBanner(String? error) {
-    if (error == null || error.isEmpty) return const SizedBox.shrink();
-    final key = authBannerKeyForError(error);
-    final text = key != null ? key.tr() : error;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.red.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.red.shade200),
-      ),
-      child: Text(text, style: TextStyle(color: Colors.red.shade800, fontSize: 13, height: 1.35)),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
-    final isWelcome = _step == 'welcome';
+    final showAppBar = _step != _LoginStep.welcome;
 
     return Scaffold(
       backgroundColor: WeretTokens.bg,
-      appBar: isWelcome
-          ? null
-          : AppBar(
+      appBar: showAppBar
+          ? AppBar(
               backgroundColor: Colors.transparent,
               elevation: 0,
               leading: IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: WeretTokens.textPrimary),
-                onPressed: _back,
+                icon: const Icon(
+                  Icons.arrow_back_ios_new_rounded,
+                  size: 20,
+                  color: WeretTokens.textPrimary,
+                ),
+                onPressed: _anyLoading ? null : _goBack,
               ),
-            ),
+            )
+          : null,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: switch (_step) {
-            'welcome' => _welcome(auth),
-            'phone' => _phoneStep(auth.error),
-            'phoneOtp' => _otpStep(auth.loading, auth.error),
-            'email' => _emailStep(auth.loading, auth.error),
-            'emailOtp' => _emailOtpStep(auth.loading, auth.error),
-            _ => _welcome(auth),
-          },
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => FocusScope.of(context).unfocus(),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return SingleChildScrollView(
+                physics: const ClampingScrollPhysics(),
+                padding: EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: constraints.maxHeight > 700 ? 0 : _md,
+                ),
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: _transitionMs),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  transitionBuilder: (child, animation) {
+                    final dir = animation.status == AnimationStatus.reverse
+                        ? const Offset(0.06, 0)
+                        : const Offset(-0.06, 0);
+                    return FadeTransition(
+                      opacity: animation,
+                      child: SlideTransition(
+                        position: Tween(begin: dir, end: Offset.zero)
+                            .animate(animation),
+                        child: child,
+                      ),
+                    );
+                  },
+                  child: KeyedSubtree(
+                    key: ValueKey(_step),
+                    child: switch (_step) {
+                      _LoginStep.welcome => _buildWelcome(auth),
+                      _LoginStep.email => _buildEmail(auth.error),
+                      _LoginStep.emailOtp => _buildOtp(auth.loading, auth.error),
+                    },
+                  ),
+                ),
+              );
+            },
+          ),
         ),
       ),
     );
   }
 
-  void _continueFromWelcome() {
-    final input = _phone.text.trim();
-    if (input.isEmpty) return;
-    final emailRegex = RegExp(r'^[^@]+@[^@]+\.[^@]+$');
-    if (emailRegex.hasMatch(input)) {
-      _email.text = input;
-      setState(() => _step = 'email');
-    } else {
-      setState(() => _step = 'phone');
-    }
-  }
-
-  Widget _welcome(AuthState auth) {
+  Widget _buildWelcome(AuthState auth) {
     if (!auth.googleSignInEnabled && auth.hydrated) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         ref.read(authProvider.notifier).retryLoadGoogleConfig();
       });
     }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        const SizedBox(height: 60),
+        const SizedBox(height: _xxl),
         const WeretLogo.wordmark(fontSize: 32),
-        const SizedBox(height: 8),
+        const SizedBox(height: _xs),
         Text('Welcome back', style: AppStyles.headlineMedium),
-        const SizedBox(height: 32),
-        _errorBanner(auth.error),
-        SizedBox(
-          height: 50,
-          child: TextField(
-            controller: _phone,
-            keyboardType: TextInputType.text,
-            decoration: InputDecoration(
-              hintText: 'Phone number or Email',
-              hintStyle: TextStyle(color: WeretTokens.textMuted, fontSize: 14),
-              filled: true,
-              fillColor: WeretTokens.inputFill,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: WeretTokens.borderSubtle),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: WeretTokens.borderSubtle),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: WeretTokens.brand, width: 1.5),
-              ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            ),
-            onSubmitted: (_) => _continueFromWelcome(),
+        const SizedBox(height: _lg),
+
+        if (_displayError(auth.error) != null)
+          FormErrorCallout(
+            message: _displayError(auth.error)!,
+            onDismiss: _dismissError,
           ),
+
+        _WeretTextField(
+          controller: _identifier,
+          focusNode: _identifierFocus,
+          hint: 'Email address',
+          keyboardType: TextInputType.emailAddress,
+          textInputAction: TextInputAction.go,
+          onFieldSubmitted:
+              _anyLoading ? null : (_) => _continueFromWelcome(),
+          prefixIcon: Icons.mail_outline_rounded,
         ),
-        const SizedBox(height: 16),
-        SizedBox(
-          width: double.infinity,
-          height: 55,
-          child: FilledButton(
-            onPressed: _continueFromWelcome,
-            style: FilledButton.styleFrom(
-              backgroundColor: WeretTokens.brand,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-            ),
-            child: const Text('Continue'),
-          ),
+        const SizedBox(height: _md),
+
+        _LoginPrimaryButton(
+          label: 'Continue',
+          loading: false,
+          onPressed: _continueFromWelcome,
         ),
-        const SizedBox(height: 24),
-        Row(
-          children: [
-            const Expanded(child: Divider(color: WeretTokens.borderSubtle, thickness: 1)),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Text('OR', style: TextStyle(color: WeretTokens.textMuted, fontSize: 12, fontWeight: FontWeight.w500)),
-            ),
-            const Expanded(child: Divider(color: WeretTokens.borderSubtle, thickness: 1)),
-          ],
-        ),
-        const SizedBox(height: 24),
+        const SizedBox(height: _lg),
+
+        const _OrDivider(),
+        const SizedBox(height: _lg),
+
         if (auth.googleSignInEnabled)
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: OutlinedButton.icon(
-              onPressed: _google,
-              icon: Image.asset('assets/images/design/03_google_modal_avatar_a.png', width: 20, height: 20),
-              label: Text('Google', style: TextStyle(color: WeretTokens.textPrimary, fontSize: 14, fontWeight: FontWeight.w600)),
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: WeretTokens.borderSubtle),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                backgroundColor: Colors.transparent,
-              ),
-            ),
-          )
+          _GoogleButton(onPressed: _googleSignIn)
         else
           Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Text('weretGoogleDevHint'.tr(), textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, height: 1.35)),
+            padding: const EdgeInsets.only(bottom: _sm),
+            child: Text(
+              'weretGoogleDevHint'.tr(),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: WeretTokens.textMuted,
+                fontSize: 12,
+                height: 1.35,
+              ),
+            ),
           ),
-        const SizedBox(height: 24),
-        TextButton(
-          onPressed: () => setState(() => _step = 'email'),
-          child: Text('Use email instead', style: TextStyle(color: WeretTokens.textSecondary, fontWeight: FontWeight.w600, fontSize: 14)),
+        const SizedBox(height: _lg),
+
+        _LoginTextLink(
+          label: 'Create an account',
+          onPressed:
+              _anyLoading ? null : () => context.push('/register'),
         ),
-        TextButton(
-          onPressed: () => context.push('/register'),
-          child: Text('Create an account', style: TextStyle(color: WeretTokens.textSecondary, fontWeight: FontWeight.w600, fontSize: 14)),
+        const SizedBox(height: _lg),
+
+        const Text(
+          'By continuing, you agree to our Terms of Service and Privacy Policy',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: WeretTokens.textMuted,
+            fontSize: 11,
+            height: 1.4,
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildInput(TextEditingController controller, {String? hint, bool obscure = false, TextInputType? keyboardType, String? Function(String?)? validator, TextInputAction? textInputAction, void Function(String)? onFieldSubmitted}) {
+  Widget _buildEmail(String? providerError) {
+    return Form(
+      key: _emailFormKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: _xl),
+          Text('Enter your email', style: AppStyles.headlineSmall),
+          const SizedBox(height: _xs),
+          Text(
+            "We'll send a verification code to your inbox",
+            style: AppStyles.bodyRegular,
+          ),
+          const SizedBox(height: _lg),
+
+          if (_displayError(providerError) != null)
+            FormErrorCallout(
+              message: _displayError(providerError)!,
+              onDismiss: _dismissError,
+            ),
+
+          _WeretTextField(
+            controller: _email,
+            focusNode: _emailFocus,
+            hint: 'Email address',
+            keyboardType: TextInputType.emailAddress,
+            validator: validateEmail,
+            textInputAction: TextInputAction.done,
+            onFieldSubmitted:
+                _anyLoading ? null : (_) => _sendEmailOtp(),
+            prefixIcon: Icons.mail_outline_rounded,
+          ),
+          const SizedBox(height: _md),
+
+          _LoginPrimaryButton(
+            label: 'Send Code',
+            loading: _anyLoading,
+            onPressed: _anyLoading ? null : _sendEmailOtp,
+          ),
+          const SizedBox(height: _md),
+
+          _LoginTextLink(
+            label: 'Create an account',
+            onPressed:
+                _anyLoading ? null : () => context.push('/register'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOtp(bool providerLoading, String? providerError) {
+    return Form(
+      key: _emailOtpFormKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: _xl),
+          Text('Enter verification code', style: AppStyles.headlineSmall),
+          if (_normalizedEmail != null) ...[
+            const SizedBox(height: _xs),
+            RichText(
+              text: TextSpan(
+                style: AppStyles.bodyRegular,
+                children: [
+                  const TextSpan(text: 'Sent to '),
+                  TextSpan(
+                    text: _maskEmail(_normalizedEmail!),
+                    style: AppStyles.bodyRegular
+                        .copyWith(fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: _lg),
+
+          if (_displayError(providerError) != null)
+            FormErrorCallout(
+              message: _displayError(providerError)!,
+              onDismiss: _dismissError,
+            ),
+
+          OtpInput(
+            length: _otpLength,
+            onCompleted: (code) {
+              _emailOtp.text = code;
+              if (!_anyLoading) _verifyEmailOtp();
+            },
+          ),
+          const SizedBox(height: _md),
+
+          _LoginPrimaryButton(
+            label: 'Verify',
+            loading: _anyLoading || providerLoading,
+            onPressed:
+                (_anyLoading || providerLoading) ? null : _verifyEmailOtp,
+          ),
+          const SizedBox(height: _md),
+
+          _LoginTextLink(
+            label: _resendSeconds > 0
+                ? 'Resend in ${_resendSeconds}s'
+                : 'Resend code',
+            onPressed:
+                (_resendSeconds > 0 || _anyLoading) ? null : _sendEmailOtp,
+          ),
+          _LoginTextLink(
+            label: 'Change email address',
+            onPressed:
+                _anyLoading ? null : () => _goTo(_LoginStep.email),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LoginPrimaryButton extends StatelessWidget {
+  final String label;
+  final bool loading;
+  final VoidCallback? onPressed;
+  const _LoginPrimaryButton({
+    required this.label,
+    this.loading = false,
+    this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: 55,
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 150),
+        opacity: (onPressed == null && !loading) ? 0.5 : 1.0,
+        child: FilledButton(
+          onPressed: onPressed,
+          style: FilledButton.styleFrom(
+            backgroundColor: WeretTokens.brand,
+            foregroundColor: Colors.white,
+            disabledBackgroundColor: WeretTokens.brand,
+            disabledForegroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            textStyle: const TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 16,
+            ),
+          ),
+          child: loading
+              ? const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: Colors.white,
+                  ),
+                )
+              : Text(label),
+        ),
+      ),
+    );
+  }
+}
+
+class _LoginTextLink extends StatelessWidget {
+  final String label;
+  final VoidCallback? onPressed;
+  const _LoginTextLink({required this.label, this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton(
+      onPressed: onPressed,
+      style: TextButton.styleFrom(
+        minimumSize: const Size.fromHeight(36),
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: onPressed != null
+              ? WeretTokens.textSecondary
+              : WeretTokens.textMuted,
+          fontWeight: FontWeight.w600,
+          fontSize: 14,
+        ),
+      ),
+    );
+  }
+}
+
+class _OrDivider extends StatelessWidget {
+  const _OrDivider();
+  @override
+  Widget build(BuildContext context) {
+    return const Row(children: [
+      Expanded(child: Divider(color: WeretTokens.borderSubtle)),
+      Padding(
+        padding: EdgeInsets.symmetric(horizontal: 14),
+        child: Text(
+          'OR',
+          style: TextStyle(
+            color: WeretTokens.textMuted,
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.5,
+          ),
+        ),
+      ),
+      Expanded(child: Divider(color: WeretTokens.borderSubtle)),
+    ]);
+  }
+}
+
+class _GoogleButton extends StatelessWidget {
+  final VoidCallback? onPressed;
+  const _GoogleButton({this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: 50,
+      child: OutlinedButton.icon(
+        onPressed: onPressed,
+        icon: Image.asset(
+          'assets/images/design/03_google_modal_avatar_a.png',
+          width: 20,
+          height: 20,
+        ),
+        label: const Text(
+          'Continue with Google',
+          style: TextStyle(
+            color: WeretTokens.textPrimary,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        style: OutlinedButton.styleFrom(
+          side: const BorderSide(color: WeretTokens.borderSubtle),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WeretTextField extends StatelessWidget {
+  final TextEditingController controller;
+  final FocusNode? focusNode;
+  final String? hint;
+  final TextInputType? keyboardType;
+  final String? Function(String?)? validator;
+  final TextInputAction? textInputAction;
+  final void Function(String)? onFieldSubmitted;
+  final IconData? prefixIcon;
+
+  static final _border = OutlineInputBorder(
+    borderRadius: BorderRadius.circular(12),
+    borderSide: const BorderSide(color: WeretTokens.borderSubtle),
+  );
+  static final _focusedBorder = OutlineInputBorder(
+    borderRadius: BorderRadius.circular(12),
+    borderSide: const BorderSide(color: WeretTokens.brand, width: 1.5),
+  );
+  static final _errorBorder = OutlineInputBorder(
+    borderRadius: BorderRadius.circular(12),
+    borderSide: BorderSide(color: Colors.red.shade300),
+  );
+
+  const _WeretTextField({
+    required this.controller,
+    this.focusNode,
+    this.hint,
+    this.keyboardType,
+    this.validator,
+    this.textInputAction,
+    this.onFieldSubmitted,
+    this.prefixIcon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return SizedBox(
       height: 50,
       child: TextFormField(
         controller: controller,
-        obscureText: obscure,
+        focusNode: focusNode,
         keyboardType: keyboardType,
         validator: validator,
         textInputAction: textInputAction,
         onFieldSubmitted: onFieldSubmitted,
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: TextStyle(color: WeretTokens.textMuted, fontSize: 14),
+          hintStyle: const TextStyle(
+            color: WeretTokens.textMuted,
+            fontSize: 14,
+          ),
           filled: true,
           fillColor: WeretTokens.inputFill,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: WeretTokens.borderSubtle),
+          prefixIcon: prefixIcon != null
+              ? Icon(prefixIcon, size: 20, color: WeretTokens.textMuted)
+              : null,
+          border: _border,
+          enabledBorder: _border,
+          focusedBorder: _focusedBorder,
+          errorBorder: _errorBorder,
+          focusedErrorBorder: _errorBorder.copyWith(
+            borderSide: BorderSide(color: Colors.red.shade400, width: 1.5),
           ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: WeretTokens.borderSubtle),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 14,
           ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: WeretTokens.brand, width: 1.5),
-          ),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          errorStyle: const TextStyle(height: 0, fontSize: 0),
         ),
-      ),
-    );
-  }
-
-  Widget _primaryButton(String label, {bool loading = false, VoidCallback? onPressed}) {
-    return SizedBox(
-      width: double.infinity,
-      height: 55,
-      child: FilledButton(
-        onPressed: onPressed,
-        style: FilledButton.styleFrom(
-          backgroundColor: WeretTokens.brand,
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-        ),
-        child: loading
-            ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-            : Text(label),
-      ),
-    );
-  }
-
-  Widget _textLink(String label, {VoidCallback? onPressed}) {
-    return TextButton(
-      onPressed: onPressed,
-      child: Text(label, style: const TextStyle(color: WeretTokens.textSecondary, fontWeight: FontWeight.w600, fontSize: 14)),
-    );
-  }
-
-  Widget _phoneStep(String? error) {
-    return Form(
-      key: _phoneFormKey,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const SizedBox(height: 32),
-          Text('Enter your phone number', style: AppStyles.headlineSmall),
-          const SizedBox(height: 8),
-          Text("We'll send you a verification code", style: AppStyles.bodyRegular),
-          const SizedBox(height: 24),
-          _errorBanner(error),
-          Row(
-            children: [
-              CountryCodeSelector(
-                selected: _countryCode,
-                onChanged: (c) => setState(() => _countryCode = c),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _buildInput(
-                  _phone,
-                  hint: 'Phone number',
-                  keyboardType: TextInputType.phone,
-                  validator: (v) => validatePhone(v, required: true),
-                  textInputAction: TextInputAction.done,
-                  onFieldSubmitted: (_) => _sendOtp(),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          _primaryButton('Send Code', loading: _sendingOtp || _firebaseLoading, onPressed: _sendOtp),
-          const SizedBox(height: 16),
-          _textLink('Sign in with Email', onPressed: () => setState(() => _step = 'email')),
-          _textLink('Create an account', onPressed: () => context.push('/register')),
-        ],
-      ),
-    );
-  }
-
-  Widget _otpStep(bool loading, String? error) {
-    return Form(
-      key: _otpFormKey,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const SizedBox(height: 32),
-          Text('Enter verification code', style: AppStyles.headlineSmall),
-          if (_normalizedPhone != null) ...[
-            const SizedBox(height: 8),
-            Text("Sent to $_normalizedPhone", style: AppStyles.bodyRegular),
-          ],
-          const SizedBox(height: 24),
-          _errorBanner(error),
-          if (_devOtpHint != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Text('phoneOtpDevHint'.tr(namedArgs: {'code': _devOtpHint!}), style: const TextStyle(fontSize: 12, color: Colors.orange)),
-            ),
-          OtpInput(
-            length: 4,
-            onCompleted: (code) {
-              _otp.text = code;
-              _verifyOtp();
-            },
-          ),
-          const SizedBox(height: 16),
-          _primaryButton('Verify', loading: loading, onPressed: _verifyOtp),
-          const SizedBox(height: 16),
-          _textLink(
-            _resendSeconds > 0 ? 'Resend in $_resendSeconds sec' : 'Resend code',
-            onPressed: _resendSeconds > 0 ? () {} : _sendOtp,
-          ),
-          _textLink('Change phone number', onPressed: () => setState(() => _step = 'phone')),
-          _textLink('Use email instead', onPressed: () => setState(() => _step = 'email')),
-        ],
-      ),
-    );
-  }
-
-  Widget _emailOtpStep(bool loading, String? error) {
-    return Form(
-      key: _emailOtpFormKey,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const SizedBox(height: 32),
-          Text('Enter verification code', style: AppStyles.headlineSmall),
-          const SizedBox(height: 8),
-          Text("Sent to $_normalizedEmail", style: AppStyles.bodyRegular),
-          const SizedBox(height: 24),
-          _errorBanner(error),
-          OtpInput(
-            length: 6,
-            onCompleted: (code) {
-              _emailOtp.text = code;
-              _verifyEmailOtp();
-            },
-          ),
-          const SizedBox(height: 16),
-          _primaryButton('Verify', loading: loading, onPressed: _verifyEmailOtp),
-          const SizedBox(height: 16),
-          _textLink(
-            _resendSeconds > 0 ? 'Resend in $_resendSeconds sec' : 'Resend code',
-            onPressed: _resendSeconds > 0 ? () {} : _sendEmailOtp,
-          ),
-          _textLink('Change email', onPressed: () => setState(() => _step = 'email')),
-        ],
-      ),
-    );
-  }
-
-  Widget _emailStep(bool loading, String? error) {
-    return Form(
-      key: _emailFormKey,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const SizedBox(height: 32),
-          Text('Sign in with Email', style: AppStyles.headlineSmall),
-          const SizedBox(height: 8),
-          Text('Enter your email to receive a verification code', style: AppStyles.bodyRegular),
-          const SizedBox(height: 24),
-          _errorBanner(error),
-          _buildInput(
-            _email,
-            hint: 'Email',
-            keyboardType: TextInputType.emailAddress,
-            validator: validateEmail,
-            textInputAction: TextInputAction.done,
-            onFieldSubmitted: (_) => _sendEmailOtp(),
-          ),
-          const SizedBox(height: 16),
-          _primaryButton('Send Code', loading: _emailOtpLoading, onPressed: _sendEmailOtp),
-          const SizedBox(height: 12),
-          _textLink('Create an account', onPressed: () => context.push('/register')),
-        ],
       ),
     );
   }

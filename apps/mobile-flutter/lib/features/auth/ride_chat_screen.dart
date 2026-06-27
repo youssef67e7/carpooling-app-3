@@ -1,13 +1,20 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:easy_localization/easy_localization.dart';
+
 import '../../core/providers/auth_provider.dart';
 import '../../core/providers/ride_provider.dart';
 import '../../core/theme/weret_tokens.dart';
 import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/weret_ambient_background.dart';
+import '../../shared/widgets/ui/pressable_scale.dart';
+
+const _pad = 16.0;
+const _sm = 8.0;
+const _bubbleRadius = 16.0;
 
 class RideChatScreen extends ConsumerStatefulWidget {
   const RideChatScreen({super.key, required this.rideId});
@@ -21,6 +28,7 @@ class _RideChatScreenState extends ConsumerState<RideChatScreen> {
   List<dynamic> _messages = [];
   bool _loadingMore = false;
   bool _hasMore = true;
+  String? _sendError;
   final _input = TextEditingController();
   final _scrollController = ScrollController();
   Timer? _pollTimer;
@@ -78,14 +86,14 @@ class _RideChatScreenState extends ConsumerState<RideChatScreen> {
   Future<void> _send() async {
     final text = _input.text.trim();
     if (text.isEmpty) return;
+    HapticFeedback.mediumImpact();
     _input.clear();
+    setState(() => _sendError = null);
     try {
       await ref.read(rideProvider.notifier).sendMessage(widget.rideId, text);
       await _load();
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
-      }
+      if (mounted) setState(() => _sendError = '$e');
     }
   }
 
@@ -113,15 +121,19 @@ class _RideChatScreenState extends ConsumerState<RideChatScreen> {
           children: [
             Expanded(
               child: _messages.isEmpty
-                  ? const EmptyState(icon: Icons.chat_outlined, title: 'noMessages', subtitle: 'startConversation')
+                  ? const EmptyState(
+                      icon: Icons.chat_outlined,
+                      title: 'No messages yet',
+                      subtitle: 'Start a conversation with your driver',
+                    )
                   : ListView.builder(
                       controller: _scrollController,
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(_pad),
                       itemCount: _messages.length + (_hasMore ? 1 : 0),
                       itemBuilder: (c, i) {
                         if (i == 0 && _hasMore) {
                           return const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 8),
+                            padding: EdgeInsets.symmetric(vertical: _sm),
                             child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
                           );
                         }
@@ -132,50 +144,103 @@ class _RideChatScreenState extends ConsumerState<RideChatScreen> {
                         final senderId = _extractSenderId(m);
                         final isMine = senderId.isNotEmpty && senderId == currentUserId;
 
-                        return Align(
-                          alignment: isMine ? AlignmentDirectional.centerEnd : AlignmentDirectional.centerStart,
-                          child: Container(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                            decoration: BoxDecoration(
-                              color: isMine ? WeretTokens.brand.withValues(alpha: 0.15) : WeretTokens.surface,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: WeretTokens.border.withValues(alpha: 0.7)),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(text, style: const TextStyle(fontWeight: FontWeight.w500)),
-                              ],
-                            ),
-                          ),
-                        );
+                        return _ChatBubble(text: text, isMine: isMine);
                       },
                     ),
             ),
-            Container(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-              decoration: BoxDecoration(
-                color: WeretTokens.surface,
-                border: Border(top: BorderSide(color: WeretTokens.border.withValues(alpha: 0.6))),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _input,
-                      decoration: InputDecoration(hintText: 'rideChatPlaceholder'.tr(), isDense: true),
-                      onSubmitted: (_) => _send(),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  FilledButton(onPressed: _send, child: const Icon(Icons.send, size: 18)),
-                ],
-              ),
+            _ChatInputBar(
+              controller: _input,
+              onSend: _send,
+              error: _sendError,
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Extracted Widgets
+// ═══════════════════════════════════════════════════════════════════════
+
+class _ChatBubble extends StatelessWidget {
+  const _ChatBubble({required this.text, required this.isMine});
+  final String text;
+  final bool isMine;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: isMine ? AlignmentDirectional.centerEnd : AlignmentDirectional.centerStart,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: _sm),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: isMine ? WeretTokens.brand.withValues(alpha: 0.15) : WeretTokens.surface,
+          borderRadius: BorderRadius.circular(_bubbleRadius),
+          border: Border.all(color: WeretTokens.border.withValues(alpha: 0.7)),
+        ),
+        child: Text(text, style: const TextStyle(fontWeight: FontWeight.w500)),
+      ),
+    );
+  }
+}
+
+class _ChatInputBar extends StatelessWidget {
+  const _ChatInputBar({
+    required this.controller,
+    required this.onSend,
+    this.error,
+  });
+  final TextEditingController controller;
+  final VoidCallback onSend;
+  final String? error;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (error != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: _pad, vertical: _sm - 4),
+            child: Text(error!, style: const TextStyle(color: WeretTokens.error, fontSize: 12)),
+          ),
+        Container(
+          padding: const EdgeInsets.fromLTRB(12, _sm, 12, 12),
+          decoration: BoxDecoration(
+            color: WeretTokens.surface,
+            border: Border(top: BorderSide(color: WeretTokens.border.withValues(alpha: 0.6))),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  decoration: InputDecoration(hintText: 'rideChatPlaceholder'.tr(), isDense: true),
+                  onSubmitted: (_) => onSend(),
+                ),
+              ),
+              const SizedBox(width: _sm),
+              PressableScale(
+                scale: 0.9,
+                haptic: true,
+                onTap: onSend,
+                child: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: WeretTokens.brand,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.send, size: 18, color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

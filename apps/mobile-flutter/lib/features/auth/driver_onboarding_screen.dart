@@ -1,7 +1,9 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../core/providers/auth_provider.dart';
 import '../../core/theme/weret_tokens.dart';
 import '../../core/utils/api_error_message.dart';
@@ -10,11 +12,26 @@ import '../../core/theme/auth_flow.dart';
 import '../../shared/widgets/auth_form_field.dart';
 import '../../shared/widgets/custom_button.dart';
 import '../../shared/widgets/document_upload_field.dart';
+import '../../shared/widgets/ui/form_error_callout.dart';
 import '../../shared/widgets/weret_auth_scaffold.dart';
 import '../../shared/models/weret_user.dart';
 import '../driver/driver_shared_widgets.dart';
 
-/// Driver application: welcome → personal → vehicle → banking → (account) → submit.
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Step enum — replaces raw int for type-safe navigation
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+enum _DriverStep { welcome, personal, vehicle, banking, account }
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Spacing & config
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const _xs = 8.0;
+const _sm = 12.0;
+const _md = 16.0;
+const _lg = 24.0;
+const _fieldGap = 14.0;
+const _transitionMs = 350;
+
 class DriverOnboardingScreen extends ConsumerStatefulWidget {
   const DriverOnboardingScreen({super.key, this.fromSignup = false});
 
@@ -22,13 +39,22 @@ class DriverOnboardingScreen extends ConsumerStatefulWidget {
   final bool fromSignup;
 
   @override
-  ConsumerState<DriverOnboardingScreen> createState() => _DriverOnboardingScreenState();
+  ConsumerState<DriverOnboardingScreen> createState() =>
+      _DriverOnboardingScreenState();
 }
 
-class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen> {
-  final _formKey = GlobalKey<FormState>();
-  int _step = 0;
+class _DriverOnboardingScreenState
+    extends ConsumerState<DriverOnboardingScreen> {
+  // ── Step ──────────────────────────────────────────────────────────
+  _DriverStep _step = _DriverStep.welcome;
 
+  // ── Per-step form keys (isolates validation between steps) ────────
+  final _personalFormKey = GlobalKey<FormState>();
+  final _vehicleFormKey = GlobalKey<FormState>();
+  final _bankingFormKey = GlobalKey<FormState>();
+  final _accountFormKey = GlobalKey<FormState>();
+
+  // ── Controllers ───────────────────────────────────────────────────
   final _fullName = TextEditingController();
   final _nationalId = TextEditingController();
   final _licenseNumber = TextEditingController();
@@ -45,6 +71,7 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
   final _confirm = TextEditingController();
   final _phone = TextEditingController();
 
+  // ── Document URLs ─────────────────────────────────────────────────
   String? _criminalFrontUrl;
   String? _criminalBackUrl;
   String? _licenseImageUrl;
@@ -53,21 +80,31 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
   String? _registrationDocUrl;
   String? _insuranceDocUrl;
 
+  // ── State ─────────────────────────────────────────────────────────
   int _year = DateTime.now().year;
   String _vehicleType = 'sedan';
   bool _bgConsent = false;
   bool _termsConsent = false;
   bool _accountTerms = false;
+  bool _submitting = false;
 
-  bool get _needsAccountStep => widget.fromSignup && ref.read(authProvider).user == null;
+  // ── Error handling ────────────────────────────────────────────────
+  String? _localError;
+  bool _errorDismissed = false;
 
-  int get _progressTotal => _needsAccountStep ? 4 : 3;
+  // ── Computed ──────────────────────────────────────────────────────
+  bool get _anyLoading => _submitting || ref.read(authProvider).loading;
 
+  // ── Lifecycle ─────────────────────────────────────────────────────
   @override
   void initState() {
     super.initState();
     final user = ref.read(authProvider).user;
-    _licenseExpiry.text = DateTime.now().add(const Duration(days: 365)).toIso8601String().split('T').first;
+    _licenseExpiry.text = DateTime.now()
+        .add(const Duration(days: 365))
+        .toIso8601String()
+        .split('T')
+        .first;
     if (user != null) {
       _fullName.text = user.name;
       _email.text = user.email;
@@ -79,64 +116,38 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
 
   @override
   void dispose() {
-    _fullName.dispose();
-    _nationalId.dispose();
-    _licenseNumber.dispose();
-    _licenseExpiry.dispose();
-    _makeModel.dispose();
-    _carColor.dispose();
-    _carSeats.dispose();
-    _plate.dispose();
-    _bankName.dispose();
-    _iban.dispose();
-    _accountHolder.dispose();
-    _email.dispose();
-    _password.dispose();
-    _confirm.dispose();
-    _phone.dispose();
+    for (final c in [
+      _fullName, _nationalId, _licenseNumber, _licenseExpiry,
+      _makeModel, _carColor, _carSeats, _plate,
+      _bankName, _iban, _accountHolder,
+      _email, _password, _confirm, _phone,
+    ]) {
+      c.dispose();
+    }
     super.dispose();
   }
 
-  bool _docsStep1Ready() =>
-      _criminalFrontUrl != null && _criminalBackUrl != null && _licenseImageUrl != null && _profileImageUrl != null;
-
-  bool _docsStep2Ready() => _carImageUrl != null && _registrationDocUrl != null && _insuranceDocUrl != null;
-
-  void _next() {
-    if (!_formKey.currentState!.validate()) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('authValidationCheckFields'.tr())));
-      return;
-    }
-    if (_step == 1 && !_docsStep1Ready()) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('authUploadDocsRequired'.tr())));
-      return;
-    }
-    if (_step == 2 && !_docsStep2Ready()) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('authUploadDocsRequired'.tr())));
-      return;
-    }
-    if (_step == 3) {
-      if (!_bgConsent || !_termsConsent) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('driverConsentsRequired'.tr())));
-        return;
-      }
-      if (_needsAccountStep) {
-        setState(() => _step = 4);
-        return;
-      }
-      _submitApplication();
-      return;
-    }
-    if (_step == 4) {
-      _registerAndSubmit();
-      return;
-    }
-    setState(() => _step += 1);
+  // ── Navigation ────────────────────────────────────────────────────
+  void _goTo(_DriverStep next) {
+    HapticFeedback.selectionClick();
+    setState(() {
+      _step = next;
+      _localError = null;
+      _errorDismissed = false;
+    });
   }
 
   void _back() {
-    if (_step > 0) {
-      setState(() => _step -= 1);
+    if (_anyLoading) return;
+    final prev = switch (_step) {
+      _DriverStep.personal => _DriverStep.welcome,
+      _DriverStep.vehicle => _DriverStep.personal,
+      _DriverStep.banking => _DriverStep.vehicle,
+      _DriverStep.account => _DriverStep.banking,
+      _DriverStep.welcome => null,
+    };
+    if (prev != null) {
+      _goTo(prev);
     } else if (widget.fromSignup) {
       context.go('/register');
     } else {
@@ -144,6 +155,115 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
     }
   }
 
+  // ── Error helpers ─────────────────────────────────────────────────
+  void _setError(String? e) {
+    if (e == null || e.isEmpty) return;
+    HapticFeedback.heavyImpact();
+    setState(() { _localError = e; _errorDismissed = false; });
+  }
+
+  void _dismissError() => setState(() => _errorDismissed = true);
+
+  String? _displayError(String? providerError) {
+    if (_errorDismissed) return null;
+    return _localError ?? providerError;
+  }
+
+  // ── Doc readiness ─────────────────────────────────────────────────
+  bool get _docsStep1Ready =>
+      _criminalFrontUrl != null &&
+      _criminalBackUrl != null &&
+      _licenseImageUrl != null &&
+      _profileImageUrl != null;
+
+  bool get _docsStep2Ready =>
+      _carImageUrl != null &&
+      _registrationDocUrl != null &&
+      _insuranceDocUrl != null;
+
+  // ── Per-step validation ───────────────────────────────────────────
+  bool _validatePersonal() {
+    if (_personalFormKey.currentState?.validate() != true) {
+      _setError('authValidationCheckFields'.tr());
+      return false;
+    }
+    if (!_docsStep1Ready) {
+      _setError('authUploadDocsRequired'.tr());
+      return false;
+    }
+    return true;
+  }
+
+  bool _validateVehicle() {
+    if (_vehicleFormKey.currentState?.validate() != true) {
+      _setError('authValidationCheckFields'.tr());
+      return false;
+    }
+    if (!_docsStep2Ready) {
+      _setError('authUploadDocsRequired'.tr());
+      return false;
+    }
+    return true;
+  }
+
+  bool _validateBanking() {
+    if (_bankingFormKey.currentState?.validate() != true) {
+      _setError('authValidationCheckFields'.tr());
+      return false;
+    }
+    if (!_bgConsent || !_termsConsent) {
+      _setError('driverConsentsRequired'.tr());
+      return false;
+    }
+    return true;
+  }
+
+  bool _validateAccount() {
+    if (_accountFormKey.currentState?.validate() != true) {
+      _setError('authValidationCheckFields'.tr());
+      return false;
+    }
+    if (!_accountTerms) {
+      _setError('authTermsRequired'.tr());
+      return false;
+    }
+    return true;
+  }
+
+  // ── Step advancement ──────────────────────────────────────────────
+  void _next() {
+    if (_anyLoading) return;
+    HapticFeedback.selectionClick();
+
+    final valid = switch (_step) {
+      _DriverStep.welcome => true,
+      _DriverStep.personal => _validatePersonal(),
+      _DriverStep.vehicle => _validateVehicle(),
+      _DriverStep.banking => _validateBanking(),
+      _DriverStep.account => _validateAccount(),
+    };
+    if (!valid) return;
+
+    switch (_step) {
+      case _DriverStep.welcome:
+        _goTo(_DriverStep.personal);
+      case _DriverStep.personal:
+        _goTo(_DriverStep.vehicle);
+      case _DriverStep.vehicle:
+        _goTo(_DriverStep.banking);
+      case _DriverStep.banking:
+        final needsAccount = widget.fromSignup && ref.read(authProvider).user == null;
+        if (needsAccount) {
+          _goTo(_DriverStep.account);
+        } else {
+          _submitApplication();
+        }
+      case _DriverStep.account:
+        _registerAndSubmit();
+    }
+  }
+
+  // ── Payload ───────────────────────────────────────────────────────
   List<String> _splitMakeModel() {
     final parts = _makeModel.text.trim().split(RegExp(r'\s+'));
     if (parts.length <= 1) return [parts.first, ''];
@@ -154,7 +274,9 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
     final mm = _splitMakeModel();
     return {
       'fullName': _fullName.text.trim(),
-      'phone': _phone.text.trim().isNotEmpty ? _phone.text.trim() : (user.phone.isNotEmpty ? user.phone : '0000000000'),
+      'phone': _phone.text.trim().isNotEmpty
+          ? _phone.text.trim()
+          : (user.phone.isNotEmpty ? user.phone : '0000000000'),
       'email': _email.text.trim().isNotEmpty ? _email.text.trim() : user.email,
       'profileImageUrl': _profileImageUrl!,
       'criminalRecordFrontUrl': _criminalFrontUrl!,
@@ -185,29 +307,28 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
     };
   }
 
+  // ── Submit (existing user) ────────────────────────────────────────
   Future<void> _submitApplication() async {
     final user = ref.read(authProvider).user;
     if (user == null) {
-      if (mounted) setState(() => _step = 4);
+      if (mounted) _goTo(_DriverStep.account);
       return;
     }
+    setState(() => _submitting = true);
+    ref.read(authProvider.notifier).clearError();
     try {
       await ref.read(authProvider.notifier).submitDriverApplication(_applicationPayload(user));
       if (mounted) context.go('/driver/application-received');
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(ref.read(authProvider).error ?? localizedApiError(e))),
-        );
-      }
+      if (mounted) _setError(ref.read(authProvider).error ?? localizedApiError(e));
+    } finally {
+      if (mounted) setState(() => _submitting = false);
     }
   }
 
+  // ── Register + submit (new user) ─────────────────────────────────
   Future<void> _registerAndSubmit() async {
-    if (!_accountTerms) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('authTermsRequired'.tr())));
-      return;
-    }
+    setState(() => _submitting = true);
     ref.read(authProvider.notifier).clearError();
     try {
       await ref.read(authProvider.notifier).register({
@@ -219,132 +340,192 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
     } catch (e) {
       final errMsg = ref.read(authProvider).error ?? localizedApiError(e);
       if (errMsg.contains('already registered') || errMsg.contains('409')) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Account already exists. Please log in first.')),
-          );
-        }
+        if (mounted) _setError('Account already exists. Please log in first.');
         if (mounted) context.go('/login');
         return;
       }
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errMsg)));
-      }
+      if (mounted) _setError(errMsg);
       return;
+    } finally {
+      if (mounted) setState(() => _submitting = false);
     }
+
     final user = ref.read(authProvider).user;
     if (user == null) return;
-    await ref.read(authProvider.notifier).submitDriverApplication(_applicationPayload(user));
-    if (mounted) context.go('/driver/application-received');
+    setState(() => _submitting = true);
+    try {
+      await ref.read(authProvider.notifier).submitDriverApplication(_applicationPayload(user));
+      if (mounted) context.go('/driver/application-received');
+    } catch (e) {
+      if (mounted) _setError(ref.read(authProvider).error ?? localizedApiError(e));
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // BUILD
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   @override
   Widget build(BuildContext context) {
-    final user = ref.watch(authProvider).user;
-    final loading = ref.watch(authProvider).loading;
+    final auth = ref.watch(authProvider);
+    final user = auth.user;
     final needsAccount = widget.fromSignup && user == null;
-    final progressStep = _step == 0 ? 0 : _step;
-    final showProgress = _step > 0 && _step <= _progressTotal;
+    final progressTotal = needsAccount ? 4 : 3;
+    final progressValue = switch (_step) {
+      _DriverStep.welcome => 0,
+      _DriverStep.personal => 1,
+      _DriverStep.vehicle => 2,
+      _DriverStep.banking => 3,
+      _DriverStep.account => 4,
+    };
+    final showProgress = _step != _DriverStep.welcome;
 
     return WeretAuthScaffold(
       flow: AuthFlow.driver,
-      title: _step == 0 ? null : _stepTitle(),
-      showBack: _step > 0,
+      title: _step == _DriverStep.welcome ? null : _stepTitle(),
+      showBack: _step != _DriverStep.welcome,
       onBack: _back,
-      centerBrand: _step == 0,
-      showBrand: _step == 0,
-      showLanguage: _step == 0,
+      centerBrand: _step == _DriverStep.welcome,
+      showBrand: _step == _DriverStep.welcome,
+      showLanguage: _step == _DriverStep.welcome,
       stepLabel: showProgress
-          ? (_step == 4
+          ? (_step == _DriverStep.account
               ? 'registerDriverStepAccount'.tr()
-              : 'registerDriverStepOnboarding'.tr(namedArgs: {'step': '$progressStep', 'total': '$_progressTotal'}))
+              : 'registerDriverStepOnboarding'.tr(namedArgs: {
+                  'step': '$progressValue',
+                  'total': '$progressTotal',
+                }))
           : null,
-      subtitle: _step == 0
-          ? null
-          : _step == 3
-              ? 'driverFinalStep'.tr()
-              : _step == 4
-                  ? 'registerDriverSubtitle'.tr()
-                  : 'driverOnboardingIntro'.tr(),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (showProgress) ...[
-              LinearProgressIndicator(
-                value: progressStep / _progressTotal,
-                backgroundColor: WeretTokens.border.withValues(alpha: 0.5),
-                color: WeretTokens.brand,
-              ),
-              const SizedBox(height: 12),
-            ],
-            switch (_step) {
-              0 => _welcomeStep(),
-              1 => _personalStep(),
-              2 => _vehicleStep(),
-              3 => _bankingStep(user),
-              _ => _accountStep(),
-            },
-            const SizedBox(height: 16),
-            if (_step == 0)
-              CustomButton(title: 'registerNext'.tr(), onPressed: () => setState(() => _step = 1))
-            else if (_step == 3)
-              CustomButton(
-                title: needsAccount ? 'registerNext'.tr() : 'driverSubmitApplication'.tr(),
-                loading: !needsAccount && loading,
-                onPressed: _next,
-              )
-            else if (_step == 4)
-              CustomButton(title: 'registerDriverCreate'.tr(), loading: loading, onPressed: _next)
-            else
-              CustomButton(
-                title: _step == 1 ? 'driverContinueVehicle'.tr() : 'driverContinueFinal'.tr(),
-                onPressed: _next,
-              ),
-            if (_step == 2) ...[
-              const SizedBox(height: 8),
-              TextButton(onPressed: _back, child: Text('driverBackPrevious'.tr())),
-            ],
-            if (_step == 1)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  'driverTermsFooter'.tr(),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 11, color: WeretTokens.textSecondary, height: 1.4),
-                ),
-              ),
-            if (_step == 4) ...[
-              WeretLinkButton(title: 'registerDriverPhone'.tr(), onPressed: () => context.push('/register/driver/phone')),
-              WeretLinkButton(title: 'login'.tr(), onPressed: () => context.go('/login')),
-            ],
+      subtitle: _stepSubtitle(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (showProgress) ...[
+            LinearProgressIndicator(
+              value: progressValue / progressTotal,
+              backgroundColor: WeretTokens.border.withValues(alpha: 0.5),
+              color: WeretTokens.brand,
+              minHeight: 4,
+            ),
+            const SizedBox(height: _md),
           ],
-        ),
+
+          if (_displayError(auth.error) != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: _sm),
+              child: FormErrorCallout(
+                message: _displayError(auth.error)!,
+                onDismiss: _dismissError,
+              ),
+            ),
+
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: _transitionMs),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            transitionBuilder: (child, animation) {
+              final dir = animation.status == AnimationStatus.reverse
+                  ? const Offset(0.04, 0)
+                  : const Offset(-0.04, 0);
+              return FadeTransition(
+                opacity: animation,
+                child: SlideTransition(
+                  position: Tween(begin: dir, end: Offset.zero).animate(animation),
+                  child: child,
+                ),
+              );
+            },
+            child: KeyedSubtree(
+              key: ValueKey(_step),
+              child: switch (_step) {
+                _DriverStep.welcome => _buildWelcome(),
+                _DriverStep.personal => Form(key: _personalFormKey, child: _buildPersonal()),
+                _DriverStep.vehicle => Form(key: _vehicleFormKey, child: _buildVehicle()),
+                _DriverStep.banking => Form(key: _bankingFormKey, child: _buildBanking(user)),
+                _DriverStep.account => Form(key: _accountFormKey, child: _buildAccount()),
+              },
+            ),
+          ),
+
+          const SizedBox(height: _md),
+
+          _buildActionButton(needsAccount),
+
+          if (_step == _DriverStep.vehicle)
+            Padding(
+              padding: const EdgeInsets.only(top: _xs),
+              child: TextButton(
+                onPressed: _anyLoading ? null : _back,
+                child: Text('driverBackPrevious'.tr()),
+              ),
+            ),
+          if (_step == _DriverStep.personal)
+            Padding(
+              padding: const EdgeInsets.only(top: _xs),
+              child: Text(
+                'driverTermsFooter'.tr(),
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 11, color: WeretTokens.textSecondary, height: 1.4),
+              ),
+            ),
+          if (_step == _DriverStep.account)
+            Padding(
+              padding: const EdgeInsets.only(top: _xs),
+              child: TextButton(
+                onPressed: _anyLoading ? null : () => context.go('/login'),
+                child: Text('login'.tr()),
+              ),
+            ),
+        ],
       ),
     );
   }
 
-  String _stepTitle() {
-    switch (_step) {
-      case 1:
-        return 'becomeDriverTitle'.tr();
-      case 2:
-        return 'driverVehicleInfo'.tr();
-      case 3:
-        return 'driverBankingVerification'.tr();
-      case 4:
-        return 'registerDriverTitle'.tr();
-      default:
-        return '';
-    }
+  String _stepTitle() => switch (_step) {
+    _DriverStep.personal => 'becomeDriverTitle'.tr(),
+    _DriverStep.vehicle => 'driverVehicleInfo'.tr(),
+    _DriverStep.banking => 'driverBankingVerification'.tr(),
+    _DriverStep.account => 'registerDriverTitle'.tr(),
+    _DriverStep.welcome => '',
+  };
+
+  String? _stepSubtitle() => switch (_step) {
+    _DriverStep.welcome => null,
+    _DriverStep.banking => 'driverFinalStep'.tr(),
+    _DriverStep.account => 'registerDriverSubtitle'.tr(),
+    _ => 'driverOnboardingIntro'.tr(),
+  };
+
+  Widget _buildActionButton(bool needsAccount) {
+    final label = switch (_step) {
+      _DriverStep.welcome => 'registerNext'.tr(),
+      _DriverStep.personal => 'driverContinueVehicle'.tr(),
+      _DriverStep.vehicle => 'driverContinueFinal'.tr(),
+      _DriverStep.banking => needsAccount ? 'registerNext'.tr() : 'driverSubmitApplication'.tr(),
+      _DriverStep.account => 'registerDriverCreate'.tr(),
+    };
+    final isLoading = switch (_step) {
+      _DriverStep.banking => !needsAccount && _anyLoading,
+      _DriverStep.account => _anyLoading,
+      _ => false,
+    };
+    return CustomButton(
+      title: label,
+      loading: isLoading,
+      onPressed: _anyLoading ? null : _next,
+    );
   }
 
-  Widget _welcomeStep() {
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // STEP BUILDERS
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Widget _buildWelcome() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SizedBox(height: 16),
+        const SizedBox(height: _md),
         Text(
           widget.fromSignup ? 'registerDriverPathBody'.tr() : 'driverWelcomeFamily'.tr(),
           textAlign: TextAlign.center,
@@ -356,59 +537,26 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
           ),
         ),
         if (widget.fromSignup) ...[
-          const SizedBox(height: 12),
+          const SizedBox(height: _sm),
           Text(
             'registerDriverHint'.tr(),
             textAlign: TextAlign.center,
             style: const TextStyle(fontSize: 13, color: WeretTokens.textSecondary, height: 1.45),
           ),
         ],
-        SizedBox(height: widget.fromSignup ? 28 : 48),
+        SizedBox(height: widget.fromSignup ? _lg : _lg * 2),
         const DriverWordmark(),
-        SizedBox(height: widget.fromSignup ? 32 : 48),
+        SizedBox(height: widget.fromSignup ? _lg : _lg * 2),
       ],
     );
   }
 
-  Widget _accountStep() {
-    final error = ref.watch(authProvider).error;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text('registerDriverHint'.tr(), style: const TextStyle(fontSize: 13, height: 1.45, color: WeretTokens.textSecondary)),
-        const SizedBox(height: 12),
-        if (error != null && error.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text(error, style: TextStyle(color: Colors.red.shade700, fontSize: 13)),
-          ),
-        AuthFormField(label: 'email'.tr(), controller: _email, keyboardType: TextInputType.emailAddress, validator: validateEmail, textInputAction: TextInputAction.next),
-        AuthFormField(label: 'password'.tr(), controller: _password, obscure: true, validator: validatePassword, textInputAction: TextInputAction.next),
-        AuthFormField(
-          label: 'authPasswordConfirm'.tr(),
-          controller: _confirm,
-          obscure: true,
-          validator: (v) => validatePasswordConfirm(v, _password.text),
-          textInputAction: TextInputAction.next,
-        ),
-        AuthFormField(label: 'phone'.tr(), controller: _phone, keyboardType: TextInputType.phone, hint: 'phonePlaceholder'.tr(), validator: (v) => validatePhone(v, required: true), textInputAction: TextInputAction.done),
-        CheckboxListTile(
-          contentPadding: EdgeInsets.zero,
-          value: _accountTerms,
-          onChanged: (v) => setState(() => _accountTerms = v ?? false),
-          title: Text('authTermsAccept'.tr(), style: const TextStyle(fontSize: 13, height: 1.35)),
-          controlAffinity: ListTileControlAffinity.leading,
-        ),
-      ],
-    );
-  }
-
-  Widget _personalStep() {
+  Widget _buildPersonal() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text('becomeDriverSubtitle'.tr(), style: const TextStyle(color: WeretTokens.textSecondary, height: 1.4)),
-        const SizedBox(height: 16),
+        const SizedBox(height: _md),
         DriverFormCard(
           icon: Icons.person_outline,
           title: 'driverProfilePersonal'.tr(),
@@ -430,7 +578,7 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
               DocumentUploadField(label: 'driverOnboardingCriminalRecord'.tr(), url: _criminalFrontUrl, onChanged: (v) => setState(() => _criminalFrontUrl = v)),
               DocumentUploadField(label: 'driverOnboardingCriminalBack'.tr(), url: _criminalBackUrl, onChanged: (v) => setState(() => _criminalBackUrl = v)),
               DocumentUploadField(label: 'profilePhoto'.tr(), url: _profileImageUrl, visibility: 'public', onChanged: (v) => setState(() => _profileImageUrl = v)),
-              const SizedBox(height: 8),
+              const SizedBox(height: _sm),
               DriverInfoBanner(text: 'driverLicensePhotoHint'.tr()),
             ],
           ),
@@ -439,12 +587,12 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
     );
   }
 
-  Widget _vehicleStep() {
+  Widget _buildVehicle() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text('driverVehicleIntro'.tr(), style: const TextStyle(color: WeretTokens.textSecondary, height: 1.4)),
-        const SizedBox(height: 16),
+        const SizedBox(height: _md),
         DriverFormCard(
           icon: Icons.directions_car_outlined,
           title: 'driverVehicleIdentity'.tr(),
@@ -452,23 +600,26 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
             children: [
               AuthFormField(label: 'driverMakeModel'.tr(), controller: _makeModel, hint: 'driverMakeModelHint'.tr(), validator: (v) => validateRequired(v, messageKey: 'authValidationCarBrandRequired')),
               DropdownButtonFormField<int>(
-                value: _year,
-                decoration: InputDecoration(labelText: 'driverYear'.tr(), border: OutlineInputBorder(borderRadius: BorderRadius.circular(WeretTokens.fieldRadius))),
+                initialValue: _year,
+                decoration: InputDecoration(
+                  labelText: 'driverYear'.tr(),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(WeretTokens.fieldRadius)),
+                ),
                 items: List.generate(30, (i) {
                   final y = DateTime.now().year - i;
                   return DropdownMenuItem(value: y, child: Text('$y'));
                 }),
                 onChanged: (v) => setState(() => _year = v ?? _year),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: _fieldGap),
               AuthFormField(label: 'driverCarColor'.tr(), controller: _carColor, validator: (v) => validateRequired(v, messageKey: 'driverRegErrCarColor')),
-              const SizedBox(height: 12),
+              const SizedBox(height: _fieldGap),
               AuthFormField(label: 'driverCarSeats'.tr(), controller: _carSeats, keyboardType: TextInputType.number, validator: (v) {
                 final s = int.tryParse(v ?? '');
                 if (s == null || s < 2 || s > 20) return 'driverCarSeatsInvalid'.tr();
                 return null;
               }),
-              const SizedBox(height: 12),
+              const SizedBox(height: _fieldGap),
               AuthFormField(label: 'driverCarPlate'.tr(), controller: _plate, validator: (v) => validateRequired(v, messageKey: 'authValidationCarPlateRequired')),
             ],
           ),
@@ -492,7 +643,7 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
               DocumentUploadField(label: 'driverVehiclePhoto'.tr(), url: _carImageUrl, visibility: 'public', onChanged: (v) => setState(() => _carImageUrl = v)),
               DocumentUploadField(label: 'driverRegistrationDoc'.tr(), url: _registrationDocUrl, onChanged: (v) => setState(() => _registrationDocUrl = v)),
               DocumentUploadField(label: 'driverInsuranceDoc'.tr(), url: _insuranceDocUrl, onChanged: (v) => setState(() => _insuranceDocUrl = v)),
-              const SizedBox(height: 8),
+              const SizedBox(height: _sm),
               DriverInfoBanner(text: 'driverDocsExpiryHint'.tr()),
             ],
           ),
@@ -501,19 +652,12 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
     );
   }
 
-  Widget _bankingStep(WeretUser? user) {
+  Widget _buildBanking(WeretUser? user) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            _stepChip('driverStepPersonal'.tr(), false),
-            _stepChip('driverVehicleInfo'.tr(), false),
-            _stepChip('driverVerification'.tr(), true),
-          ],
-        ),
-        const SizedBox(height: 16),
+        const _StepStepper(currentStep: 2),
+        const SizedBox(height: _md),
         DriverFormCard(
           icon: Icons.account_balance_outlined,
           title: 'driverPayoutMethod'.tr(),
@@ -526,64 +670,190 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
             ],
           ),
         ),
-        CheckboxListTile(
-          value: _bgConsent,
-          onChanged: (v) => setState(() => _bgConsent = v ?? false),
-          title: Text('driverBgConsent'.tr(), style: const TextStyle(fontSize: 13)),
-          controlAffinity: ListTileControlAffinity.leading,
-          contentPadding: EdgeInsets.zero,
+        const SizedBox(height: _sm),
+        _DriverCheckbox(value: _bgConsent, label: 'driverBgConsent'.tr(), onChanged: (v) => setState(() => _bgConsent = v)),
+        _DriverCheckbox(value: _termsConsent, label: 'driverTermsConsent'.tr(), onChanged: (v) => setState(() => _termsConsent = v)),
+        const SizedBox(height: _md),
+        _ApplicationSummary(
+          fullName: _fullName.text,
+          email: user?.email ?? _email.text,
+          makeModel: _makeModel.text,
+          plate: _plate.text,
+          onEditPersonal: () => _goTo(_DriverStep.personal),
+          onEditVehicle: () => _goTo(_DriverStep.vehicle),
         ),
-        CheckboxListTile(
-          value: _termsConsent,
-          onChanged: (v) => setState(() => _termsConsent = v ?? false),
-          title: Text('driverTermsConsent'.tr(), style: const TextStyle(fontSize: 13)),
-          controlAffinity: ListTileControlAffinity.leading,
-          contentPadding: EdgeInsets.zero,
-        ),
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(color: WeretTokens.ambient, borderRadius: BorderRadius.circular(WeretTokens.fieldRadius)),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text('driverApplicationSummary'.tr(), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12, letterSpacing: 1)),
-              const SizedBox(height: 10),
-              _summaryRow('driverProfilePersonal'.tr(), '${_fullName.text}\n${user?.email ?? _email.text}'),
-              _summaryRow('driverVehicleInfo'.tr(), '${_makeModel.text}\n${'driverCarPlate'.tr()}: ${_plate.text}'),
-              Row(
-                children: [
-                  const Icon(Icons.check_circle, color: WeretTokens.brand, size: 18),
-                  const SizedBox(width: 6),
-                  Text('driverIdentityUploaded'.tr(), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                ],
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
+        const SizedBox(height: _sm),
         DriverInfoBanner(text: 'driverReviewTimeline'.tr()),
       ],
     );
   }
 
-  Widget _stepChip(String label, bool active) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: Column(
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(color: active ? WeretTokens.brand : WeretTokens.border, shape: BoxShape.circle),
+  Widget _buildAccount() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('registerDriverHint'.tr(), style: const TextStyle(fontSize: 13, height: 1.45, color: WeretTokens.textSecondary)),
+        const SizedBox(height: _sm),
+        AuthFormField(label: 'email'.tr(), controller: _email, keyboardType: TextInputType.emailAddress, validator: validateEmail, textInputAction: TextInputAction.next),
+        AuthFormField(label: 'password'.tr(), controller: _password, obscure: true, validator: validatePassword, textInputAction: TextInputAction.next),
+        AuthFormField(label: 'authPasswordConfirm'.tr(), controller: _confirm, obscure: true, validator: (v) => validatePasswordConfirm(v, _password.text), textInputAction: TextInputAction.next),
+        AuthFormField(label: 'phone'.tr(), controller: _phone, keyboardType: TextInputType.phone, hint: 'phonePlaceholder'.tr(), validator: (v) => validatePhone(v, required: true), textInputAction: TextInputAction.done),
+        _DriverCheckbox(value: _accountTerms, label: 'authTermsAccept'.tr(), onChanged: (v) => setState(() => _accountTerms = v)),
+      ],
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Extracted widgets
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Connected stepper dots with labels for the final step.
+class _StepStepper extends StatelessWidget {
+  final int currentStep;
+  const _StepStepper({required this.currentStep});
+
+  static const _labels = ['driverStepPersonal', 'driverVehicleInfo', 'driverVerification'];
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(3, (i) {
+        final isActive = i == currentStep;
+        final isPast = i < currentStep;
+        final dotColor = (isActive || isPast) ? WeretTokens.brand : WeretTokens.border.withValues(alpha: 0.5);
+        final lineColor = isPast ? WeretTokens.brand : WeretTokens.border.withValues(alpha: 0.5);
+
+        return Expanded(
+          child: Row(
+            children: [
+              if (i > 0) Expanded(child: Container(height: 2, color: lineColor)),
+              Column(
+                children: [
+                  Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _labels[i].tr(),
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: isActive ? FontWeight.w800 : FontWeight.w500,
+                      color: (isActive || isPast) ? WeretTokens.brand : WeretTokens.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+              if (i < 2) Expanded(child: Container(height: 2, color: lineColor)),
+            ],
           ),
-          const SizedBox(height: 4),
-          Text(label, style: TextStyle(fontSize: 9, fontWeight: active ? FontWeight.w800 : FontWeight.w500, color: active ? WeretTokens.brand : WeretTokens.textSecondary)),
+        );
+      }),
+    );
+  }
+}
+
+/// Styled checkbox matching the app's design tokens.
+class _DriverCheckbox extends StatelessWidget {
+  final bool value;
+  final String label;
+  final ValueChanged<bool> onChanged;
+
+  const _DriverCheckbox({required this.value, required this.label, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => onChanged(!value),
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 22,
+              height: 22,
+              child: Checkbox(
+                value: value,
+                onChanged: (v) => onChanged(v ?? false),
+                activeColor: WeretTokens.brand,
+                checkColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(6),
+                  side: BorderSide(color: value ? WeretTokens.brand : WeretTokens.border),
+                ),
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(child: Text(label, style: const TextStyle(fontSize: 13, height: 1.35))),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Summary card on the banking step with editable rows.
+class _ApplicationSummary extends StatelessWidget {
+  final String fullName;
+  final String email;
+  final String makeModel;
+  final String plate;
+  final VoidCallback onEditPersonal;
+  final VoidCallback onEditVehicle;
+
+  const _ApplicationSummary({
+    required this.fullName,
+    required this.email,
+    required this.makeModel,
+    required this.plate,
+    required this.onEditPersonal,
+    required this.onEditVehicle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: WeretTokens.ambient,
+        borderRadius: BorderRadius.circular(WeretTokens.fieldRadius),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('driverApplicationSummary'.tr(), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12, letterSpacing: 1)),
+          const SizedBox(height: 10),
+          _SummaryRow(title: 'driverProfilePersonal'.tr(), body: '$fullName\n$email', onEdit: onEditPersonal),
+          _SummaryRow(title: 'driverVehicleInfo'.tr(), body: '$makeModel\n${'driverCarPlate'.tr()}: $plate', onEdit: onEditVehicle),
+          Row(
+            children: [
+              const Icon(Icons.check_circle, color: WeretTokens.brand, size: 18),
+              const SizedBox(width: 6),
+              Text('driverIdentityUploaded'.tr(), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+            ],
+          ),
         ],
       ),
     );
   }
+}
 
-  Widget _summaryRow(String title, String body) {
+class _SummaryRow extends StatelessWidget {
+  final String title;
+  final String body;
+  final VoidCallback onEdit;
+
+  const _SummaryRow({required this.title, required this.body, required this.onEdit});
+
+  @override
+  Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Row(
@@ -598,7 +868,7 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
               ],
             ),
           ),
-          TextButton(onPressed: () => setState(() => _step = title.contains('Vehicle') || title.contains('مركبة') ? 2 : 1), child: Text('edit'.tr())),
+          TextButton(onPressed: onEdit, child: Text('edit'.tr())),
         ],
       ),
     );

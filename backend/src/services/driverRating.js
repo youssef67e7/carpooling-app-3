@@ -12,11 +12,7 @@ export async function refreshDriverRatingAggregate(driverId) {
   const sum = rated.reduce((acc, r) => acc + Number(r.passengerRating || 0), 0);
   const avg = Math.round((sum / rated.length) * 10) / 10;
 
-  await DriverProfile.updateOne(
-    { userId: id },
-    { $set: { rating: avg, ratingCount: rated.length } },
-    { upsert: true }
-  );
+  await DriverProfile.updateOne({ userId: id }, { $set: { rating: avg, ratingCount: rated.length } }, { upsert: true });
   return { rating: avg, ratingCount: rated.length };
 }
 

@@ -6,16 +6,26 @@ import '../services/debug_logger.dart';
 import '../utils/auth_navigation.dart';
 import '../../features/auth/weret_onboarding_screen.dart';
 import '../../features/auth/login_screen.dart';
+import '../../features/auth/driver_onboarding_screen.dart';
 import '../../features/auth/register_choice_screen.dart';
 import '../../features/auth/passenger_register_screen.dart';
 import '../../features/auth/driver_register_screen.dart';
-import '../../features/auth/legacy_screens.dart';
 import '../../features/auth/forgot_password_screen.dart';
-import '../../features/auth/phone_register_screen.dart';
+import '../../features/auth/in_app_call_screen.dart';
 import '../../features/auth/ride_chat_screen.dart';
+import '../../features/safety/emergency_sos_screen.dart';
+import '../../features/safety/trusted_contacts_screen.dart';
+import '../../features/safety/share_live_trip_screen.dart';
+import '../../features/safety/verify_driver_screen.dart';
+import '../../features/safety/report_incident_screen.dart';
+import '../../features/safety/block_user_screen.dart';
+import '../../features/safety/emergency_hotline_screen.dart';
+import '../../features/auth/user_dispute_screen.dart';
+import '../../features/auth/user_dispute_chat_screen.dart';
 import '../../features/driver/driver_status_screens.dart';
 import '../../features/driver/driver_request_detail_screen.dart';
 import '../../features/debug/debug_log_screen.dart';
+import '../../features/more/rating_history_screen.dart';
 import 'passenger_shell.dart';
 import 'driver_shell.dart';
 import 'admin_shell.dart';
@@ -119,22 +129,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/forgot-password', builder: (_, __) => const ForgotPasswordScreen()),
       GoRoute(path: '/register', builder: (_, __) => const RegisterChoiceScreen()),
       GoRoute(path: '/register/passenger', builder: (_, __) => const PassengerRegisterScreen()),
-      GoRoute(
-        path: '/register/passenger/phone',
-        builder: (_, __) => const PhoneRegisterScreen(forDriver: false),
-      ),
       GoRoute(path: '/register/driver', builder: (_, __) => const DriverRegisterScreen()),
-      GoRoute(
-        path: '/register/driver/phone',
-        builder: (_, __) => const PhoneRegisterScreen(forDriver: true),
-      ),
-      GoRoute(
-        path: '/register/phone',
-        redirect: (_, state) {
-          if (state.uri.queryParameters['driver'] == '1') return '/register/driver/phone';
-          return '/register/passenger/phone';
-        },
-      ),
       GoRoute(path: '/driver/onboarding', builder: (_, __) => const DriverOnboardingScreen()),
       GoRoute(path: '/driver/application-received', builder: (_, __) => const DriverApplicationReceivedScreen()),
       GoRoute(path: '/driver/verification-status', builder: (_, __) => const DriverVerificationStatusScreen()),
@@ -148,6 +143,27 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/ride-chat/:rideId', builder: (c, s) => RideChatScreen(rideId: s.pathParameters['rideId']!)),
       GoRoute(path: '/in-app-call/:rideId', builder: (c, s) => InAppCallScreen(rideId: s.pathParameters['rideId']!)),
       GoRoute(path: '/debug/log', builder: (_, __) => const DebugLogScreen()),
+      GoRoute(path: '/safety/emergency', builder: (_, s) => EmergencySosScreen(rideId: s.extra as String?)),
+      GoRoute(path: '/safety/trusted-contacts', builder: (_, __) => const TrustedContactsScreen()),
+      GoRoute(path: '/safety/share-trip', builder: (_, s) => ShareLiveTripScreen(rideId: s.extra as String? ?? '')),
+      GoRoute(path: '/safety/verify-driver', builder: (_, s) {
+        final e = s.extra as Map<String, dynamic>?;
+        return VerifyDriverScreen(
+          driverName: e?['driverName'] as String? ?? '',
+          driverPhoto: e?['driverPhoto'] as String? ?? '',
+          vehicleModel: e?['vehicleModel'] as String? ?? '',
+          vehicleColor: e?['vehicleColor'] as String? ?? '',
+          plateNumber: e?['plateNumber'] as String? ?? '',
+          rating: (e?['rating'] as num?)?.toDouble() ?? 0.0,
+        );
+      }),
+      GoRoute(path: '/safety/report', builder: (_, s) => ReportIncidentScreen(reportedUserId: s.extra is String ? s.extra as String? : null)),
+      GoRoute(path: '/safety/blocked', builder: (_, __) => const BlockUserScreen()),
+      GoRoute(path: '/safety/hotline', builder: (_, __) => const EmergencyHotlineScreen()),
+      GoRoute(path: '/disputes', builder: (_, __) => const UserDisputeScreen()),
+      GoRoute(path: '/dispute/:id', builder: (c, s) => UserDisputeChatScreen(disputeId: s.pathParameters['id']!)),
+      GoRoute(path: '/ratings', builder: (_, __) => const RatingHistoryScreen()),
+      GoRoute(path: '/ratings/received', builder: (_, __) => const RatingHistoryScreen(isDriver: true)),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) => PassengerShell(navigationShell: navigationShell),
         branches: [

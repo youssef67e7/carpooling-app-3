@@ -3,7 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/auth/admin_screens.dart';
 import '../../features/auth/settings_screen.dart';
+import '../../features/auth/admin_dispute_screen.dart';
+import '../../features/auth/admin_dispute_detail_screen.dart';
 import '../../features/auth/legacy_screens.dart';
+import '../../features/more/info_screens.dart';
+import '../../features/more/promotions_screen.dart';
 import '../../shared/widgets/weret_shell_scaffold.dart';
 
 class AdminShell extends StatelessWidget {
@@ -38,7 +42,13 @@ class AdminShell extends StatelessWidget {
                 GoRoute(path: 'reports', builder: (_, __) => const AdminReportsScreen()),
                 GoRoute(path: 'transactions', builder: (_, __) => const AdminTransactionsScreen()),
                 GoRoute(path: 'audit', builder: (_, __) => const AdminAuditLogScreen()),
+                GoRoute(path: 'promotions', builder: (_, __) => const PromotionsScreen(isAdmin: true)),
                 GoRoute(path: 'about', builder: (_, __) => const AboutWeretScreen()),
+                GoRoute(path: 'disputes', builder: (_, __) => const AdminDisputeScreen()),
+                GoRoute(
+                  path: 'disputes/:id',
+                  builder: (c, s) => AdminDisputeDetailScreen(disputeId: s.pathParameters['id']!),
+                ),
               ],
             ),
           ],

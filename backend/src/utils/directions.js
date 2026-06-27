@@ -31,11 +31,15 @@ function decodeGooglePolyline(encoded) {
 }
 
 /**
- * Returns routePath [{lat,lng},...] using Google Directions when key set, else mock interpolation.
+ * Returns routePath [{lat,lng},...] using Google Directions when key set.
+ * Throws in production if no API key is configured.
  */
 export async function buildRoutePath(pickup, destination) {
   const key = process.env.GOOGLE_DIRECTIONS_API_KEY;
   if (!key) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("GOOGLE_DIRECTIONS_API_KEY is not configured — cannot generate routes in production");
+    }
     return interpolateRoute(pickup, destination, 28);
   }
   const origin = `${pickup.lat},${pickup.lng}`;
@@ -47,16 +51,16 @@ export async function buildRoutePath(pickup, destination) {
 
   const res = await fetch(url.toString());
   if (!res.ok) {
-    return interpolateRoute(pickup, destination, 28);
+    throw new Error(`Directions API returned ${res.status}`);
   }
   const data = await res.json();
   const enc = data?.routes?.[0]?.overview_polyline?.points;
   if (!enc) {
-    return interpolateRoute(pickup, destination, 28);
+    throw new Error("Directions API returned no route");
   }
   try {
     return decodeGooglePolyline(enc);
-  } catch {
-    return interpolateRoute(pickup, destination, 28);
+  } catch (e) {
+    throw new Error(`Failed to decode polyline: ${e}`);
   }
 }

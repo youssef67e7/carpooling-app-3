@@ -9,8 +9,7 @@ const app = createApp();
 const PORT = Number(process.env.PORT) || 3000;
 
 if (!process.env.JWT_SECRET) {
-  console.warn("WARNING: JWT_SECRET not set. Using insecure default for local dev only.");
-  process.env.JWT_SECRET = "dev-only-insecure-secret-change-me";
+  throw new Error("JWT_SECRET environment variable must be set");
 }
 
 function logLanApiUrls(port) {
