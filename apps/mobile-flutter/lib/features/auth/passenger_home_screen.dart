@@ -150,8 +150,6 @@ class _PassengerHomeScreenState extends ConsumerState<PassengerHomeScreen> {
               lat: p.latitude,
               lng: p.longitude,
             );
-      } else {
-        await ref.read(rideProvider.notifier).fetchNearbyDrivers(_vehicleType);
       }
     } catch (e) {
       debugPrint('Nearby drivers fetch failed: $e');
@@ -361,7 +359,13 @@ class _PassengerHomeScreenState extends ConsumerState<PassengerHomeScreen> {
                 ),
 
                 Gap.h20(),
-                _ModeSelector(),
+                _ModeSelector(
+                  selectedType: _vehicleType,
+                  onChanged: (t) {
+                    setState(() => _vehicleType = t);
+                    _refreshNearby();
+                  },
+                ),
 
                 Gap.h20(),
                 _SectionLabel('YOUR LOCATION'),
@@ -528,7 +532,18 @@ class _MapPreview extends StatelessWidget {
 }
 
 class _ModeSelector extends StatelessWidget {
-  const _ModeSelector();
+  const _ModeSelector({
+    required this.selectedType,
+    required this.onChanged,
+  });
+
+  final String selectedType;
+  final ValueChanged<String> onChanged;
+
+  static const _rideTypes = {'travel', 'motorcycle', 'car_standard', 'car_comfort'};
+  static const _deliveryTypes = {'delivery', 'shipping'};
+
+  bool get _isRideMode => _rideTypes.contains(selectedType);
 
   @override
   Widget build(BuildContext context) {
@@ -538,8 +553,10 @@ class _ModeSelector extends StatelessWidget {
           child: _ModeCard(
             label: 'Ride',
             icon: Icons.directions_car_outlined,
-            selected: true,
-            onTap: () {},
+            selected: _isRideMode,
+            onTap: () {
+              if (!_isRideMode) onChanged('travel');
+            },
           ),
         ),
         const SizedBox(width: _md),
@@ -547,8 +564,10 @@ class _ModeSelector extends StatelessWidget {
           child: _ModeCard(
             label: 'Send a package',
             image: AppAssets.deliveryVan,
-            selected: false,
-            onTap: () {},
+            selected: !_isRideMode,
+            onTap: () {
+              if (_isRideMode) onChanged('delivery');
+            },
           ),
         ),
       ],
@@ -738,7 +757,7 @@ class _NearbySection extends StatelessWidget {
         Row(
           children: [
             Text(
-              'nearbyTrips'.tr(),
+              'nearbyDrivers'.tr(),
               style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,

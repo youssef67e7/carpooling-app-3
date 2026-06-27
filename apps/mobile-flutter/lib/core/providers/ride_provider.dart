@@ -151,13 +151,14 @@ class RideNotifier extends StateNotifier<RideState> {
   }
 
   Future<void> fetchNearbyDrivers(String vehicleType, {double? lat, double? lng, double radiusKm = 15}) async {
+    if (lat == null || lng == null) return;
     final api = await _api;
-    final query = <String, dynamic>{'vehicleType': vehicleType};
-    if (lat != null && lng != null) {
-      query['lat'] = lat;
-      query['lng'] = lng;
-      query['radiusKm'] = radiusKm;
-    }
+    final query = <String, dynamic>{
+      'vehicleType': vehicleType,
+      'lat': lat,
+      'lng': lng,
+      'radiusKm': radiusKm,
+    };
     final data = await api.getJson(ApiEndpoints.ridesNearbyDrivers, query: query);
     state = state.copyWith(nearbyDrivers: data['drivers'] as List? ?? []);
   }
