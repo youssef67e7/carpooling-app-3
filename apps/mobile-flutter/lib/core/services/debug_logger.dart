@@ -77,14 +77,14 @@ class DebugLogger {
   }
 
   void flush() {
-    if (_buffer.isNotEmpty && _sink != null) {
-      _sink!.write(_buffer.toString());
-      _sink!.flush();
-      _buffer.clear();
-    }
+    if (!_initialized || _buffer.isEmpty || _sink == null) return;
+    _sink!.write(_buffer.toString());
+    _sink!.flush();
+    _buffer.clear();
   }
 
   void _write(String level, String category, String message, {String icon = '', String screen = ''}) {
+    if (!_initialized) return;
     final now = DateTime.now();
     final ts = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}.${now.millisecond.toString().padLeft(3, '0')}';
     final line = '$icon [$ts] [$level] [$screen] [$category] $message\n';
@@ -104,9 +104,9 @@ class DebugLogger {
   }
 
   void dispose() {
+    _initialized = false;
     _flushTimer?.cancel();
     flush();
     _sink?.close();
-    _initialized = false;
   }
 }

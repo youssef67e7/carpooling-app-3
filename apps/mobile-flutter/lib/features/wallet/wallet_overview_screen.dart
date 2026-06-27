@@ -24,6 +24,12 @@ class _WalletOverviewScreenState extends ConsumerState<WalletOverviewScreen> {
     final w = ref.watch(walletProvider);
     return Scaffold(
       backgroundColor: WeretTokens.bg,
+      appBar: AppBar(
+        title: const Text('Wallet', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17)),
+        centerTitle: true,
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+      ),
       body: Column(
         children: [
           Container(

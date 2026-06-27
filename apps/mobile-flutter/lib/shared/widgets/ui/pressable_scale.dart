@@ -1,52 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// A widget that scales down on press and springs back on release.
-///
-/// Designed as a lightweight, reusable alternative to [InkWell] when you
-/// want only a scale effect without ink splashes or ripples.
-///
-/// ```dart
-/// PressableScale(
-///   onTap: () => context.push('/detail'),
-///   child: Card(child: ...),
-/// )
-/// ```
 class PressableScale extends StatefulWidget {
-  /// The widget to apply the scale effect to.
   final Widget child;
-
-  /// Called when the user taps and releases.
   final VoidCallback? onTap;
-
-  /// Called when the user long-presses.
   final VoidCallback? onLongPress;
-
-  /// The scale factor to animate to on press. Defaults to `0.95`.
-  ///
-  /// Must be in the range `(0, 1)`.
   final double scale;
-
-  /// Duration of the scale animation. Defaults to 100 ms.
   final Duration duration;
-
-  /// Duration of the reverse (release) animation. Defaults to [duration].
-  ///
-  /// A slightly longer reverse can feel more natural.
   final Duration? reverseDuration;
-
-  /// Whether the widget responds to input. Defaults to `true`.
-  ///
-  /// When `false`, taps are ignored and the widget is not scaled.
   final bool enabled;
-
-  /// Whether to produce a light haptic on press. Defaults to `false`.
   final bool haptic;
-
-  /// Hit test behavior for the underlying [GestureDetector].
-  ///
-  /// Defaults to [HitTestBehavior.opaque] so the entire child area
-  /// is tappable even if the child doesn't fill its bounds.
   final HitTestBehavior behavior;
 
   const PressableScale({
@@ -68,9 +31,9 @@ class PressableScale extends StatefulWidget {
 
 class _PressableScaleState extends State<PressableScale>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
+  late AnimationController _controller;
   late Animation<double> _scaleAnim;
-
+  final List<CurvedAnimation> _curves = [];
   bool _isPressed = false;
 
   @override
@@ -81,9 +44,7 @@ class _PressableScaleState extends State<PressableScale>
       reverseDuration: widget.reverseDuration,
       vsync: this,
     );
-    _scaleAnim = Tween<double>(begin: 1.0, end: widget.scale).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
-    );
+    _buildAnim();
   }
 
   @override
@@ -92,11 +53,10 @@ class _PressableScaleState extends State<PressableScale>
     if (oldWidget.scale != widget.scale ||
         oldWidget.duration != widget.duration ||
         oldWidget.reverseDuration != widget.reverseDuration) {
+      _disposeCurves();
       _controller.duration = widget.duration;
       _controller.reverseDuration = widget.reverseDuration;
-      _scaleAnim = Tween<double>(begin: 1.0, end: widget.scale).animate(
-        CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
-      );
+      _buildAnim();
     }
     if (!widget.enabled && _isPressed) {
       _isPressed = false;
@@ -104,21 +64,28 @@ class _PressableScaleState extends State<PressableScale>
     }
   }
 
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
+  void _buildAnim() {
+    final curved = CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic);
+    _curves.add(curved);
+    _scaleAnim = Tween<double>(begin: 1.0, end: widget.scale).animate(curved);
+  }
+
+  void _disposeCurves() {
+    for (final c in _curves) {
+      c.dispose();
+    }
+    _curves.clear();
   }
 
   void _handleTapDown(TapDownDetails details) {
     if (!widget.enabled) return;
-    setState(() => _isPressed = true);
-    if (widget.haptic) HapticFeedback.selectionClick();
+    _isPressed = true;
     _controller.forward();
   }
 
   void _handleTapUp(TapUpDetails details) {
     _release();
+    if (widget.haptic) HapticFeedback.lightImpact();
     widget.onTap?.call();
   }
 
@@ -126,13 +93,21 @@ class _PressableScaleState extends State<PressableScale>
 
   void _release() {
     if (!_isPressed) return;
-    setState(() => _isPressed = false);
+    _isPressed = false;
     _controller.reverse();
   }
 
   @override
+  void dispose() {
+    _disposeCurves();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final canInteract = widget.enabled && (widget.onTap != null || widget.onLongPress != null);
+    final canInteract =
+        widget.enabled && (widget.onTap != null || widget.onLongPress != null);
 
     return Semantics(
       button: widget.onTap != null,

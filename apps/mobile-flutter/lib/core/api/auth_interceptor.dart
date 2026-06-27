@@ -95,9 +95,9 @@ class AuthInterceptor extends Interceptor {
       );
 
       final responseData = response.data is Map ? response.data as Map : <dynamic, dynamic>{};
-      final data = responseData['data'] is Map ? responseData['data'] as Map : <dynamic, dynamic>{};
-      final newAccessToken = data['accessToken'] as String?;
-      final newRefreshToken = data['refreshToken'] as String?;
+      final tokenContainer = responseData['data'] is Map ? responseData['data'] as Map : responseData;
+      final newAccessToken = tokenContainer['accessToken'] as String?;
+      final newRefreshToken = tokenContainer['refreshToken'] as String?;
 
       if (newAccessToken == null || newRefreshToken == null) {
         await _forceLogout();

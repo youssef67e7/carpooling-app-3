@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/api_client.dart';
@@ -45,10 +46,13 @@ class _ApiSyncBridge {
     try {
       final rideState = _ref.read(rideProvider);
       final active = rideState.activeRide;
-      if (active == null) return const Duration(seconds: 20);
-      final status = '${active['status']}';
-      if (status == 'accepted' || status == 'ongoing') return const Duration(seconds: 6);
-      if (status == 'pending') return const Duration(seconds: 10);
+      if (active != null) {
+        final status = '${active['status']}';
+        if (status == 'accepted' || status == 'ongoing') return const Duration(seconds: 6);
+        if (status == 'pending') return const Duration(seconds: 10);
+      }
+      // Driver waiting for ride requests — poll frequently
+      if (_activeRole == 'driver') return const Duration(seconds: 8);
       return const Duration(seconds: 20);
     } catch (_) {
       return const Duration(seconds: 20);
@@ -60,7 +64,7 @@ class _ApiSyncBridge {
     disconnect();
     _userId = userId;
     _activeRole = activeRole;
-    _initFcm().catchError((_) {});
+    _initFcm().catchError((e) => debugPrint('[SyncBridge] FCM init error: $e'));
     unawaited(_syncOnce());
     _scheduleNext();
   }
@@ -70,17 +74,26 @@ class _ApiSyncBridge {
     _fcmInitialized = true;
 
     _tokenSub = FcmService.listenTokenRefresh((token) {
-      _registerFcmToken().catchError((_) {});
+      _registerFcmToken().catchError((e) => debugPrint('[SyncBridge] FCM token refresh error: $e'));
     });
 
     await _registerFcmToken();
   }
 
-  Future<void> _registerFcmToken() async {
-    try {
-      final api = await _ref.read(apiClientProvider.future);
-      await FcmService.registerToken(api);
-    } catch (_) {}
+  Future<void> _registerFcmToken({int retries = 3}) async {
+    for (int attempt = 0; attempt < retries; attempt++) {
+      try {
+        final api = await _ref.read(apiClientProvider.future);
+        final success = await FcmService.registerToken(api);
+        if (success) return;
+        debugPrint('[SyncBridge] FCM register returned false (attempt $attempt)');
+      } catch (e) {
+        debugPrint('[SyncBridge] FCM register error (attempt $attempt): $e');
+      }
+      if (attempt < retries - 1) {
+        await Future.delayed(Duration(seconds: 2 * (attempt + 1)));
+      }
+    }
   }
 
   void _scheduleNext() {

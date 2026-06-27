@@ -19,6 +19,7 @@ import '../../features/more/my_carpools_screen.dart';
 import '../../features/more/saved_places_screen.dart';
 import '../../features/more/payment_methods_screen.dart';
 import '../../features/more/promotions_screen.dart';
+import '../../features/more/rating_history_screen.dart';
 import '../../features/more/referral_screen.dart';
 import '../../shared/widgets/weret_shell_scaffold.dart';
 
@@ -77,6 +78,8 @@ class PassengerShell extends StatelessWidget {
               GoRoute(path: 'my-carpools', builder: (_, __) => const MyCarpoolsScreen()),
               GoRoute(path: 'disputes', builder: (_, __) => const UserDisputeScreen()),
               GoRoute(path: 'disputes/:id', builder: (c, s) => UserDisputeChatScreen(disputeId: s.pathParameters['id']!)),
+              GoRoute(path: 'ratings', builder: (_, __) => const RatingHistoryScreen()),
+              GoRoute(path: 'ratings/received', builder: (_, __) => const RatingHistoryScreen(isDriver: true)),
               GoRoute(path: 'about', builder: (_, __) => const AboutWeretScreen()),
             ],
           ),

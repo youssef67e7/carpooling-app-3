@@ -27,7 +27,7 @@ class PassengerMoreMenuScreen extends ConsumerWidget {
     ('featureFavoriteDrivers', 'featureFavoriteDriversSubtitle', Icons.favorite, '/passenger/more/favorite-drivers'),
     ('featureCarpoolFind', 'featureCarpoolFindSubtitle', Icons.directions_car, '/passenger/more/find-carpool'),
     ('featureCarpoolMy', 'featureCarpoolMySubtitle', Icons.event_seat, '/passenger/more/my-carpools'),
-    ('featureRatingHistory', 'featureRatingHistorySubtitle', Icons.star_half, '/ratings'),
+    ('featureRatingHistory', 'featureRatingHistorySubtitle', Icons.star_half, '/passenger/more/ratings'),
     ('featureHelp', 'featureHelpSubtitle', Icons.help, '/passenger/more/help'),
     ('featureSafety', 'featureSafetySubtitle', Icons.shield, '/passenger/more/safety'),
     ('featureDisputes', 'featureDisputesSubtitle', Icons.gavel, '/passenger/more/disputes'),

@@ -541,7 +541,6 @@ class _ModeSelector extends StatelessWidget {
   final ValueChanged<String> onChanged;
 
   static const _rideTypes = {'travel', 'motorcycle', 'car_standard', 'car_comfort'};
-  static const _deliveryTypes = {'delivery', 'shipping'};
 
   bool get _isRideMode => _rideTypes.contains(selectedType);
 

@@ -157,6 +157,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     return Scaffold(
       backgroundColor: WeretTokens.bg,
+      appBar: AppBar(
+        title: const Text('Settings', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17)),
+        centerTitle: true,
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: WeretTokens.textPrimary),
+          onPressed: () => Navigator.maybePop(context),
+        ),
+      ),
       body: WeretAmbientBackground(
         child: SafeArea(
           child: WeretListScreen(

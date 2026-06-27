@@ -159,7 +159,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     HapticFeedback.selectionClick();
     final input = _identifier.text.trim();
     if (input.isEmpty) {
-      _setError('Please enter your email address');
+      _setError('loginErrorEmailRequired'.tr());
       return;
     }
     _email.text = input;
@@ -305,7 +305,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         const SizedBox(height: _xxl),
         const WeretLogo.wordmark(fontSize: 32),
         const SizedBox(height: _xs),
-        Text('Welcome back', style: AppStyles.headlineMedium),
+        Text('loginWelcomeBack'.tr(), style: AppStyles.headlineMedium),
         const SizedBox(height: _lg),
 
         if (_displayError(auth.error) != null)
@@ -317,7 +317,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         _WeretTextField(
           controller: _identifier,
           focusNode: _identifierFocus,
-          hint: 'Email address',
+          hint: 'loginEmailHint'.tr(),
           keyboardType: TextInputType.emailAddress,
           textInputAction: TextInputAction.go,
           onFieldSubmitted:
@@ -327,7 +327,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         const SizedBox(height: _md),
 
         _LoginPrimaryButton(
-          label: 'Continue',
+          label: 'loginContinue'.tr(),
           loading: false,
           onPressed: _continueFromWelcome,
         ),
@@ -354,14 +354,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         const SizedBox(height: _lg),
 
         _LoginTextLink(
-          label: 'Create an account',
+          label: 'loginCreateAccount'.tr(),
           onPressed:
               _anyLoading ? null : () => context.push('/register'),
         ),
         const SizedBox(height: _lg),
 
-        const Text(
-          'By continuing, you agree to our Terms of Service and Privacy Policy',
+        Text(
+          'loginTerms'.tr(),
           textAlign: TextAlign.center,
           style: TextStyle(
             color: WeretTokens.textMuted,
@@ -380,10 +380,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const SizedBox(height: _xl),
-          Text('Enter your email', style: AppStyles.headlineSmall),
+          Text('loginEnterEmail'.tr(), style: AppStyles.headlineSmall),
           const SizedBox(height: _xs),
           Text(
-            "We'll send a verification code to your inbox",
+            'loginVerificationSent'.tr(),
             style: AppStyles.bodyRegular,
           ),
           const SizedBox(height: _lg),
@@ -397,7 +397,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           _WeretTextField(
             controller: _email,
             focusNode: _emailFocus,
-            hint: 'Email address',
+            hint: 'loginEmailHint'.tr(),
             keyboardType: TextInputType.emailAddress,
             validator: validateEmail,
             textInputAction: TextInputAction.done,
@@ -408,14 +408,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           const SizedBox(height: _md),
 
           _LoginPrimaryButton(
-            label: 'Send Code',
+            label: 'loginSendCode'.tr(),
             loading: _anyLoading,
             onPressed: _anyLoading ? null : _sendEmailOtp,
           ),
           const SizedBox(height: _md),
 
           _LoginTextLink(
-            label: 'Create an account',
+            label: 'loginCreateAccount'.tr(),
             onPressed:
                 _anyLoading ? null : () => context.push('/register'),
           ),
@@ -431,14 +431,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const SizedBox(height: _xl),
-          Text('Enter verification code', style: AppStyles.headlineSmall),
+          Text('loginEnterOtp'.tr(), style: AppStyles.headlineSmall),
           if (_normalizedEmail != null) ...[
             const SizedBox(height: _xs),
             RichText(
               text: TextSpan(
                 style: AppStyles.bodyRegular,
                 children: [
-                  const TextSpan(text: 'Sent to '),
+                  TextSpan(text: 'loginSentTo'.tr()),
                   TextSpan(
                     text: _maskEmail(_normalizedEmail!),
                     style: AppStyles.bodyRegular
@@ -466,7 +466,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           const SizedBox(height: _md),
 
           _LoginPrimaryButton(
-            label: 'Verify',
+            label: 'loginVerify'.tr(),
             loading: _anyLoading || providerLoading,
             onPressed:
                 (_anyLoading || providerLoading) ? null : _verifyEmailOtp,
@@ -475,13 +475,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
           _LoginTextLink(
             label: _resendSeconds > 0
-                ? 'Resend in ${_resendSeconds}s'
-                : 'Resend code',
+                ? 'authResendIn'.tr(namedArgs: {'sec': _resendSeconds.toString()})
+                : 'authResend'.tr(),
             onPressed:
                 (_resendSeconds > 0 || _anyLoading) ? null : _sendEmailOtp,
           ),
           _LoginTextLink(
-            label: 'Change email address',
+            label: 'loginChangeEmail'.tr(),
             onPressed:
                 _anyLoading ? null : () => _goTo(_LoginStep.email),
           ),
@@ -571,13 +571,13 @@ class _OrDivider extends StatelessWidget {
   const _OrDivider();
   @override
   Widget build(BuildContext context) {
-    return const Row(children: [
-      Expanded(child: Divider(color: WeretTokens.borderSubtle)),
+    return Row(children: [
+      const Expanded(child: Divider(color: WeretTokens.borderSubtle)),
       Padding(
-        padding: EdgeInsets.symmetric(horizontal: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 14),
         child: Text(
-          'OR',
-          style: TextStyle(
+          'loginOr'.tr(),
+          style: const TextStyle(
             color: WeretTokens.textMuted,
             fontSize: 11,
             fontWeight: FontWeight.w600,
@@ -606,9 +606,9 @@ class _GoogleButton extends StatelessWidget {
           width: 20,
           height: 20,
         ),
-        label: const Text(
-          'Continue with Google',
-          style: TextStyle(
+        label: Text(
+          'weretContinueGoogle'.tr(),
+          style: const TextStyle(
             color: WeretTokens.textPrimary,
             fontSize: 14,
             fontWeight: FontWeight.w600,

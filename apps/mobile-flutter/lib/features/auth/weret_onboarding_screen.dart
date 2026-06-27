@@ -4,9 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/providers/auth_provider.dart';
 import '../../core/theme/app_assets.dart';
 import '../../core/theme/weret_tokens.dart';
 import '../../core/theme/app_styles.dart';
+import '../../core/utils/auth_navigation.dart';
 import '../../shared/widgets/weret_logo.dart';
 
 // ── Config ───────────────────────────────────────────────────────────
@@ -63,6 +65,15 @@ class _WeretOnboardingScreenState extends ConsumerState<WeretOnboardingScreen>
   }
 
   Future<void> _checkAndProceed() async {
+    if (!ref.read(authProvider).hydrated) {
+      await ref.read(authHydrateProvider.future);
+    }
+    if (!mounted) return;
+    final auth = ref.read(authProvider);
+    if (auth.isAuthenticated) {
+      context.go(AuthNavigation.homeForUser(auth.user));
+      return;
+    }
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getString(_onboardingKey) == '1') {
       if (mounted) context.go('/login');
@@ -75,6 +86,15 @@ class _WeretOnboardingScreenState extends ConsumerState<WeretOnboardingScreen>
     HapticFeedback.mediumImpact();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_onboardingKey, '1');
+    if (!ref.read(authProvider).hydrated) {
+      await ref.read(authHydrateProvider.future);
+    }
+    if (!mounted) return;
+    final auth = ref.read(authProvider);
+    if (auth.isAuthenticated) {
+      context.go(AuthNavigation.homeForUser(auth.user));
+      return;
+    }
     if (mounted) context.go('/login');
   }
 

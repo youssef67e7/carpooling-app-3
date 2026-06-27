@@ -1,66 +1,75 @@
 import { interpolateRoute } from "./geo.js";
 
-function decodeGooglePolyline(encoded) {
-  const points = [];
-  let index = 0;
-  let lat = 0;
-  let lng = 0;
-  while (index < encoded.length) {
-    let b;
-    let shift = 0;
-    let result = 0;
-    do {
-      b = encoded.charCodeAt(index++) - 63;
-      result |= (b & 0x1f) << shift;
-      shift += 5;
-    } while (b >= 0x20);
-    const dlat = result & 1 ? ~(result >> 1) : result >> 1;
-    lat += dlat;
-    shift = 0;
-    result = 0;
-    do {
-      b = encoded.charCodeAt(index++) - 63;
-      result |= (b & 0x1f) << shift;
-      shift += 5;
-    } while (b >= 0x20);
-    const dlng = result & 1 ? ~(result >> 1) : result >> 1;
-    lng += dlng;
-    points.push({ lat: lat / 1e5, lng: lng / 1e5 });
+const ORS_BASE = "https://api.openrouteservice.org/v2/directions/driving-car";
+
+function logWarn(...args) {
+  if (process.env.NODE_ENV !== "test") {
+    console.warn("[directions]", ...args);
   }
-  return points;
+}
+
+function geojsonToLatLng(coordinates) {
+  return coordinates.map(([lng, lat]) => ({ lat, lng }));
+}
+
+function haversineKmApprox(a, b) {
+  const R = 6371;
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+  const lat1 = (a.lat * Math.PI) / 180;
+  const lat2 = (b.lat * Math.PI) / 180;
+  const sinDLat = Math.sin(dLat / 2);
+  const sinDLng = Math.sin(dLng / 2);
+  const aVal = sinDLat * sinDLat + Math.cos(lat1) * Math.cos(lat2) * sinDLng * sinDLng;
+  return R * 2 * Math.atan2(Math.sqrt(aVal), Math.sqrt(1 - aVal));
+}
+
+function fallbackRoutePath(pickup, destination, reason) {
+  logWarn(`Fallback to straight-line interpolation: ${reason}`);
+  return interpolateRoute(pickup, destination, 28);
 }
 
 /**
- * Returns routePath [{lat,lng},...] using Google Directions when key set.
- * Throws in production if no API key is configured.
+ * Returns routePath [{lat,lng},...] using OpenRouteService when API key is set.
+ * Falls back to straight-line interpolation if key is missing or any error occurs.
  */
 export async function buildRoutePath(pickup, destination) {
-  const key = process.env.GOOGLE_DIRECTIONS_API_KEY;
+  const key = process.env.OPENROUTESERVICE_API_KEY;
   if (!key) {
-    if (process.env.NODE_ENV === "production") {
-      throw new Error("GOOGLE_DIRECTIONS_API_KEY is not configured — cannot generate routes in production");
-    }
-    return interpolateRoute(pickup, destination, 28);
+    return fallbackRoutePath(pickup, destination, "OPENROUTESERVICE_API_KEY not set");
   }
-  const origin = `${pickup.lat},${pickup.lng}`;
-  const dest = `${destination.lat},${destination.lng}`;
-  const url = new URL("https://maps.googleapis.com/maps/api/directions/json");
-  url.searchParams.set("origin", origin);
-  url.searchParams.set("destination", dest);
-  url.searchParams.set("key", key);
 
-  const res = await fetch(url.toString());
-  if (!res.ok) {
-    throw new Error(`Directions API returned ${res.status}`);
-  }
-  const data = await res.json();
-  const enc = data?.routes?.[0]?.overview_polyline?.points;
-  if (!enc) {
-    throw new Error("Directions API returned no route");
-  }
   try {
-    return decodeGooglePolyline(enc);
-  } catch (e) {
-    throw new Error(`Failed to decode polyline: ${e}`);
+    const body = {
+      coordinates: [
+        [pickup.lng, pickup.lat],
+        [destination.lng, destination.lat],
+      ],
+    };
+
+    const res = await fetch(ORS_BASE, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        Authorization: key,
+        Accept: "application/json, application/geo+json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const hint = res.status === 401 ? "Invalid API key" : res.status === 429 ? "Rate limited" : `HTTP ${res.status}`;
+      return fallbackRoutePath(pickup, destination, `OpenRouteService returned ${hint}`);
+    }
+
+    const data = await res.json();
+    const coords = data?.features?.[0]?.geometry?.coordinates;
+    if (!Array.isArray(coords) || coords.length < 2) {
+      return fallbackRoutePath(pickup, destination, "OpenRouteService returned no route geometry");
+    }
+
+    return geojsonToLatLng(coords);
+  } catch (err) {
+    return fallbackRoutePath(pickup, destination, `OpenRouteService error: ${err.message}`);
   }
 }

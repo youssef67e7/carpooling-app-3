@@ -167,24 +167,20 @@ class _PassengerRegisterScreenState
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
-    final showAppBar = _step == _RegisterStep.account;
+    final isWelcome = _step == _RegisterStep.welcome;
 
     return Scaffold(
       backgroundColor: WeretTokens.bg,
-      appBar: showAppBar
-          ? AppBar(
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              leading: IconButton(
-                icon: const Icon(
-                  Icons.arrow_back_ios_new_rounded,
-                  size: 20,
-                  color: WeretTokens.textPrimary,
-                ),
-                onPressed: _goBack,
-              ),
-            )
-          : null,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: WeretTokens.textPrimary),
+          onPressed: _goBack,
+        ),
+        title: isWelcome ? null : const Text('Create your account', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17)),
+        centerTitle: true,
+      ),
       body: SafeArea(
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
@@ -288,9 +284,7 @@ class _PassengerRegisterScreenState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SizedBox(height: _lg),
-          Text('Create your account', style: AppStyles.headlineSmall),
-          const SizedBox(height: _xs),
+          const SizedBox(height: _sm),
           Text(
             'Fill in your details to get started',
             style: AppStyles.bodyRegular,

@@ -1,24 +1,11 @@
 import 'package:flutter/material.dart';
 
-/// Direction each child slides in from.
 enum StaggerDirection { down, up, left, right }
 
-/// Staggers the entrance of [children] with a fade + slide animation,
-/// each delayed by [delayPerChild] after the previous one.
-///
-/// ```dart
-/// StaggerEntrance(
-///   spacing: 12,
-///   children: [
-///     SettingsRow(icon: Icons.notifications, title: 'Notifications'),
-///     SettingsRow(icon: Icons.lock, title: 'Privacy'),
-///   ],
-/// )
-/// ```
 class StaggerEntrance extends StatefulWidget {
   final List<Widget> children;
-  final Duration delayPerChild;
-  final Duration duration;
+  final Duration itemDelay;
+  final Duration totalDuration;
   final double offset;
   final StaggerDirection direction;
   final double spacing;
@@ -27,11 +14,11 @@ class StaggerEntrance extends StatefulWidget {
   const StaggerEntrance({
     super.key,
     required this.children,
-    this.delayPerChild = const Duration(milliseconds: 80),
-    this.duration = const Duration(milliseconds: 300),
+    this.itemDelay = const Duration(milliseconds: 50),
+    this.totalDuration = const Duration(milliseconds: 400),
     this.offset = 20,
     this.direction = StaggerDirection.down,
-    this.spacing = 0,
+    this.spacing = 16,
     this.crossAxisAlignment = CrossAxisAlignment.start,
   });
 
@@ -58,8 +45,8 @@ class _StaggerEntranceState extends State<StaggerEntrance>
   void didUpdateWidget(covariant StaggerEntrance oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.children.length != widget.children.length ||
-        oldWidget.duration != widget.duration ||
-        oldWidget.delayPerChild != widget.delayPerChild ||
+        oldWidget.totalDuration != widget.totalDuration ||
+        oldWidget.itemDelay != widget.itemDelay ||
         oldWidget.offset != widget.offset ||
         oldWidget.direction != widget.direction) {
       _disposeCurves();
@@ -78,23 +65,20 @@ class _StaggerEntranceState extends State<StaggerEntrance>
       return;
     }
 
-    final totalMs =
-        widget.duration.inMilliseconds + widget.delayPerChild.inMilliseconds * (count - 1);
-    _controller.duration = Duration(milliseconds: totalMs);
+    final totalMs = widget.totalDuration.inMilliseconds;
+    _controller.duration = widget.totalDuration;
 
     final begin = _beginOffset();
     _opacities = [];
     _translations = [];
 
     for (int i = 0; i < count; i++) {
-      final start = (widget.delayPerChild.inMilliseconds * i) / totalMs;
-      final end = (widget.duration.inMilliseconds +
-              widget.delayPerChild.inMilliseconds * i) /
-          totalMs;
+      final start = (widget.itemDelay.inMilliseconds * i) / totalMs;
+      final endClamped = 1.0.clamp(0.0, 1.0);
 
       final curve = CurvedAnimation(
         parent: _controller,
-        curve: Interval(start, end.clamp(0.0, 1.0)),
+        curve: Interval(start.clamp(0.0, 1.0), endClamped),
       );
       _curves.add(curve);
 
@@ -112,14 +96,16 @@ class _StaggerEntranceState extends State<StaggerEntrance>
   }
 
   Offset _beginOffset() => switch (widget.direction) {
-        StaggerDirection.down  => Offset(0, widget.offset),
-        StaggerDirection.up    => Offset(0, -widget.offset),
-        StaggerDirection.left  => Offset(-widget.offset, 0),
+        StaggerDirection.down => Offset(0, widget.offset),
+        StaggerDirection.up => Offset(0, -widget.offset),
+        StaggerDirection.left => Offset(-widget.offset, 0),
         StaggerDirection.right => Offset(widget.offset, 0),
       };
 
   void _disposeCurves() {
-    for (final c in _curves) { c.dispose(); }
+    for (final c in _curves) {
+      c.dispose();
+    }
     _curves.clear();
   }
 
@@ -134,29 +120,24 @@ class _StaggerEntranceState extends State<StaggerEntrance>
   Widget build(BuildContext context) {
     if (widget.children.isEmpty) return const SizedBox.shrink();
 
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, _) {
-        final count = widget.children.length;
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: widget.crossAxisAlignment,
-          children: List.generate(count, (i) {
-            return Padding(
-              padding: EdgeInsets.only(
-                bottom: i < count - 1 ? widget.spacing : 0,
-              ),
-              child: Opacity(
-                opacity: _opacities[i].value,
-                child: Transform.translate(
-                  offset: _translations[i].value,
-                  child: widget.children[i],
-                ),
-              ),
-            );
-          }),
+    final count = widget.children.length;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: widget.crossAxisAlignment,
+      children: List.generate(count, (i) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: i < count - 1 ? widget.spacing : 0,
+          ),
+          child: Opacity(
+            opacity: _opacities[i].value,
+            child: Transform.translate(
+              offset: _translations[i].value,
+              child: widget.children[i],
+            ),
+          ),
         );
-      },
+      }),
     );
   }
 }

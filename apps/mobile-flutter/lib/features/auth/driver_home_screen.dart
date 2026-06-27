@@ -88,6 +88,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
     final tracker = ref.read(driverLocationTrackerProvider);
     final isOnline = ref.read(authProvider).user?.isOnline ?? false;
     isOnline ? tracker.start() : tracker.stop();
+    await _fetchData();
   }
 
   bool _awaitingMyConfirm(Map<String, dynamic> m, String myId) {
