@@ -9,6 +9,7 @@ export const createWalletAccountSchema = z.object({
 export const depositSchema = z.object({
   amount: z.number().positive("Amount must be positive").max(10000, "Max deposit is 10,000"),
   walletAccountId: z.string().min(1, "Wallet account ID is required"),
+  idempotencyKey: z.string().min(1).max(128).optional(),
 });
 
 export const withdrawSchema = z.object({

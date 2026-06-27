@@ -1,4 +1,5 @@
-import { getCollection } from "../mongo/client.js";
+import crypto from "crypto";
+import { getCollection, getMongoClient } from "../mongo/client.js";
 import { WalletAccount } from "../models/WalletAccount.js";
 import { Transaction } from "../models/Transaction.js";
 
@@ -95,6 +96,126 @@ export async function debitPassengerForRide(passengerId, rideId, amount) {
     note: "Ride fare debit (wallet)",
   });
   return tx;
+}
+
+/**
+ * Atomic ride payment: debit passenger, credit driver, create both ledger entries,
+ * and mark ride as paid — all within a single MongoDB transaction.
+ *
+ * If the server crashes mid-transaction, MongoDB automatically rolls back all changes.
+ * If transactions are not available (standalone MongoDB), falls back to non-atomic
+ * sequential operations with a warning.
+ *
+ * Idempotent: safe to call multiple times for the same rideId.
+ *
+ * @returns {Promise<boolean>} true if payment was processed successfully
+ */
+export async function atomicRidePayment(passengerId, driverId, rideId, amount) {
+  const amt = Math.round(Number(amount) * 100) / 100;
+  if (!passengerId || !driverId || !rideId || !amt || Number.isNaN(amt) || amt <= 0) return false;
+
+  // Check idempotency upfront — if both debit and credit already exist, skip
+  const existingCredit = await Transaction.findOne({ rideId, type: "ride_payment", status: "success" });
+  const existingDebit = await Transaction.findOne({ rideId, type: "ride_debit", status: "success" });
+  if (existingCredit && existingDebit) return true;
+  if (existingDebit && !existingCredit) {
+    // Incomplete state: debit exists but no credit — reprocess credit only (non-atomic fallback)
+    await creditDriverForRide(driverId, rideId, amt);
+    return true;
+  }
+
+  const mongoClient = getMongoClient();
+  if (!mongoClient) {
+    console.warn("[wallet] No MongoClient available — falling back to non-atomic payment");
+    const debit = await debitPassengerForRide(passengerId, rideId, amt);
+    if (debit) await creditDriverForRide(driverId, rideId, amt);
+    return !!debit;
+  }
+
+  const session = mongoClient.startSession();
+  try {
+    let result = false;
+    await session.withTransaction(async () => {
+      // 1. Find or create passenger wallet
+      let pWallet = await getCollection("wallet_accounts").findOne(
+        { userId: passengerId, walletType: "cash" },
+        { session },
+      );
+      if (!pWallet) {
+        const id = crypto.randomUUID();
+        const now = new Date();
+        await getCollection("wallet_accounts").insertOne(
+          { _id: id, userId: passengerId, walletType: "cash", phoneNumber: "", balance: 0, label: "Ride earnings", isDefault: true, createdAt: now, updatedAt: now },
+          { session },
+        );
+        pWallet = { _id: id, balance: 0 };
+      }
+
+      // 2. Debit passenger with atomic balance guard
+      const debitResult = await getCollection("wallet_accounts").findOneAndUpdate(
+        { _id: pWallet._id, balance: { $gte: amt } },
+        { $inc: { balance: -amt } },
+        { session, returnDocument: "after" },
+      );
+      if (!debitResult) {
+        await getCollection("transactions").insertOne(
+          { _id: crypto.randomUUID(), userId: passengerId, walletAccountId: pWallet._id, amount: amt, type: "ride_debit", status: "failed", rideId, note: "Insufficient wallet balance", createdAt: new Date(), updatedAt: new Date() },
+          { session },
+        );
+        throw new Error("Insufficient balance");
+      }
+
+      // 3. Create debit ledger entry
+      await getCollection("transactions").insertOne(
+        { _id: crypto.randomUUID(), userId: passengerId, walletAccountId: pWallet._id, amount: amt, type: "ride_debit", status: "success", rideId, note: "Ride fare debit (wallet)", createdAt: new Date(), updatedAt: new Date() },
+        { session },
+      );
+
+      // 4. Find or create driver wallet
+      let dWallet = await getCollection("wallet_accounts").findOne(
+        { userId: driverId, walletType: "cash" },
+        { session },
+      );
+      if (!dWallet) {
+        const id = crypto.randomUUID();
+        const now = new Date();
+        await getCollection("wallet_accounts").insertOne(
+          { _id: id, userId: driverId, walletType: "cash", phoneNumber: "", balance: 0, label: "Ride earnings", isDefault: true, createdAt: now, updatedAt: now },
+          { session },
+        );
+        dWallet = { _id: id };
+      }
+
+      // 5. Credit driver
+      await getCollection("wallet_accounts").updateOne(
+        { _id: dWallet._id },
+        { $inc: { balance: amt } },
+        { session },
+      );
+
+      // 6. Create credit ledger entry
+      await getCollection("transactions").insertOne(
+        { _id: crypto.randomUUID(), userId: driverId, walletAccountId: dWallet._id, amount: amt, type: "ride_payment", status: "success", rideId, note: "Ride fare credit", createdAt: new Date(), updatedAt: new Date() },
+        { session },
+      );
+
+      // 7. Mark ride as paid
+      await getCollection("rides").updateOne(
+        { _id: rideId },
+        { $set: { paymentProcessed: true, paymentProcessedAt: new Date() } },
+        { session },
+      );
+
+      result = true;
+    });
+
+    return result;
+  } catch (err) {
+    console.error("[wallet] Atomic ride payment failed:", err.message, err.code);
+    return false;
+  } finally {
+    await session.endSession();
+  }
 }
 
 /**

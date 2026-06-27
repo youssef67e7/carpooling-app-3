@@ -91,9 +91,10 @@ router.post(
 
 router.delete("/trusted-contacts/:contactId", param("contactId").isString(), validateRequest, async (req, res, next) => {
   try {
+    const contactId = /^[0-9a-f]{24}$/i.test(req.params.contactId) ? new ObjectId(req.params.contactId) : req.params.contactId;
     const result = await User.updateOne(
       { _id: req.userId },
-      { $pull: { trustedContacts: { _id: new ObjectId(req.params.contactId) } } },
+      { $pull: { trustedContacts: { _id: contactId } } },
     );
     if (result.modifiedCount === 0) throw new AppError("Contact not found", 404);
     return res.json({ success: true });
@@ -114,7 +115,7 @@ router.post("/block/:userId", param("userId").isString(), validateRequest, async
     if (blocked.some((b) => String(b.userId) === targetId)) {
       return res.json({ success: true, message: "Already blocked" });
     }
-    blocked.push({ userId: new ObjectId(targetId), blockedAt: new Date() });
+    blocked.push({ userId: targetId, blockedAt: new Date() });
     await User.updateOne({ _id: req.userId }, { $set: { blockedUsers: blocked } });
     logAction({ req, action: "BLOCK_USER", extra: { targetId } });
     return res.json({ success: true });

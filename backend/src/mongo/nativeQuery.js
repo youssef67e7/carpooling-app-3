@@ -7,7 +7,35 @@ function toNativeId(id) {
   return /^[0-9a-f]{24}$/i.test(String(id)) ? ObjectId(String(id)) : String(id);
 }
 
-function convertFilterKeys(filter) {
+/** Recursively convert all object keys to snake_case (handles dotted paths). */
+export function deepSnakeKeys(obj) {
+  if (!obj || typeof obj !== "object" || obj instanceof Date || obj instanceof RegExp) return obj;
+  if (Array.isArray(obj)) return obj.map(deepSnakeKeys);
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    out[camelToSnake(k)] = deepSnakeKeys(v);
+  }
+  return out;
+}
+
+/** Walk $expr trees converting field-reference strings ("$camelCase" → "$snake_case"). */
+function convertExprRefs(val) {
+  if (typeof val === "string" && val.startsWith("$") && val.length > 1) {
+    const path = val.slice(1);
+    return "$" + (path.includes(".")
+      ? path.split(".").map((p) => camelToSnake(p)).join(".")
+      : camelToSnake(path));
+  }
+  if (Array.isArray(val)) return val.map(convertExprRefs);
+  if (val && typeof val === "object" && !(val instanceof Date) && !(val instanceof RegExp)) {
+    const out = {};
+    for (const [k, v] of Object.entries(val)) out[k] = convertExprRefs(v);
+    return out;
+  }
+  return val;
+}
+
+export function convertFilterKeys(filter) {
   if (!filter || typeof filter !== "object" || Array.isArray(filter) || filter instanceof RegExp || filter instanceof Date)
     return filter;
   const out = {};
@@ -17,7 +45,9 @@ function convertFilterKeys(filter) {
       continue;
     }
     if (key.startsWith("$")) {
-      out[key] = Array.isArray(val) ? val.map(convertFilterKeys) : convertFilterKeys(val);
+      let converted = Array.isArray(val) ? val.map(convertFilterKeys) : convertFilterKeys(val);
+      if (key === "$expr") converted = convertExprRefs(converted);
+      out[key] = converted;
       continue;
     }
     const snakeKey = camelToSnake(key);
@@ -104,11 +134,7 @@ export async function nativeUpdateOne(tableName, filter, update, opts = {}) {
   const nativeFilter = convertFilterKeys(filter);
   const nativeUpdate = {};
   for (const [op, fields] of Object.entries(update)) {
-    if (op === "$set" || op === "$inc" || op === "$unset") {
-      nativeUpdate[op] = convertFilterKeys(fields);
-    } else {
-      nativeUpdate[op] = fields;
-    }
+    nativeUpdate[op] = deepSnakeKeys(fields);
   }
   return col.updateOne(nativeFilter, nativeUpdate, opts);
 }
@@ -118,13 +144,10 @@ export async function nativeFindOneAndUpdate(tableName, filter, update, opts = {
   const nativeFilter = convertFilterKeys(filter);
   const nativeUpdate = {};
   for (const [op, fields] of Object.entries(update)) {
-    if (op === "$set" || op === "$inc" || op === "$unset") {
-      nativeUpdate[op] = convertFilterKeys(fields);
-    } else {
-      nativeUpdate[op] = fields;
-    }
+    nativeUpdate[op] = deepSnakeKeys(fields);
   }
-  const row = await col.findOneAndUpdate(nativeFilter, nativeUpdate, { ...opts, returnDocument: "after" });
+  const returnDoc = opts.new === false ? "before" : "after";
+  const row = await col.findOneAndUpdate(nativeFilter, nativeUpdate, { ...opts, returnDocument: returnDoc });
   if (!row) return null;
   return rowToDoc(row);
 }
@@ -146,11 +169,7 @@ export async function nativeUpdateMany(tableName, filter, update) {
   const nativeFilter = convertFilterKeys(filter);
   const nativeUpdate = {};
   for (const [op, fields] of Object.entries(update)) {
-    if (op === "$set" || op === "$inc" || op === "$unset") {
-      nativeUpdate[op] = convertFilterKeys(fields);
-    } else {
-      nativeUpdate[op] = fields;
-    }
+    nativeUpdate[op] = deepSnakeKeys(fields);
   }
   const result = await col.updateMany(nativeFilter, nativeUpdate);
   return { acknowledged: result.acknowledged, modifiedCount: result.modifiedCount, upsertedCount: result.upsertedCount ?? 0 };

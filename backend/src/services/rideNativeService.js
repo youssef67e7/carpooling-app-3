@@ -7,6 +7,8 @@ import {
 } from "../mongo/queries/rides.js";
 import { findById } from "../mongo/queries/users.js";
 import { getDb } from "../mongo/nativeClient.js";
+import { getCollection } from "../mongo/client.js";
+import { User } from "../models/User.js";
 
 export async function requestRide(passengerId, pickup, dropoff, vehicleType) {
   const existing = await findActiveRideByPassenger(passengerId);
@@ -49,6 +51,10 @@ export async function getRequestedRides(vehicleType) {
 }
 
 export async function acceptRide(rideId, driverId) {
+  // Enforce break mode / offline status at the service layer
+  const driver = await User.findById(driverId).select("isOnline").lean();
+  if (!driver?.isOnline) throw new Error("Driver is offline");
+
   const { matched } = await updateRideStatus(
     rideId,
     "accepted",

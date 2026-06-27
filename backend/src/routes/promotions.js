@@ -19,7 +19,7 @@ router.get("/active", async (req, res, next) => {
       expiresAt: { $gte: now },
     })
       .sort({ createdAt: -1 })
-      .toArray();
+      .lean();
     return res.json({ success: true, data: promos });
   } catch (e) {
     next(e);
@@ -63,22 +63,33 @@ router.post(
   validateRequest,
   async (req, res, next) => {
     try {
-      const promo = await Promotion.findById(req.params.id);
-      if (!promo || !promo.isActive) throw new AppError("Promo not found or inactive", 404);
       const now = new Date();
-      if (promo.expiresAt && new Date(promo.expiresAt) < now) throw new AppError("Promo code has expired", 400);
-      if (promo.startsAt && new Date(promo.startsAt) > now) throw new AppError("Promo code is not yet active", 400);
-      if (promo.maxUses && promo.currentUses >= promo.maxUses) throw new AppError("Promo code has reached max uses", 400);
+      const updated = await Promotion.findOneAndUpdate(
+        {
+          _id: req.params.id,
+          isActive: true,
+          expiresAt: { $gte: now },
+          startsAt: { $lte: now },
+          $expr: {
+            $or: [
+              { $eq: ["$max_uses", null] },
+              { $lt: ["$current_uses", "$max_uses"] },
+            ],
+          },
+        },
+        { $inc: { currentUses: 1 } },
+        { returnDocument: "after" },
+      );
+      if (!updated) throw new AppError("Promo not found or expired or max uses reached", 400);
       const rideFare = Number(req.body.rideFare);
       let discount = 0;
-      if (promo.discountType === "percentage") {
-        discount = Math.round(rideFare * (promo.discountValue / 100) * 100) / 100;
-        if (promo.maxDiscount) discount = Math.min(discount, promo.maxDiscount);
+      if (updated.discountType === "percentage") {
+        discount = Math.round(rideFare * (updated.discountValue / 100) * 100) / 100;
+        if (updated.maxDiscount) discount = Math.min(discount, updated.maxDiscount);
       } else {
-        discount = Math.min(promo.discountValue, rideFare);
+        discount = Math.min(updated.discountValue, rideFare);
       }
-      await Promotion.updateOne({ _id: new ObjectId(req.params.id) }, { $inc: { currentUses: 1 } });
-      logAction({ req, action: "PROMO_APPLIED", extra: { promoId: req.params.id, code: promo.code, discount } });
+      logAction({ req, action: "PROMO_APPLIED", extra: { promoId: req.params.id, code: updated.code, discount } });
       return res.json({ success: true, data: { discount, finalFare: Math.round((rideFare - discount) * 100) / 100 } });
     } catch (e) {
       next(e);
@@ -129,7 +140,7 @@ router.post(
 
 router.get("/admin", roleRequired("admin"), async (req, res, next) => {
   try {
-    const promos = await Promotion.find({}).sort({ createdAt: -1 }).toArray();
+    const promos = await Promotion.find({}).sort({ createdAt: -1 }).lean();
     return res.json({ success: true, data: promos });
   } catch (e) {
     next(e);
@@ -140,7 +151,7 @@ router.put("/admin/:id/toggle", roleRequired("admin"), param("id").isString(), v
   try {
     const promo = await Promotion.findById(req.params.id);
     if (!promo) throw new AppError("Promo not found", 404);
-    await Promotion.updateOne({ _id: new ObjectId(req.params.id) }, { $set: { isActive: !promo.isActive } });
+    await Promotion.updateOne({ _id: req.params.id }, { $set: { isActive: !promo.isActive } });
     logAction({ req, action: "PROMO_TOGGLED", extra: { id: req.params.id, wasActive: promo.isActive } });
     return res.json({ success: true, data: { isActive: !promo.isActive } });
   } catch (e) {

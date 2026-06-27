@@ -139,12 +139,12 @@ export async function ensureMongoIndexes(getDb) {
 
   await db
     .collection("driver_profiles")
-    .createIndex({ userId: 1 }, { unique: true })
-    .catch((err) => console.error("[indexes] driver_profiles.userId:", err.message));
+    .createIndex({ user_id: 1 }, { unique: true })
+    .catch((err) => console.error("[indexes] driver_profiles.user_id:", err.message));
   await db
     .collection("driver_profiles")
-    .createIndex({ isOnline: 1, isAvailable: 1 })
-    .catch((err) => console.error("[indexes] driver_profiles.isOnline+isAvailable:", err.message));
+    .createIndex({ is_online: 1, is_available: 1 })
+    .catch((err) => console.error("[indexes] driver_profiles.is_online+is_available:", err.message));
 
   await db
     .collection("rides")
@@ -160,6 +160,21 @@ export async function ensureMongoIndexes(getDb) {
     .collection("rides")
     .createIndex({ status: 1, updatedAt: 1 }, { background: true })
     .catch((err) => console.error("[indexes] rides.status+updatedAt:", err.message));
+
+  // Unique partial index: at most one active ride per passenger (race-condition guard)
+  await db
+    .collection("rides")
+    .createIndex(
+      { passenger_id: 1 },
+      {
+        unique: true,
+        name: "passenger_id_unique_active",
+        partialFilterExpression: {
+          status: { $in: ["pending", "accepted", "driver_arriving", "passenger_onboard", "ongoing"] },
+        },
+      },
+    )
+    .catch((err) => console.error("[indexes] rides.passenger_id unique partial:", err.message));
 
   await db
     .collection("refresh_tokens")
@@ -253,6 +268,18 @@ export async function ensureMongoIndexes(getDb) {
     .createIndex({ userId: 1 }, { unique: true })
     .catch((err) => console.error("[indexes] notification_prefs.userId:", err.message));
 
+  // Unique partial index: at most one default wallet per user (race-condition guard)
+  try {
+    await db.collection("wallet_accounts").dropIndex("user_id_unique_default");
+  } catch {}
+  await db
+    .collection("wallet_accounts")
+    .createIndex(
+      { user_id: 1 },
+      { name: "user_id_unique_default", unique: true, partialFilterExpression: { is_default: true } },
+    )
+    .catch((err) => console.error("[indexes] wallet_accounts.isDefault unique partial:", err.message));
+
   // Promotions indexes
   await db
     .collection("promotions")
@@ -272,4 +299,10 @@ export async function ensureMongoIndexes(getDb) {
     .collection("referrals")
     .createIndex({ userId: 1 })
     .catch((err) => console.error("[indexes] referrals.userId:", err.message));
+
+  // Idempotency key unique index for deposit deduplication
+  await db
+    .collection("transactions")
+    .createIndex({ idempotencyKey: 1 }, { unique: true, sparse: true, background: true })
+    .catch((err) => console.error("[indexes] transactions.idempotencyKey:", err.message));
 }

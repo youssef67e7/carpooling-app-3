@@ -9,8 +9,8 @@
 
 import { MongoClient } from "mongodb";
 
-const URI = process.env.MONGODB_URI;
-const DB_NAME = process.env.MONGODB_DB_NAME || "weret";
+function resolveUri() { return process.env.MONGODB_URI; }
+function resolveDbName() { return process.env.MONGODB_DB_NAME || "weret"; }
 
 const OPTIONS = {
   maxPoolSize: 5,
@@ -31,13 +31,21 @@ let db = null;
 export async function getDb() {
   if (db) return db;
 
-  if (!URI) {
+  const uri = resolveUri();
+  if (!uri) {
     throw new Error("MONGODB_URI is not set. Provide it in backend/.env or set MONGODB_FALLBACK_MEMORY=1 for local dev.");
   }
 
-  client = new MongoClient(URI, OPTIONS);
+  // In "memory" mode, delegate to the shared in-memory MongoDB from client.js
+  if (uri === "memory" || uri === "mongodb://memory") {
+    const { getDb: getSharedDb } = await import("./client.js");
+    db = getSharedDb();
+    return db;
+  }
+
+  client = new MongoClient(uri, OPTIONS);
   await client.connect();
-  db = client.db(DB_NAME);
+  db = client.db(resolveDbName());
   return db;
 }
 

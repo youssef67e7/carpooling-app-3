@@ -78,9 +78,9 @@ export function docToRow(doc) {
     if (val === undefined) continue;
     const col = key === "_id" ? "id" : camelToSnake(key);
     if (val instanceof Date) {
-      out[col] = val.toISOString();
+      out[col] = val;
     } else if (Array.isArray(val)) {
-      out[col] = val.map((item) => (item instanceof Date ? item.toISOString() : item));
+      out[col] = val;
     } else if (isPlainObject(val)) {
       out[col] = val;
     } else {

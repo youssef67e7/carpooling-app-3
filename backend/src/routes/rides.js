@@ -28,7 +28,7 @@ import { applyPassengerRatingFromRide } from "../services/passengerRating.js";
 import { haversineKm, fareFromVehiclePricing } from "../utils/geo.js";
 import { buildRoutePath } from "../utils/directions.js";
 import { computeSeatUnits, roundSeatUnits } from "../utils/seatUnits.js";
-import { creditDriverForRide, debitPassengerForRide, refundPassengerForRide } from "../services/walletLedger.js";
+import { atomicRidePayment, creditDriverForRide, debitPassengerForRide, refundPassengerForRide } from "../services/walletLedger.js";
 import {
   MAX_DRIVER_CONCURRENT_RIDES,
   assertDriverCanTakeAnotherRide,
@@ -58,6 +58,7 @@ async function requireApprovedDriverUnlessAdmin(req, res, next) {
     if (user.role === "admin") return next();
     const mode = user.active_role || user.role || "passenger";
     if (mode !== "driver") return res.status(403).json({ message: "Forbidden" });
+    if (!user.isOnline) return res.status(403).json({ message: "Driver is offline — go online before accepting rides" });
     return requireApprovedDriver(req, res, next);
   } catch (e) {
     next(e);
@@ -272,6 +273,7 @@ router.post("/:id/cancel", authRequired, blockCheck, roleRequired("passenger"), 
           cancelledAt: new Date(),
           cancelledBy: "passenger",
           cancelReason: reason,
+          driverId: null,
           driverProposal: null,
           awaitingDriverConfirm: false,
           preassignedDriverId: null,
@@ -582,6 +584,12 @@ router.post(
   validateRequest,
   async (req, res, next) => {
     try {
+      const existingActive = await Ride.findOne({
+        passengerId: req.userId,
+        status: { $in: ["pending", "accepted", "driver_arriving", "passenger_onboard", "ongoing"] },
+      });
+      if (existingActive) throw new AppError("You already have an active ride", 400);
+
       const vt = String(req.body.vehicleType).toLowerCase().trim();
       const vehicleDoc = await Vehicle.findOne({ typeKey: vt, active: true });
       if (!vehicleDoc) throw new AppError("Invalid vehicle type", 400);
@@ -940,6 +948,7 @@ router.post(
         ride.driverProposal = null;
       }
       const driver = await User.findById(req.userId);
+      if (!driver?.isOnline) throw new AppError("Driver is offline — go online before accepting rides", 403);
       const driverProfile = await DriverProfile.findOne({ userId: req.userId }).lean();
       const cars = Array.isArray(driverProfile.cars) ? driverProfile.cars : [];
       const selectedId = driverProfile.selectedCarId ? String(driverProfile.selectedCarId) : null;
@@ -1079,7 +1088,10 @@ router.post(
   validateRequest,
   async (req, res, next) => {
     try {
-      const { rideId, passengerMinFare } = req.body;
+      const driver = await User.findById(req.userId).select("isOnline").lean();
+      if (!driver?.isOnline) throw new AppError("Driver is offline — go online before accepting rides", 403);
+
+      const { rideId, accept } = req.body;
       const ride = await Ride.findById(rideId);
       if (!ride || String(ride.passengerId) !== String(req.userId)) {
         throw new AppError("Not found", 404);
@@ -1115,6 +1127,9 @@ router.post(
   validateRequest,
   async (req, res, next) => {
     try {
+      const driver = await User.findById(req.userId).select("isOnline").lean();
+      if (!driver?.isOnline) throw new AppError("Driver is offline — go online before accepting rides", 403);
+
       const { rideId, accept } = req.body;
       const ride = await Ride.findById(rideId);
       if (!ride || ride.status !== "pending" || ride.driverId) {
@@ -1267,21 +1282,14 @@ router.post("/end", roleRequired("driver"), requireApprovedDriver, ...rideIdVali
       agreed != null && !Number.isNaN(agreed) ? agreed : Number(updated.passengerMinFare ?? updated.estimatedFare) || 0;
     await updated.save();
 
-    try {
-      if (updated.driverId) {
-        const paymentMethod = String(updated.paymentMethod || "cash").toLowerCase();
-
-        if (paymentMethod === "wallet" && updated.passengerId) {
-          const debit = await debitPassengerForRide(updated.passengerId, rideId, updated.fare);
-          if (!debit) {
-            console.error("wallet debitPassengerForRide failed — insufficient funds or already debited");
-          } else {
-            await creditDriverForRide(updated.driverId, rideId, updated.fare);
-          }
+    if (updated.driverId && updated.passengerId) {
+      const paymentMethod = String(updated.paymentMethod || "cash").toLowerCase();
+      if (paymentMethod === "wallet") {
+        const ok = await atomicRidePayment(updated.passengerId, updated.driverId, rideId, updated.fare);
+        if (!ok) {
+          console.error("wallet atomicRidePayment failed — insufficient funds or already processed");
         }
       }
-    } catch (ledgerErr) {
-      console.error("wallet ledger error", ledgerErr);
     }
 
     const populated = await populatedRideById(rideId);
@@ -1322,6 +1330,7 @@ router.post(
             cancelledAt: new Date(),
             cancelledBy: "passenger",
             cancelReason: reason,
+            driverId: null,
             driverProposal: null,
             awaitingDriverConfirm: false,
             preassignedDriverId: null,

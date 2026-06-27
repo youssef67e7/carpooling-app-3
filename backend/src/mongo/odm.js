@@ -11,6 +11,9 @@ import {
   nativeDeleteOne,
   nativeDeleteMany,
   nativeAggregate,
+  nativeFindOneAndUpdate,
+  convertFilterKeys,
+  deepSnakeKeys,
 } from "./nativeQuery.js";
 
 /** @type {Map<string, object>} */
@@ -554,32 +557,10 @@ export function createModel(collectionName, options = {}) {
   model.deleteMany = async (filter) => nativeDeleteMany(model.tableName, filter);
 
   model.findOneAndUpdate = async (filter, update, opts = {}) => {
-    const toSnakeKeys = (obj) => {
-      if (!obj || typeof obj !== "object") return obj;
-      const out = {};
-      for (const [k, v] of Object.entries(obj)) {
-        out[camelToSnake(k)] = v;
-      }
-      return out;
-    };
-
     const id = filter._id ? String(filter._id) : null;
-    const nativeFilter = toSnakeKeys(filter);
-    if (id) nativeFilter._id = /^[0-9a-f]{24}$/i.test(id) ? new ObjectId(id) : id;
-
-    const nativeUpdate = {};
-    for (const [op, fields] of Object.entries(update)) {
-      if (op === "$set" || op === "$inc" || op === "$unset") {
-        nativeUpdate[op] = toSnakeKeys(fields);
-      } else {
-        nativeUpdate[op] = fields;
-      }
-    }
 
     if (id) {
-      const row = await getCollection(model.tableName).findOneAndUpdate(nativeFilter, nativeUpdate, {
-        returnDocument: opts.new === false ? "before" : "after",
-      });
+      const row = await nativeFindOneAndUpdate(model.tableName, filter, update, opts);
       if (row) return new MongoDoc(model, rowFromDoc(row));
       return null;
     }

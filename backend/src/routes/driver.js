@@ -51,6 +51,7 @@ router.get("/status", async (req, res, next) => {
     return res.json({
       applicationStatus: user.driver_application_status || "none",
       profileStatus: prof?.status || "none",
+      isOnline: user.isOnline ?? false,
       reviewNote: prof?.reviewNote || "",
       selectedCarId: prof?.selectedCarId || null,
       carsCount: cars.length,

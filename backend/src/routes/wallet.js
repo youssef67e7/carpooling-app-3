@@ -81,6 +81,9 @@ router.post(
       });
       return res.status(201).json({ account: acc.toJSON() });
     } catch (e) {
+      if (e.code === 11000) {
+        return next(new AppError("Another wallet was set as default concurrently", 409));
+      }
       next(e);
     }
   },
@@ -90,10 +93,23 @@ router.put("/accounts/:id/default", docIdParam("id"), validateRequest, async (re
   try {
     const acc = await WalletAccount.findOne({ _id: req.params.id, userId: req.userId });
     if (!acc) throw new AppError("Not found", 404);
-    await WalletAccount.updateOne({ userId: req.userId }, { $set: { isDefault: false } });
-    await WalletAccount.updateOne({ _id: req.params.id }, { $set: { isDefault: true } });
-    return res.json({ ok: true });
+    if (acc.isDefault) return res.json({ ok: true });
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await WalletAccount.updateMany({ userId: req.userId }, { $set: { isDefault: false } });
+      const result = await WalletAccount.findOneAndUpdate(
+        { _id: req.params.id, userId: req.userId },
+        { $set: { isDefault: true } },
+      );
+      if (!result) throw new AppError("Not found", 404);
+      const dupes = await WalletAccount.countDocuments({ userId: req.userId, isDefault: true });
+      if (dupes <= 1) return res.json({ ok: true });
+    }
+    throw new AppError("Could not set wallet as default due to concurrent modification", 409);
   } catch (e) {
+    if (e.code === 11000) {
+      return next(new AppError("Another wallet was set as default concurrently", 409));
+    }
     next(e);
   }
 });
@@ -119,27 +135,40 @@ router.post(
   validateRequest,
   async (req, res, next) => {
     try {
-      const { walletAccountId, amount } = req.body;
+      const { walletAccountId, amount, idempotencyKey } = req.body;
       const amt = Math.round(Number(amount) * 100) / 100;
+
+      // Idempotency: if key provided, return existing transaction without re-processing
+      if (idempotencyKey) {
+        const existing = await Transaction.findOne({ idempotencyKey, type: "deposit" });
+        if (existing) {
+          const acc = await WalletAccount.findOne({ _id: walletAccountId, userId: req.userId });
+          if (!acc) throw new AppError("Wallet not found", 404);
+          return res.json({ account: acc.toJSON(), transaction: existing.toJSON() });
+        }
+      }
+
       const updated = await WalletAccount.findOneAndUpdate(
         { _id: walletAccountId, userId: req.userId },
         { $inc: { balance: amt } },
         { new: true },
       );
       if (!updated) throw new AppError("Wallet not found", 404);
-      const tx = await Transaction.create({
+      const txData = {
         userId: req.userId,
         walletAccountId: updated._id,
         amount: amt,
         type: "deposit",
         status: "success",
         note: "Simulated deposit",
-      });
+      };
+      if (idempotencyKey) txData.idempotencyKey = idempotencyKey;
+      const tx = await Transaction.create(txData);
       logAction({
         req,
         action: "Wallet deposit",
         file: "routes/wallet.js:deposit",
-        extra: { amount: amt, accountId: walletAccountId },
+        extra: { amount: amt, accountId: walletAccountId, idempotencyKey: idempotencyKey || null },
       });
       return res.json({ account: updated.toJSON(), transaction: tx.toJSON() });
     } catch (e) {

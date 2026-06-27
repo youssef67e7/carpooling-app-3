@@ -225,6 +225,10 @@ export function getDb() {
   return db;
 }
 
+export function getMongoClient() {
+  return client;
+}
+
 export function getCollection(name) {
   return getDb().collection(name);
 }

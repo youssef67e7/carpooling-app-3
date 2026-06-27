@@ -52,12 +52,13 @@ router.post("/apply", body("code").trim().notEmpty().isLength({ max: 10 }), vali
     const ref = await Referral.findOne({ code });
     if (!ref) throw new AppError("Invalid referral code", 404);
     if (String(ref.userId) === String(req.userId)) throw new AppError("Cannot use your own referral code", 400);
-    const existing = await Referral.findOne({ referredUserId: req.userId });
-    if (existing) throw new AppError("Referral already applied for this account", 400);
     const user = await User.findById(req.userId).select("name").lean();
     const referrer = await User.findById(ref.userId).select("name").lean();
-    await Referral.updateOne(
-      { _id: ref._id },
+    const updated = await Referral.findOneAndUpdate(
+      {
+        _id: ref._id,
+        "referredUsers.userId": { $ne: req.userId },
+      },
       {
         $push: {
           referredUsers: { userId: req.userId, name: user?.name || "User", appliedAt: new Date() },
@@ -65,9 +66,10 @@ router.post("/apply", body("code").trim().notEmpty().isLength({ max: 10 }), vali
         $inc: { rewards: 1 },
       },
     );
+    if (!updated) throw new AppError("Referral already applied for this account", 400);
     await Referral.create({
       userId: req.userId,
-      code: null,
+      code: `ref_${crypto.randomUUID()}`,
       referredBy: ref.userId,
       rewards: 0,
       referredUsers: [],

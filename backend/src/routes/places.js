@@ -1,6 +1,5 @@
 import { Router } from "express";
 import { body, param } from "express-validator";
-import { ObjectId } from "mongodb";
 import { SavedPlace } from "../models/SavedPlace.js";
 import { authRequired, blockCheck } from "../middleware/auth.js";
 import { validateRequest } from "../middleware/validateRequest.js";
@@ -12,7 +11,7 @@ router.use(authRequired, blockCheck);
 
 router.get("/", async (req, res, next) => {
   try {
-    const places = await SavedPlace.find({ userId: req.userId }).sort({ createdAt: -1 }).toArray();
+    const places = await SavedPlace.find({ userId: req.userId }).sort({ createdAt: -1 }).lean();
     return res.json({ success: true, data: places });
   } catch (e) {
     next(e);
@@ -78,7 +77,7 @@ router.put(
       if (lng !== undefined) updates.lng = Number(lng);
       if (icon !== undefined) updates.icon = String(icon).trim() || null;
       if (isDefault !== undefined) updates.isDefault = Boolean(isDefault);
-      await SavedPlace.updateOne({ _id: new ObjectId(req.params.id) }, { $set: updates });
+      await SavedPlace.updateOne({ _id: req.params.id }, { $set: updates });
       const updated = await SavedPlace.findById(req.params.id);
       logAction({ req, action: "SAVED_PLACE_UPDATE", extra: { placeId: req.params.id } });
       return res.json({ success: true, data: updated });
@@ -94,7 +93,7 @@ router.delete("/:id", param("id").isString(), validateRequest, async (req, res, 
     if (!place || String(place.userId) !== String(req.userId)) {
       throw new AppError("Place not found", 404);
     }
-    await SavedPlace.deleteOne({ _id: new ObjectId(req.params.id) });
+    await SavedPlace.deleteOne({ _id: req.params.id });
     logAction({ req, action: "SAVED_PLACE_DELETE", extra: { placeId: req.params.id } });
     return res.json({ success: true });
   } catch (e) {
@@ -109,7 +108,7 @@ router.put("/:id/default", param("id").isString(), validateRequest, async (req, 
       throw new AppError("Place not found", 404);
     }
     await SavedPlace.updateOne({ userId: req.userId }, { $set: { isDefault: false } });
-    await SavedPlace.updateOne({ _id: new ObjectId(req.params.id) }, { $set: { isDefault: true } });
+      await SavedPlace.updateOne({ _id: req.params.id }, { $set: { isDefault: true } });
     logAction({ req, action: "SAVED_PLACE_DEFAULT", extra: { placeId: req.params.id } });
     return res.json({ success: true });
   } catch (e) {
