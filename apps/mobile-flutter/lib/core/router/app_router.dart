@@ -26,6 +26,8 @@ import '../../features/driver/driver_status_screens.dart';
 import '../../features/driver/driver_request_detail_screen.dart';
 import '../../features/debug/debug_log_screen.dart';
 import '../../features/more/rating_history_screen.dart';
+import '../../features/shared_rides/shared_rides_screen.dart';
+import '../../features/shared_rides/shared_ride_detail_screen.dart';
 import 'passenger_shell.dart';
 import 'driver_shell.dart';
 import 'admin_shell.dart';
@@ -164,6 +166,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/dispute/:id', builder: (c, s) => UserDisputeChatScreen(disputeId: s.pathParameters['id']!)),
       GoRoute(path: '/ratings', builder: (_, __) => const RatingHistoryScreen()),
       GoRoute(path: '/ratings/received', builder: (_, __) => const RatingHistoryScreen(isDriver: true)),
+      GoRoute(path: '/shared-rides', builder: (_, __) => const SharedRidesScreen()),
+      GoRoute(
+        path: '/shared-rides/:id',
+        builder: (c, s) => SharedRideDetailScreen(rideId: s.pathParameters['id']!),
+      ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) => PassengerShell(navigationShell: navigationShell),
         branches: [

@@ -440,6 +440,7 @@ class _ActiveRideCard extends StatelessWidget {
     this.onStart,
     this.onEnd,
     this.onCancel,
+    this.onJoinRequests,
   });
 
   final int idx;

@@ -451,6 +451,18 @@ class _PassengerHomeScreenState extends ConsumerState<PassengerHomeScreen> {
                     driverCount: ride.nearbyDrivers.length,
                     drivers: ride.nearbyDrivers,
                   ),
+                  Gap.h12(),
+                  OutlinedButton.icon(
+                    onPressed: () => context.push('/shared-rides'),
+                    icon: const Icon(Icons.people_alt_outlined, size: 18),
+                    label: const Text('Find Shared Rides'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: WeretTokens.brand,
+                      side: const BorderSide(color: WeretTokens.brand),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
                 ],
 
                 Gap.h24(),

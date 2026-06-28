@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import '../../core/providers/ride_provider.dart';
 import '../../core/theme/weret_tokens.dart';
 import '../../shared/widgets/weret_text_field.dart';
-import '../../core/utils/auth_validators.dart';
 
 class SharedRideDetailScreen extends ConsumerStatefulWidget {
   const SharedRideDetailScreen({super.key, required this.rideId});
@@ -58,7 +57,7 @@ class _SharedRideDetailScreenState extends ConsumerState<SharedRideDetailScreen>
 
   @override
   Widget build(BuildContext context) {
-    final ride = ModalRoute.of(context)?.settings.extra as Map<String, dynamic>?;
+    final ride = GoRouterState.of(context).extra as Map<String, dynamic>?;
     final driver = ride?['driverId'] is Map ? ride!['driverId'] as Map : null;
     final available = (ride?['availableSeatUnits'] as num?)?.toInt() ?? 0;
     final fare = ride?['agreedFare'] ?? ride?['estimatedFare'] ?? '—';
@@ -103,10 +102,10 @@ class _SharedRideDetailScreenState extends ConsumerState<SharedRideDetailScreen>
           ),
           const SizedBox(height: 16),
           if (_requested)
-            const Card(
+            Card(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               child: Padding(
-                padding: EdgeInsets.all(16),
+                padding: const EdgeInsets.all(16),
                 child: Row(
                   children: [
                     Icon(Icons.check_circle, color: Colors.green),
