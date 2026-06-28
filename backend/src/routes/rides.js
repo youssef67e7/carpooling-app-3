@@ -677,7 +677,7 @@ router.post(
           routePath,
           totalSeats: cap,
           availableSeatUnits,
-          poolingEnabled: true,
+          poolingEnabled: false,
           passengerGenderPolicy: req.body.passengerGenderPreference != null ? String(req.body.passengerGenderPreference) : "all",
         });
         await Booking.create({
