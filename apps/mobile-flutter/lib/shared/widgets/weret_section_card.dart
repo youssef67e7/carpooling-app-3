@@ -28,10 +28,24 @@ class WeretSectionCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+          Text(
+            title,
+            style: const TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 16,
+              color: WeretTokens.textPrimary,
+            ),
+          ),
           if (subtitle != null) ...[
             const SizedBox(height: 6),
-            Text(subtitle!, style: const TextStyle(color: WeretTokens.textSecondary, height: 1.4, fontSize: 13)),
+            Text(
+              subtitle!,
+              style: const TextStyle(
+                color: WeretTokens.textSecondary,
+                height: 1.4,
+                fontSize: 13,
+              ),
+            ),
           ],
           const SizedBox(height: 14),
           child,
@@ -53,7 +67,14 @@ class WeretPageTitle extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 28)),
+          Text(
+            title,
+            style: const TextStyle(
+              fontWeight: FontWeight.w900,
+              fontSize: 28,
+              color: WeretTokens.textPrimary,
+            ),
+          ),
           const SizedBox(height: 8),
           Container(height: 3, width: 42, color: WeretTokens.brand),
         ],

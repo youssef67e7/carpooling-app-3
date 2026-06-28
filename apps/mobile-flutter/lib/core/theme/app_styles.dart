@@ -49,4 +49,48 @@ abstract class AppStyles {
         fontWeight: FontWeight.w700,
         color: WeretTokens.textPrimary,
       );
+
+  // ── Additional variants ──
+
+  static TextStyle get title => GoogleFonts.poppins(
+        fontSize: 17,
+        fontWeight: FontWeight.w700,
+        color: WeretTokens.textPrimary,
+      );
+
+  static TextStyle get caption => GoogleFonts.poppins(
+        fontSize: 12,
+        fontWeight: FontWeight.w500,
+        color: WeretTokens.textMuted,
+      );
+
+  static TextStyle get bodySmall => GoogleFonts.poppins(
+        fontSize: 12,
+        fontWeight: FontWeight.w400,
+        color: WeretTokens.textSecondary,
+      );
+
+  static TextStyle get label => GoogleFonts.poppins(
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+        color: WeretTokens.textSecondary,
+      );
+
+  static TextStyle get labelSmall => GoogleFonts.poppins(
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+        color: WeretTokens.textMuted,
+      );
+
+  static TextStyle get priceSmall => GoogleFonts.poppins(
+        fontSize: 16,
+        fontWeight: FontWeight.w800,
+        color: WeretTokens.textPrimary,
+      );
+
+  static TextStyle get priceMedium => GoogleFonts.poppins(
+        fontSize: 20,
+        fontWeight: FontWeight.w700,
+        color: WeretTokens.textPrimary,
+      );
 }

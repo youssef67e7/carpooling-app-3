@@ -781,7 +781,7 @@ class _DriverCheckbox extends StatelessWidget {
                 value: value,
                 onChanged: (v) => onChanged(v ?? false),
                 activeColor: WeretTokens.brand,
-                checkColor: Colors.white,
+                checkColor: WeretTokens.surface,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(6),
                   side: BorderSide(color: value ? WeretTokens.brand : WeretTokens.border),

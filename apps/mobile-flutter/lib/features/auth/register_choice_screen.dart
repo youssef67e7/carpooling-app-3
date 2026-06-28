@@ -61,7 +61,7 @@ class RegisterChoiceScreen extends StatelessWidget {
             padding: const EdgeInsets.only(top: _bottomGap - _cardGap),
             child: CustomButton(
               title: 'login'.tr(),
-              variant: 'outline',
+              variant: ButtonVariant.outlined,
               onPressed: () => _goLogin(context),
             ),
           ),

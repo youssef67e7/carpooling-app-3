@@ -1,0 +1,532 @@
+# Weret — System Architecture
+
+> Ride-hailing platform (passenger, driver, admin) — Monorepo
+
+---
+
+## 1. Project Structure
+
+```
+ReachNative Car/
+├── backend/                          # Node.js + Express API server
+│   ├── src/
+│   │   ├── index.js                  # Entry point
+│   │   ├── createApp.js              # Express app factory
+│   │   ├── db.js                     # MongoDB init (idempotent)
+│   │   ├── config/                   # Env-var wrappers
+│   │   ├── errors/
+│   │   │   └── AppError.js           # Custom error class
+│   │   ├── middleware/               # 9 files (see §4)
+│   │   ├── mongo/                    # Core DB layer (see §5)
+│   │   ├── models/                   # 27 model definitions
+│   │   ├── routes/                   # 20 route files (see §6)
+│   │   ├── schemas/                  # 6 Zod schemas
+│   │   ├── services/                 # 15 business-logic services
+│   │   ├── utils/                    # 9 utility files
+│   │   ├── jobs/                     # Scheduled/cron jobs
+│   │   ├── migrations/               # DB migration scripts
+│   │   └── seed/                     # Seed data
+│   ├── test/
+│   │   ├── integration.test.js       # 61 integration tests
+│   │   └── concurrency.test.js       # Race-condition tests (104 tests)
+│   ├── package.json
+│   └── .env.example
+│
+├── apps/
+│   └── mobile-flutter/               # Flutter mobile app
+│       └── lib/
+│           ├── main.dart             # App entry
+│           ├── app.dart              # MaterialApp.router
+│           ├── core/                 # Infrastructure layer
+│           ├── features/             # Feature modules
+│           └── shared/               # Reusable widgets + models
+│
+├── shared/                           # Cross-platform constants
+├── assets/                           # Static assets
+├── docs/                             # Documentation
+├── scripts/                          # DevOps helpers
+├── .github/workflows/
+│   ├── backend.yml                   # Node.js CI
+│   └── flutter.yml                   # Flutter analyze + build
+├── docker-compose.yml                # MongoDB 7 + backend
+└── vercel.json                       # Deployment config
+```
+
+---
+
+## 2. Technology Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Server | Node.js + Express |
+| Database | MongoDB 7 (Atlas / local / in-memory) |
+| Mobile | Flutter (iOS + Android) |
+| State management | Riverpod |
+| Routing | GoRouter (StatefulShellRoute) |
+| HTTP client | Dio (with auth interceptor) |
+| Auth | JWT + Google OAuth + Email OTP |
+| Push notifications | Firebase Cloud Messaging |
+| Image storage | Cloudinary |
+| Maps | OpenStreetMap (flutter_map) |
+| Email | Nodemailer (SMTP) |
+| Schema validation | Zod (backend) |
+| Containerization | Docker Compose |
+| CI/CD | GitHub Actions |
+| Deployment | Vercel |
+
+---
+
+## 3. Data Flow
+
+```
+Flutter App
+    │
+    ▼ GoRouter (auth redirect)
+    │
+    ▼ Riverpod Providers (AuthState, RideState, etc.)
+    │
+    ▼ Dio ApiClient (JWT interceptor → auto-refresh on 401)
+    │
+    ▼ HTTP REST (JSON)
+    │
+Express Server
+    ├── Middleware Pipeline (helmet → cors → logger → auth → validate)
+    ├── Route Handler
+    │   ├── Service Layer (business logic)
+    │   └── ODM Layer (MongoQuery + native helpers)
+    └── MongoDB (native driver)
+```
+
+---
+
+## 4. Middleware Stack (order matters)
+
+| # | Middleware | Purpose |
+|---|-----------|---------|
+| 1 | `helmet()` | Security headers |
+| 2 | `cors()` | CORS (default-deny, explicit origins) |
+| 3 | `express.json()` | Body parser (10mb limit) |
+| 4 | `requestLogger` | Log method, path, status, duration |
+| 5 | `auth` | JWT verify + block check + role gates |
+| 6 | `rateLimiters` | Per-endpoint rate limiting |
+| 7 | `validate` / `validateRequest` | Zod + express-validator |
+| 8 | `docId` | Normalize `:id` params (ObjectId) |
+| 9 | `driverGate` | Driver-specific access |
+| 10 | `fixedAdmin` | Fixed admin override |
+
+---
+
+## 5. Database Layer — ODM Architecture
+
+### 5.1 Files
+
+| File | Purpose |
+|------|---------|
+| `client.js` | Multi-mode connection (Atlas → local → in-memory) |
+| `schema.js` | 27 collection definitions + index creation |
+| `odm.js` | Custom ODM: `MongoQuery` + `MongoDoc` + `Model` |
+| `nativeQuery.js` | Native MongoDB helpers with camelCase↔snake_case |
+| `fieldMap.js` | Bidirectional field mapping |
+
+### 5.2 ODM Polymorphic Query Strategy
+
+```
+MongoQuery.exec()
+  ├── Simple find (no populate) → nativeFind()
+  │     (projection + limit + skip passed to MongoDB)
+  ├── findById + select + lean → nativeFindOne()
+  ├── Requires populate → loadCollectionDocs()
+  │     (in-memory join fallback)
+  └── update/delete ops → nativeUpdateOne, nativeDeleteOne, etc.
+```
+
+### 5.3 Collections (27)
+
+| # | Collection | Description |
+|---|-----------|-------------|
+| 1 | `users` | Accounts (passenger, driver, admin) |
+| 2 | `passenger_profiles` | Passenger profile data |
+| 3 | `driver_profiles` | Driver onboarding & vehicle |
+| 4 | `driver_documents` | ID / criminal record uploads |
+| 5 | `admin_accounts` | Fixed admin login |
+| 6 | `email_password_reset_otps` | Password reset OTP (TTL) |
+| 7 | `vehicles` | Ride service types & pricing |
+| 8 | `rides` | Trip requests & lifecycle |
+| 9 | `bookings` | Seat pooling bookings |
+| 10 | `messages` | Ride chat messages |
+| 11 | `wallet_accounts` | User wallets |
+| 12 | `transactions` | Wallet ledger |
+| 13 | `withdrawal_requests` | Withdraw OTP flow |
+| 14 | `reports` | User reports |
+| 15 | `admin_audit_logs` | Admin action audit (TTL: 30d) |
+| 16 | `email_login_otps` | Email OTP hashes (TTL) |
+| 17 | `safety_events` | SOS/emergency events |
+| 18 | `driver_bonuses` | Driver bonus records |
+| 19 | `favorite_drivers` | Passenger's favorite drivers |
+| 20 | `carpools` | Scheduled carpool rides |
+| 21 | `disputes` | Ride dispute management |
+| 22 | `saved_places` | Saved places for quick booking |
+| 23 | `notification_prefs` | User notification preferences |
+| 24 | `promotions` | Promo codes & discounts |
+| 25 | `referrals` | Referral codes & rewards |
+| 26 | `refresh_tokens` | Refresh tokens (snake_case) |
+| 27 | `refreshTokens` | Refresh tokens (camelCase) |
+
+System collections: `fcm_tokens`, `notifications`, `_meta`
+
+---
+
+## 6. API Endpoints (220+)
+
+### 6.1 Auth — `/auth`
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/auth/google` | — | Google OAuth sign-in |
+| POST | `/auth/register` | — | Email + password registration |
+| POST | `/auth/login` | — | Email + password login |
+| GET | `/auth/profile` | JWT | Get current user profile |
+| PUT | `/auth/profile` | JWT | Update profile |
+| PUT | `/auth/password` | JWT | Change password |
+| POST | `/auth/forgot-password` | — | Request reset OTP |
+| POST | `/auth/reset-password` | — | Reset with OTP |
+| POST | `/auth/send-otp` | — | Send email login OTP |
+| POST | `/auth/verify-otp` | — | Verify OTP + login |
+| POST | `/auth/refresh` | — | Rotate refresh token |
+| POST | `/auth/logout` | JWT | Invalidate refresh token |
+| POST | `/auth/fcm-token` | JWT | Register FCM device token |
+
+### 6.2 Rides — `/rides`
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/rides` | JWT | Request a ride |
+| GET | `/rides` | JWT | List user's ride history |
+| GET | `/rides/:id` | JWT | Get ride details |
+| POST | `/rides/:id/cancel` | JWT | Cancel with reason |
+| POST | `/rides/:id/rate` | JWT | Rate a ride |
+| PUT | `/rides/:id/status` | JWT | Advance lifecycle |
+| POST | `/rides/:id/chat` | JWT | Send chat message |
+| GET | `/rides/:id/chat` | JWT | Get chat messages |
+| GET | `/rides/nearby` | JWT | Find nearby drivers |
+| GET | `/rides/route-preview` | JWT | Fare estimate |
+| POST | `/rides/:id/offer` | JWT | Driver pool offer |
+| POST | `/rides/:id/book` | JWT | Book pool seat |
+
+**Ride lifecycle:** `pending → accepted → driver_arriving → passenger_onboard → ongoing → completed / cancelled`
+
+### 6.3 Driver — `/driver`
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/driver/status` | Get status + profile |
+| PUT | `/driver/status` | Toggle online |
+| PUT | `/driver/location` | Update location |
+| GET | `/driver/dashboard` | Dashboard stats |
+| GET | `/driver/earnings` | Earnings overview |
+| GET | `/driver/earnings-summary` | Aggregated summary |
+| GET | `/driver/bonuses` | Bonus history |
+| GET | `/driver/heatmap` | Ride heatmap |
+| POST | `/driver/break-mode` | Set break mode |
+| GET | `/driver/break-mode` | Get break mode |
+| PUT | `/driver/car` | Update car details |
+| GET | `/driver/request` | Get current request |
+| POST | `/driver/accept` | Accept ride |
+| POST | `/driver/arrived` | Mark arrived |
+| POST | `/driver/start` | Start ride |
+| POST | `/driver/complete` | Complete ride |
+
+### 6.4 Passenger — `/passenger`
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/passenger/active-ride` | Current active ride |
+| GET | `/passenger/stats` | Statistics (cached) |
+| GET | `/passenger/history` | Ride history |
+| GET | `/passenger/ratings` | Rating history |
+
+### 6.5 Wallet — `/wallet`
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/wallet` | List accounts |
+| POST | `/wallet` | Create account |
+| GET | `/wallet/:id` | Get account |
+| PUT | `/wallet/:id/default` | Set default |
+| POST | `/wallet/deposit` | Deposit (idempotent) |
+| POST | `/wallet/withdraw` | Request withdrawal |
+| POST | `/wallet/withdraw/verify` | Verify with OTP |
+| GET | `/wallet/transactions` | List transactions |
+
+### 6.6 Safety — `/safety`
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/safety/sos` | Trigger SOS |
+| GET | `/safety/events` | Past events |
+| GET | `/safety/trusted-contacts` | List contacts |
+| POST | `/safety/trusted-contacts` | Add contact |
+| DELETE | `/safety/trusted-contacts/:id` | Remove contact |
+| POST | `/safety/block` | Block user |
+| GET | `/safety/blocked` | List blocked |
+| DELETE | `/safety/blocked/:id` | Unblock |
+| POST | `/safety/share-trip` | Share trip |
+| GET | `/safety/share-trip/:id` | Get shared trip |
+
+### 6.7 Admin — `/admin`
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/admin/users` | List users |
+| GET | `/admin/users/:id` | Get user |
+| PUT | `/admin/users/:id/block` | Block/unblock |
+| GET | `/admin/reports` | List reports |
+| GET | `/admin/transactions` | All transactions |
+| GET | `/admin/rides` | All rides |
+| GET | `/admin/stats` | Platform stats |
+| GET | `/admin/audit-log` | Audit log |
+| POST | `/admin/refund/:id` | Process refund |
+| PUT | `/admin/disputes/:id/resolve` | Resolve dispute |
+
+### 6.8 Other Routes
+
+| Prefix | Endpoints | Description |
+|--------|-----------|-------------|
+| `/disputes` | 6 | Create, list, message, resolve disputes |
+| `/places` | 5 | Saved places CRUD |
+| `/promotions` | 4 | Promo code management |
+| `/referrals` | 3 | Referral code + rewards |
+| `/favorites` | 3 | Favorite drivers |
+| `/carpools` | 5 | Carpool CRUD + booking |
+| `/vehicles` | 1 | List vehicle types |
+| `/reports` | 3 | Submit + manage reports |
+| `/upload` | 1 | Cloudinary image upload |
+| `/driver-application` | 2 | Driver application |
+| `/role-switch` | 1 | Switch passenger/driver |
+| `/preferences` | 2 | Notification prefs |
+| `/health` | 1 | Health check |
+
+---
+
+## 7. Business Logic Services
+
+| Service | Purpose |
+|---------|---------|
+| `googleAuth.js` | Google OAuth token exchange |
+| `refreshTokenService.js` | SHA-256 token rotation |
+| `sendEmail.js` | Nodemailer email sending |
+| `fcmService.js` | Firebase push notifications |
+| `driverDashboard.js` | Aggregated driver stats |
+| `driverRating.js` | Driver rating calculation |
+| `passengerRating.js` | Passenger rating calculation |
+| `passengerStats.js` | Cached passenger statistics |
+| `walletLedger.js` | Transaction ledger + balance |
+| `uploadStorage.js` | Cloudinary upload |
+| `rideNativeService.js` | Native ride query helpers |
+| `driverVerification.js` | Document verification |
+| `driverRideCapacity.js` | Capacity constraints |
+| `notificationHelpers.js` | Notification formatting |
+| `ensureFixedAdmins.js` | Admin account seeding |
+
+---
+
+## 8. Auth Flow
+
+```
+1. Login/Register
+   └── POST /auth/google | /auth/login | /auth/register
+   └── Returns { accessToken, refreshToken, user }
+   └── accessToken → in-memory (Riverpod)
+   └── refreshToken → shared_preferences
+
+2. Authenticated request
+   └── Dio interceptor → Authorization: Bearer <accessToken>
+
+3. Token refresh (401 → auto)
+   └── POST /auth/refresh { refreshToken }
+   └── Old token hashed & stored (SHA-256)
+   └── Returns new { accessToken, refreshToken }
+   └── Retry original request
+
+4. Logout
+   └── POST /auth/logout → invalidates refresh token
+   └── Clear tokens from memory + storage
+```
+
+---
+
+## 9. Flutter App Architecture
+
+### 9.1 Routing (GoRouter)
+
+```
+/login, /register, /forgot-password, /onboarding  (public)
+
+/passenger  (shell with 3 tabs)
+  ├── /passenger/home
+  ├── /passenger/history
+  └── /passenger/more
+      ├── /passenger/more/wallet
+      │   ├── /passenger/more/wallet/deposit
+      │   ├── /passenger/more/wallet/withdraw
+      │   └── /passenger/more/wallet/history
+      ├── /passenger/more/saved-places
+      ├── /passenger/more/payment-methods
+      ├── /passenger/more/promotions
+      ├── /passenger/more/referral
+      ├── /passenger/more/notifications
+      ├── /passenger/more/help
+      ├── /passenger/more/safety
+      ├── /passenger/more/favorite-drivers
+      ├── /passenger/more/find-carpool
+      ├── /passenger/more/my-carpools
+      ├── /passenger/more/disputes
+      ├── /passenger/more/ratings
+      └── /passenger/more/about
+
+/driver  (shell with 3 tabs)
+  ├── /driver/home
+  ├── /driver/earnings
+  └── /driver/more
+
+/admin  (shell with 3 tabs)
+  ├── /admin/transactions
+  ├── /admin/disputes
+  └── /admin/more
+
+Detail routes: ride/:id, dispute/:id, driver-profile/:id
+```
+
+### 9.2 Core Infrastructure (`lib/core/`)
+
+| Module | Purpose |
+|--------|---------|
+| `api/api_client.dart` | Dio HTTP client + auth interceptor |
+| `api/api_endpoints.dart` | Endpoint path constants |
+| `providers/auth_provider.dart` | AuthState: WeretUser, tokens, session |
+| `providers/` | Ride, driver, wallet, etc. providers |
+| `router/app_router.dart` | GoRouter config |
+| `theme/` | Light + dark themes |
+| `services/` | Local storage, location, etc. |
+| `utils/` | Formatting, validation, helpers |
+
+### 9.3 Feature Screens (46 total)
+
+| Module | Screens |
+|--------|---------|
+| **Auth** (20) | Login, Register, ForgotPassword, Onboarding, Home, History, Settings, RideChat, Disputes, Admin screens |
+| **Driver** (5) | RequestDetail, Profile, EarningsWallet, BonusScreen |
+| **Safety** (8) | SafetyHub, EmergencySOS, Hotline, TrustedContacts, ShareTrip, BlockUser, ReportIncident, VerifyDriver |
+| **More** (11) | SavedPlaces, PaymentMethods, Promotions, Referral, Notifications, FavoriteDrivers, Carpools, RatingHistory |
+| **Wallet** (2) | WalletOverview, WalletHistory |
+| **Debug** (1) | DebugLog |
+
+### 9.4 Shared Widgets (50+)
+
+- **Layout:** `WeretScreenScaffold`, `WeretShellScaffold`, `WeretAuthScaffold`, `WeretBrandHeader`
+- **Input:** `WeretTextField`, `OtpInput`, `NumericKeypad`, `AvatarEditor`
+- **Display:** `WeretLogo`, `WeretStatCard`, `StatusPill`, `ServiceTypeGallery`, `FareBreakdown`
+- **Ride:** `RideCard`, `ActiveRidePanel`, `DriverOfferBanner`, `WeretRideMap`
+- **Feedback:** `SuccessModal`, `ShimmerLoading`, `ErrorState`, `EmptyState`, `RateDriverModal`
+
+---
+
+## 10. Testing
+
+| Suite | File | Tests | Status |
+|-------|------|-------|--------|
+| Integration | `test/integration.test.js` | 61 | All passing |
+| Concurrency | `test/concurrency.test.js` | 104 | All passing |
+
+**Integration test coverage:** Auth, ride lifecycle, ride state guards, saved places, safety (SOS, trusted contacts, block), favorites, promotions, referrals, preferences, driver dashboard, wallet (deposit idempotency), ratings, admin, health.
+
+**Concurrency coverage:** Race conditions in ride creation (TOCTOU), wallet set-default, promotion over-redemption, referral duplicate, wallet account creation.
+
+Framework: `node:test` + `node:assert` (Node.js built-in).
+
+---
+
+## 11. Concurrency & Race-Condition Fixes
+
+| Bug | Root Cause | Fix | Atomic Mechanism |
+|-----|-----------|-----|-----------------|
+| Ride creation TOCTOU | Two requests both pass `findOne` check | Unique partial index `passenger_id_unique_active` | MongoDB index constraint |
+| Wallet set-default race | Concurrent `clear+set` creates two defaults | Unique partial index `user_id_unique_default` | MongoDB index constraint |
+| Promotion over-redemption | `read→check→write` gap | `findOneAndUpdate` with `$expr` guard | MongoDB document-level atomicity |
+| Referral duplicate apply | No uniqueness on referredUsers array | `findOneAndUpdate` with `$ne` filter | MongoDB document-level atomicity |
+| Wallet account 409 missing | POST `/accounts` had no E11000 handler | try/catch returning 409 | MongoDB index constraint |
+
+---
+
+## 12. Key Patterns
+
+### Field Mapping (camelCase ↔ snake_case)
+
+- Client sends/receives camelCase JSON
+- `fieldMap.js` maintains bidirectional mapping
+- `nativeQuery.convertFilterKeys()` auto-maps filter keys
+- ODM converts on read/write transparently
+
+### Idempotency
+
+- POST `/wallet/deposit` accepts `idempotencyKey`
+- Unique sparse index on `transactions.idempotencyKey`
+- Same key → return existing transaction (no duplicate charge)
+
+### Token Security
+
+- JWT access tokens (short-lived)
+- Refresh tokens hashed with SHA-256 before DB storage
+- Rotation: each refresh invalidates previous token
+- TTL index auto-clears expired tokens (7 days)
+
+---
+
+## 13. Database Indexes (Key)
+
+| Collection | Index | Type |
+|-----------|-------|------|
+| `users` | `email` | Unique sparse |
+| `users` | `google_sub` | Unique sparse |
+| `rides` | `passenger_id` + `status` (active filter) | Unique partial |
+| `wallet_accounts` | `user_id` (default filter) | Unique partial |
+| `transactions` | `idempotencyKey` | Unique sparse |
+| `refresh_tokens` | `expiresAt` | TTL (7d) |
+| `refresh_tokens` | `tokenHash` | Unique |
+| `promotions` | `code` | Unique |
+| `driver_profiles` | `currentLocation` | 2dsphere |
+| `rides` | `pickup.coordinates` | 2dsphere |
+| `carpools` | `origin.coordinates` | 2dsphere |
+
+---
+
+## 14. Dependencies
+
+### Backend (Node.js)
+
+| Package | Purpose |
+|---------|---------|
+| express | Web framework |
+| mongodb | Native driver |
+| bcryptjs | Password hashing |
+| jsonwebtoken | JWT |
+| zod | Schema validation |
+| cloudinary | Image upload |
+| google-auth-library | Google OAuth |
+| nodemailer | Email |
+| express-rate-limit | Rate limiting |
+
+### Flutter
+
+| Package | Purpose |
+|---------|---------|
+| flutter_riverpod | State management |
+| go_router | Routing |
+| dio | HTTP client |
+| google_sign_in | Google OAuth |
+| firebase_messaging | Push notifications |
+| flutter_map | OpenStreetMap |
+| easy_localization | i18n |
+| cached_network_image | Image caching |
+| shimmer | Loading effects |
+| equatable | Value equality |

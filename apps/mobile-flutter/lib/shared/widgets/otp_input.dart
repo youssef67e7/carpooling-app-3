@@ -75,44 +75,51 @@ class _OtpInputState extends State<OtpInput> {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(widget.length, (i) {
-        return Padding(
-          padding: EdgeInsets.symmetric(horizontal: 6),
-          child: SizedBox(
-            width: 56,
-            height: 56,
-            child: TextField(
-              controller: _controllers[i],
-              focusNode: _focusNodes[i],
-              keyboardType: TextInputType.number,
-              textAlign: TextAlign.center,
-              maxLength: 1,
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
-              decoration: InputDecoration(
-                counterText: '',
-                filled: true,
-                fillColor: WeretTokens.inputFill,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: WeretTokens.borderSubtle),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: WeretTokens.borderSubtle),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: WeretTokens.brand, width: 1.5),
-                ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final gap = 6.0;
+        final totalGap = gap * (widget.length - 1);
+        final boxSize = ((constraints.maxWidth - totalGap) / widget.length).clamp(44.0, 64.0);
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(widget.length, (i) {
+            return Container(
+              width: boxSize,
+              height: boxSize,
+              margin: EdgeInsets.only(
+                left: i == 0 ? 0 : gap,
               ),
-              onChanged: (v) => _onChanged(v, i),
-              onTapOutside: (_) => FocusScope.of(context).unfocus(),
-            ),
-          ),
+              child: TextField(
+                controller: _controllers[i],
+                focusNode: _focusNodes[i],
+                keyboardType: TextInputType.number,
+                textAlign: TextAlign.center,
+                maxLength: 1,
+                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+                decoration: InputDecoration(
+                  counterText: '',
+                  filled: true,
+                  fillColor: WeretTokens.inputFill,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: WeretTokens.borderSubtle),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: WeretTokens.borderSubtle),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: WeretTokens.brand, width: 1.5),
+                  ),
+                ),
+                onChanged: (v) => _onChanged(v, i),
+                onTapOutside: (_) => FocusScope.of(context).unfocus(),
+              ),
+            );
+          }),
         );
-      }),
+      },
     );
   }
 }

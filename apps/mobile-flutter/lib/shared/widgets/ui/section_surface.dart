@@ -83,7 +83,7 @@ class SectionSurface extends StatelessWidget {
     }
 
     final interactive = Material(
-      color: Colors.transparent,
+      color: WeretTokens.surface,
       child: InkWell(
         onTap: enabled ? onTap : null,
         borderRadius: BorderRadius.circular(_radius),

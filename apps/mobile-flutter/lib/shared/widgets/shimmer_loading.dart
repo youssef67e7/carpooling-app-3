@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/theme/weret_tokens.dart';
 
 class ShimmerLoading extends StatefulWidget {
   final Widget child;
@@ -40,10 +41,10 @@ class _ShimmerLoadingState extends State<ShimmerLoading>
     return ShaderMask(
       shaderCallback: (bounds) {
         return LinearGradient(
-          colors: const [
-            Colors.transparent,
-            Colors.white24,
-            Colors.transparent,
+          colors: [
+            WeretTokens.surface,
+            WeretTokens.inputFill,
+            WeretTokens.surface,
           ],
           stops: const [0.0, 0.4, 0.8],
           transform: _SlideGradientTransform(_controller.value),
@@ -85,7 +86,7 @@ class ShimmerBox extends StatelessWidget {
       width: width,
       height: height,
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.1),
+        color: WeretTokens.inputFill.withValues(alpha: 0.3),
         borderRadius: borderRadius ?? BorderRadius.circular(8),
       ),
     );

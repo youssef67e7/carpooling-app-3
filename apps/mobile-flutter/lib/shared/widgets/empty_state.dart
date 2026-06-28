@@ -25,10 +25,25 @@ class EmptyState extends StatelessWidget {
           children: [
             Icon(icon, size: 48, color: WeretTokens.textSecondary),
             const SizedBox(height: 12),
-            Text(title, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 16,
+                color: WeretTokens.textPrimary,
+              ),
+            ),
             if (subtitle != null) ...[
               const SizedBox(height: 8),
-              Text(subtitle!, textAlign: TextAlign.center, style: const TextStyle(color: WeretTokens.textSecondary)),
+              Text(
+                subtitle!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: WeretTokens.textSecondary,
+                  fontSize: 14,
+                ),
+              ),
             ],
             if (action != null) ...[
               const SizedBox(height: 24),

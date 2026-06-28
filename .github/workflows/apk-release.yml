@@ -1,0 +1,54 @@
+name: Build & Release APK
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile-flutter
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27'
+          channel: 'stable'
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build APK
+        run: flutter build apk --release
+
+      - name: Get version from tag
+        id: version
+        run: echo "tag=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: WERET v${{ steps.version.outputs.tag }}
+          body: |
+            ## WERET v${{ steps.version.outputs.tag }}
+
+            Download the APK below and install on your Android device.
+            Make sure to allow installation from unknown sources.
+
+            ### Changelog
+            See the [commit log](https://github.com/${{ github.repository }}/commits/${{ github.ref_name }}) for details.
+          files: apps/mobile-flutter/build/app/outputs/flutter-apk/app-release.apk
+          generate_release_notes: true

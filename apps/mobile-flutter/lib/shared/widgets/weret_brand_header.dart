@@ -30,7 +30,7 @@ class WeretBrandHeader extends StatelessWidget {
           Text(
             subtitle!,
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: compact ? 14 : 16, color: onDark ? Colors.white70 : WeretTokens.textSecondary),
+            style: TextStyle(fontSize: compact ? 14 : 16, color: onDark ? WeretTokens.surface.withValues(alpha: 0.7) : WeretTokens.textSecondary),
           ),
         ],
         if (showLanguage) ...[

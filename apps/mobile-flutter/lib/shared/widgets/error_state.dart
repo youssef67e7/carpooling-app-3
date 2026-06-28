@@ -1,4 +1,6 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import '../../core/theme/weret_tokens.dart';
 
 class ErrorState extends StatelessWidget {
   final String message;
@@ -12,25 +14,34 @@ class ErrorState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.error_outline, size: 64, color: theme.colorScheme.error.withValues(alpha: 0.7)),
+            Icon(
+              Icons.error_outline_rounded,
+              size: 64,
+              color: WeretTokens.error.withValues(alpha: 0.7),
+            ),
             const SizedBox(height: 16),
             Text(
-              'Something went wrong',
-              style: theme.textTheme.titleMedium?.copyWith(color: theme.colorScheme.error),
+              'errorTitle'.tr(),
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: WeretTokens.error,
+              ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
               message,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+              style: const TextStyle(
+                fontSize: 14,
+                color: WeretTokens.textSecondary,
+                height: 1.4,
               ),
               textAlign: TextAlign.center,
               maxLines: 3,
@@ -38,10 +49,21 @@ class ErrorState extends StatelessWidget {
             ),
             if (onRetry != null) ...[
               const SizedBox(height: 24),
-              FilledButton.icon(
-                onPressed: onRetry,
-                icon: const Icon(Icons.refresh, size: 18),
-                label: const Text('Try Again'),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: FilledButton.icon(
+                  onPressed: onRetry,
+                  icon: const Icon(Icons.refresh, size: 18),
+                  label: Text('retry'.tr()),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: WeretTokens.brand,
+                    foregroundColor: WeretTokens.surface,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(WeretTokens.pillRadius),
+                    ),
+                  ),
+                ),
               ),
             ],
           ],

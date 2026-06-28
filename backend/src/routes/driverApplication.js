@@ -18,16 +18,19 @@ function isOwnedUploadUrl(userId, raw) {
   if (s.startsWith("http://") || s.startsWith("https://")) {
     // Only allow Cloudinary URLs from our cloud (prevents arbitrary URL injection)
     const cloudName = process.env.CLOUDINARY_CLOUD_NAME || "dixvj7zzs";
-    return s.includes(`res.cloudinary.com/${cloudName}`);
+    if (s.includes(`res.cloudinary.com/${cloudName}`)) return true;
+    // Allow Google profile image URLs (lh3.googleusercontent.com)
+    if (s.includes("googleusercontent.com")) return true;
+    return false;
   }
   // Our upload URLs are returned as `/uploads/public/<userId>/<file>` or `/uploads/private/<userId>/<file>`
   return s.startsWith(`/uploads/public/${String(userId)}/`) || s.startsWith(`/uploads/private/${String(userId)}/`);
 }
 
-function assertOwnedUploadUrls(userId, urls) {
+function assertOwnedUploadUrls(userId, urls, label) {
   for (const u of urls) {
     if (u == null || u === "") continue;
-    if (!isOwnedUploadUrl(userId, u)) throw new AppError("Invalid image URL", 400);
+    if (!isOwnedUploadUrl(userId, u)) throw new AppError(`Invalid image URL at ${label}`, 400);
   }
 }
 
@@ -118,15 +121,16 @@ router.post(
       if (u.role === "admin") throw new AppError("Admins cannot apply as drivers", 403);
 
       // Prevent attaching someone else's uploads to this profile.
-      assertOwnedUploadUrls(uid, [
-        req.body.profileImageUrl,
-        req.body.criminalRecordFrontUrl,
-        req.body.criminalRecordBackUrl,
-        req.body.licenseImageUrl,
-        req.body.carImageUrl,
-      ]);
+      // Allow the existing user profile image without re-validation.
+      if (req.body.profileImageUrl !== u.profileImageUrl) {
+        assertOwnedUploadUrls(uid, [req.body.profileImageUrl], "profileImageUrl");
+      }
+      assertOwnedUploadUrls(uid, [req.body.criminalRecordFrontUrl], "criminalRecordFrontUrl");
+      assertOwnedUploadUrls(uid, [req.body.criminalRecordBackUrl], "criminalRecordBackUrl");
+      assertOwnedUploadUrls(uid, [req.body.licenseImageUrl], "licenseImageUrl");
+      assertOwnedUploadUrls(uid, [req.body.carImageUrl], "carImageUrl");
       if (Array.isArray(req.body.cars)) {
-        assertOwnedUploadUrls(uid, req.body.cars.map((c) => c?.imageUrl).filter(Boolean));
+        assertOwnedUploadUrls(uid, req.body.cars.map((c) => c?.imageUrl).filter(Boolean), "cars.*.imageUrl");
       }
 
       u.name = String(req.body.fullName).trim().slice(0, 80);

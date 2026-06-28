@@ -1,4 +1,3 @@
-import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -185,41 +184,30 @@ class _PassengerRegisterScreenState
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: () => FocusScope.of(context).unfocus(),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              return SingleChildScrollView(
-                physics: const ClampingScrollPhysics(),
-                padding: EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: constraints.maxHeight > 700 ? 0 : _md,
-                ),
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: _transitionMs),
-                  switchInCurve: Curves.easeOutCubic,
-                  switchOutCurve: Curves.easeInCubic,
-                  transitionBuilder: (child, animation) {
-                    final dir = animation.status == AnimationStatus.reverse
-                        ? const Offset(0.06, 0)
-                        : const Offset(-0.06, 0);
-                    return FadeTransition(
-                      opacity: animation,
-                      child: SlideTransition(
-                        position: Tween(begin: dir, end: Offset.zero)
-                            .animate(animation),
-                        child: child,
-                      ),
-                    );
-                  },
-                  child: KeyedSubtree(
-                    key: ValueKey(_step),
-                    child: switch (_step) {
-                      _RegisterStep.welcome => _buildWelcome(),
-                      _RegisterStep.account => _buildAccount(auth.error),
-                    },
-                  ),
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: _transitionMs),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            transitionBuilder: (child, animation) {
+              final dir = animation.status == AnimationStatus.reverse
+                  ? const Offset(0.06, 0)
+                  : const Offset(-0.06, 0);
+              return FadeTransition(
+                opacity: animation,
+                child: SlideTransition(
+                  position: Tween(begin: dir, end: Offset.zero)
+                      .animate(animation),
+                  child: child,
                 ),
               );
             },
+            child: KeyedSubtree(
+              key: ValueKey(_step),
+              child: switch (_step) {
+                _RegisterStep.welcome => _buildWelcome(),
+                _RegisterStep.account => _buildAccount(auth.error),
+              },
+            ),
           ),
         ),
       ),
@@ -238,7 +226,7 @@ class _PassengerRegisterScreenState
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Text(
-            'registerPassengerIntro'.tr(),
+            'Create your passenger account to start riding with Weret.',
             textAlign: TextAlign.center,
             style: AppStyles.bodyRegular,
           ),
@@ -279,144 +267,147 @@ class _PassengerRegisterScreenState
   }
 
   Widget _buildAccount(String? providerError) {
-    return Form(
-      key: _formKey,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const SizedBox(height: _sm),
-          Text(
-            'Fill in your details to get started',
-            style: AppStyles.bodyRegular,
-          ),
-          const SizedBox(height: _lg),
-
-          if (_displayError(providerError) != null)
-            FormErrorCallout(
-              message: _displayError(providerError)!,
-              onDismiss: _dismissError,
+    return SingleChildScrollView(
+      physics: const ClampingScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: _sm),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Fill in your details to get started',
+              style: AppStyles.bodyRegular,
             ),
+            const SizedBox(height: _lg),
 
-          _WeretTextField(
-            controller: _name,
-            focusNode: _nameFocus,
-            hint: 'Full name',
-            keyboardType: TextInputType.name,
-            textInputAction: TextInputAction.next,
-            onFieldSubmitted: (_) => _emailFocus.requestFocus(),
-            prefixIcon: Icons.person_outline_rounded,
-            validator: (v) {
-              if (v == null || v.trim().isEmpty) return 'Please enter your name';
-              if (v.trim().length < 3) return 'Name must be at least 3 characters';
-              return null;
-            },
-          ),
-          const SizedBox(height: _fieldGap),
-
-          _WeretTextField(
-            controller: _email,
-            focusNode: _emailFocus,
-            hint: 'Email address',
-            keyboardType: TextInputType.emailAddress,
-            validator: validateEmail,
-            textInputAction: TextInputAction.next,
-            onFieldSubmitted: (_) => _passwordFocus.requestFocus(),
-            prefixIcon: Icons.mail_outline_rounded,
-          ),
-          const SizedBox(height: _fieldGap),
-
-          _WeretTextField(
-            controller: _password,
-            focusNode: _passwordFocus,
-            hint: 'Password',
-            obscureText: _obscurePassword,
-            validator: validatePassword,
-            textInputAction: TextInputAction.next,
-            onFieldSubmitted: (_) => _confirmFocus.requestFocus(),
-            prefixIcon: Icons.lock_outline_rounded,
-            suffixIcon: _PasswordToggle(
-              obscured: _obscurePassword,
-              onToggle: () =>
-                  setState(() => _obscurePassword = !_obscurePassword),
-            ),
-          ),
-          const SizedBox(height: _fieldGap),
-
-          _WeretTextField(
-            controller: _confirm,
-            focusNode: _confirmFocus,
-            hint: 'Confirm password',
-            obscureText: _obscureConfirm,
-            validator: (v) {
-              if (v == null || v.isEmpty) return 'Please confirm your password';
-              if (v != _password.text) return 'Passwords do not match';
-              return null;
-            },
-            textInputAction: TextInputAction.next,
-            onFieldSubmitted: (_) => _phoneFocus.requestFocus(),
-            prefixIcon: Icons.lock_outline_rounded,
-            suffixIcon: _PasswordToggle(
-              obscured: _obscureConfirm,
-              onToggle: () =>
-                  setState(() => _obscureConfirm = !_obscureConfirm),
-            ),
-          ),
-          const SizedBox(height: _fieldGap),
-
-          Row(
-            children: [
-              _CountryCodeSelector(
-                selectedIndex: _selectedCountryIndex,
-                codes: _countryCodes,
-                onChanged: (i) =>
-                    setState(() => _selectedCountryIndex = i),
+            if (_displayError(providerError) != null)
+              FormErrorCallout(
+                message: _displayError(providerError)!,
+                onDismiss: _dismissError,
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _WeretTextField(
-                  controller: _phone,
-                  focusNode: _phoneFocus,
-                  hint: 'Phone number',
-                  keyboardType: TextInputType.phone,
-                  validator: (v) => validatePhone(v, required: true),
-                  textInputAction: TextInputAction.done,
-                  onFieldSubmitted:
-                      _anyLoading ? null : (_) => _register(),
+
+            _WeretTextField(
+              controller: _name,
+              focusNode: _nameFocus,
+              hint: 'Full name',
+              keyboardType: TextInputType.name,
+              textInputAction: TextInputAction.next,
+              onFieldSubmitted: (_) => _emailFocus.requestFocus(),
+              prefixIcon: Icons.person_outline_rounded,
+              validator: (v) {
+                if (v == null || v.trim().isEmpty) return 'Please enter your name';
+                if (v.trim().length < 3) return 'Name must be at least 3 characters';
+                return null;
+              },
+            ),
+            const SizedBox(height: _fieldGap),
+
+            _WeretTextField(
+              controller: _email,
+              focusNode: _emailFocus,
+              hint: 'Email address',
+              keyboardType: TextInputType.emailAddress,
+              validator: validateEmail,
+              textInputAction: TextInputAction.next,
+              onFieldSubmitted: (_) => _passwordFocus.requestFocus(),
+              prefixIcon: Icons.mail_outline_rounded,
+            ),
+            const SizedBox(height: _fieldGap),
+
+            _WeretTextField(
+              controller: _password,
+              focusNode: _passwordFocus,
+              hint: 'Password',
+              obscureText: _obscurePassword,
+              validator: validatePassword,
+              textInputAction: TextInputAction.next,
+              onFieldSubmitted: (_) => _confirmFocus.requestFocus(),
+              prefixIcon: Icons.lock_outline_rounded,
+              suffixIcon: _PasswordToggle(
+                obscured: _obscurePassword,
+                onToggle: () =>
+                    setState(() => _obscurePassword = !_obscurePassword),
+              ),
+            ),
+            const SizedBox(height: _fieldGap),
+
+            _WeretTextField(
+              controller: _confirm,
+              focusNode: _confirmFocus,
+              hint: 'Confirm password',
+              obscureText: _obscureConfirm,
+              validator: (v) {
+                if (v == null || v.isEmpty) return 'Please confirm your password';
+                if (v != _password.text) return 'Passwords do not match';
+                return null;
+              },
+              textInputAction: TextInputAction.next,
+              onFieldSubmitted: (_) => _phoneFocus.requestFocus(),
+              prefixIcon: Icons.lock_outline_rounded,
+              suffixIcon: _PasswordToggle(
+                obscured: _obscureConfirm,
+                onToggle: () =>
+                    setState(() => _obscureConfirm = !_obscureConfirm),
+              ),
+            ),
+            const SizedBox(height: _fieldGap),
+
+            Row(
+              children: [
+                _CountryCodeSelector(
+                  selectedIndex: _selectedCountryIndex,
+                  codes: _countryCodes,
+                  onChanged: (i) =>
+                      setState(() => _selectedCountryIndex = i),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: _lg),
-
-          _TermsCheckbox(
-            accepted: _acceptedTerms,
-            onChanged: (v) => setState(() {
-              _acceptedTerms = v;
-              if (v) _errorDismissed = true;
-            }),
-          ),
-          const SizedBox(height: _md),
-
-          _RegisterPrimaryButton(
-            label: 'Create Account',
-            loading: _anyLoading,
-            onPressed: _anyLoading ? null : _register,
-          ),
-          const SizedBox(height: _md),
-
-          Center(
-            child: _RegisterTextLink(
-              label: 'Already have an account? Login',
-              onPressed: _anyLoading
-                  ? null
-                  : () {
-                      HapticFeedback.selectionClick();
-                      context.go('/login');
-                    },
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _WeretTextField(
+                    controller: _phone,
+                    focusNode: _phoneFocus,
+                    hint: 'Phone number',
+                    keyboardType: TextInputType.phone,
+                    validator: (v) => validatePhone(v, required: true),
+                    textInputAction: TextInputAction.done,
+                    onFieldSubmitted:
+                        _anyLoading ? null : (_) => _register(),
+                  ),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: _lg),
-        ],
+            const SizedBox(height: _lg),
+
+            _TermsCheckbox(
+              accepted: _acceptedTerms,
+              onChanged: (v) => setState(() {
+                _acceptedTerms = v;
+                if (v) _errorDismissed = true;
+              }),
+            ),
+            const SizedBox(height: _md),
+
+            _RegisterPrimaryButton(
+              label: 'Create Account',
+              loading: _anyLoading,
+              onPressed: _anyLoading ? null : _register,
+            ),
+            const SizedBox(height: _md),
+
+            Center(
+              child: _RegisterTextLink(
+                label: 'Already have an account? Login',
+                onPressed: _anyLoading
+                    ? null
+                    : () {
+                        HapticFeedback.selectionClick();
+                        context.go('/login');
+                      },
+              ),
+            ),
+            const SizedBox(height: _lg),
+          ],
+        ),
       ),
     );
   }

@@ -13,9 +13,11 @@ import '../../core/utils/api_error_message.dart';
 import '../../core/utils/auth_navigation.dart';
 import '../../core/utils/auth_validators.dart';
 import '../../core/utils/google_o_auth_errors.dart';
+import '../../shared/widgets/custom_button.dart';
 import '../../shared/widgets/otp_input.dart';
 import '../../shared/widgets/ui/form_error_callout.dart';
 import '../../shared/widgets/weret_logo.dart';
+import '../../shared/widgets/weret_text_field.dart';
 
 enum _LoginStep { welcome, email, emailOtp }
 
@@ -234,14 +236,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       backgroundColor: WeretTokens.bg,
       appBar: showAppBar
           ? AppBar(
-              backgroundColor: Colors.transparent,
+              backgroundColor: WeretTokens.surface,
               elevation: 0,
               leading: IconButton(
-                icon: const Icon(
-                  Icons.arrow_back_ios_new_rounded,
-                  size: 20,
-                  color: WeretTokens.textPrimary,
-                ),
+                icon: const Icon(Icons.arrow_back_ios_new_rounded),
+                tooltip: 'Back',
                 onPressed: _anyLoading ? null : _goBack,
               ),
             )
@@ -314,7 +313,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             onDismiss: _dismissError,
           ),
 
-        _WeretTextField(
+        WeretTextField(
           controller: _identifier,
           focusNode: _identifierFocus,
           hint: 'loginEmailHint'.tr(),
@@ -326,8 +325,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         ),
         const SizedBox(height: _md),
 
-        _LoginPrimaryButton(
-          label: 'loginContinue'.tr(),
+        CustomButton(
+          title: 'loginContinue'.tr(),
           loading: false,
           onPressed: _continueFromWelcome,
         ),
@@ -337,7 +336,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         const SizedBox(height: _lg),
 
         if (auth.googleSignInEnabled)
-          _GoogleButton(onPressed: _googleSignIn)
+          WeretGoogleButton(onPressed: _googleSignIn)
         else
           Padding(
             padding: const EdgeInsets.only(bottom: _sm),
@@ -353,17 +352,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           ),
         const SizedBox(height: _lg),
 
-        _LoginTextLink(
-          label: 'loginCreateAccount'.tr(),
-          onPressed:
-              _anyLoading ? null : () => context.push('/register'),
+        WeretLinkButton(
+          title: 'loginCreateAccount'.tr(),
+          onPressed: _anyLoading ? null : () => context.push('/register'),
         ),
         const SizedBox(height: _lg),
 
         Text(
           'loginTerms'.tr(),
           textAlign: TextAlign.center,
-          style: TextStyle(
+          style: const TextStyle(
             color: WeretTokens.textMuted,
             fontSize: 11,
             height: 1.4,
@@ -394,7 +392,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               onDismiss: _dismissError,
             ),
 
-          _WeretTextField(
+          WeretTextField(
             controller: _email,
             focusNode: _emailFocus,
             hint: 'loginEmailHint'.tr(),
@@ -407,17 +405,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           ),
           const SizedBox(height: _md),
 
-          _LoginPrimaryButton(
-            label: 'loginSendCode'.tr(),
+          CustomButton(
+            title: 'loginSendCode'.tr(),
             loading: _anyLoading,
             onPressed: _anyLoading ? null : _sendEmailOtp,
           ),
           const SizedBox(height: _md),
 
-          _LoginTextLink(
-            label: 'loginCreateAccount'.tr(),
-            onPressed:
-                _anyLoading ? null : () => context.push('/register'),
+          WeretLinkButton(
+            title: 'loginCreateAccount'.tr(),
+            onPressed: _anyLoading ? null : () => context.push('/register'),
           ),
         ],
       ),
@@ -465,103 +462,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           ),
           const SizedBox(height: _md),
 
-          _LoginPrimaryButton(
-            label: 'loginVerify'.tr(),
+          CustomButton(
+            title: 'loginVerify'.tr(),
             loading: _anyLoading || providerLoading,
             onPressed:
                 (_anyLoading || providerLoading) ? null : _verifyEmailOtp,
           ),
           const SizedBox(height: _md),
 
-          _LoginTextLink(
-            label: _resendSeconds > 0
+          WeretLinkButton(
+            title: _resendSeconds > 0
                 ? 'authResendIn'.tr(namedArgs: {'sec': _resendSeconds.toString()})
                 : 'authResend'.tr(),
             onPressed:
                 (_resendSeconds > 0 || _anyLoading) ? null : _sendEmailOtp,
           ),
-          _LoginTextLink(
-            label: 'loginChangeEmail'.tr(),
+          WeretLinkButton(
+            title: 'loginChangeEmail'.tr(),
             onPressed:
                 _anyLoading ? null : () => _goTo(_LoginStep.email),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _LoginPrimaryButton extends StatelessWidget {
-  final String label;
-  final bool loading;
-  final VoidCallback? onPressed;
-  const _LoginPrimaryButton({
-    required this.label,
-    this.loading = false,
-    this.onPressed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: 55,
-      child: AnimatedOpacity(
-        duration: const Duration(milliseconds: 150),
-        opacity: (onPressed == null && !loading) ? 0.5 : 1.0,
-        child: FilledButton(
-          onPressed: onPressed,
-          style: FilledButton.styleFrom(
-            backgroundColor: WeretTokens.brand,
-            foregroundColor: Colors.white,
-            disabledBackgroundColor: WeretTokens.brand,
-            disabledForegroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            textStyle: const TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 16,
-            ),
-          ),
-          child: loading
-              ? const SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.5,
-                    color: Colors.white,
-                  ),
-                )
-              : Text(label),
-        ),
-      ),
-    );
-  }
-}
-
-class _LoginTextLink extends StatelessWidget {
-  final String label;
-  final VoidCallback? onPressed;
-  const _LoginTextLink({required this.label, this.onPressed});
-
-  @override
-  Widget build(BuildContext context) {
-    return TextButton(
-      onPressed: onPressed,
-      style: TextButton.styleFrom(
-        minimumSize: const Size.fromHeight(36),
-        padding: const EdgeInsets.symmetric(horizontal: 4),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: onPressed != null
-              ? WeretTokens.textSecondary
-              : WeretTokens.textMuted,
-          fontWeight: FontWeight.w600,
-          fontSize: 14,
-        ),
       ),
     );
   }
@@ -587,114 +508,5 @@ class _OrDivider extends StatelessWidget {
       ),
       Expanded(child: Divider(color: WeretTokens.borderSubtle)),
     ]);
-  }
-}
-
-class _GoogleButton extends StatelessWidget {
-  final VoidCallback? onPressed;
-  const _GoogleButton({this.onPressed});
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: 50,
-      child: OutlinedButton.icon(
-        onPressed: onPressed,
-        icon: Image.asset(
-          'assets/images/design/03_google_modal_avatar_a.png',
-          width: 20,
-          height: 20,
-        ),
-        label: Text(
-          'weretContinueGoogle'.tr(),
-          style: const TextStyle(
-            color: WeretTokens.textPrimary,
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        style: OutlinedButton.styleFrom(
-          side: const BorderSide(color: WeretTokens.borderSubtle),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _WeretTextField extends StatelessWidget {
-  final TextEditingController controller;
-  final FocusNode? focusNode;
-  final String? hint;
-  final TextInputType? keyboardType;
-  final String? Function(String?)? validator;
-  final TextInputAction? textInputAction;
-  final void Function(String)? onFieldSubmitted;
-  final IconData? prefixIcon;
-
-  static final _border = OutlineInputBorder(
-    borderRadius: BorderRadius.circular(12),
-    borderSide: const BorderSide(color: WeretTokens.borderSubtle),
-  );
-  static final _focusedBorder = OutlineInputBorder(
-    borderRadius: BorderRadius.circular(12),
-    borderSide: const BorderSide(color: WeretTokens.brand, width: 1.5),
-  );
-  static final _errorBorder = OutlineInputBorder(
-    borderRadius: BorderRadius.circular(12),
-    borderSide: BorderSide(color: Colors.red.shade300),
-  );
-
-  const _WeretTextField({
-    required this.controller,
-    this.focusNode,
-    this.hint,
-    this.keyboardType,
-    this.validator,
-    this.textInputAction,
-    this.onFieldSubmitted,
-    this.prefixIcon,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 50,
-      child: TextFormField(
-        controller: controller,
-        focusNode: focusNode,
-        keyboardType: keyboardType,
-        validator: validator,
-        textInputAction: textInputAction,
-        onFieldSubmitted: onFieldSubmitted,
-        decoration: InputDecoration(
-          hintText: hint,
-          hintStyle: const TextStyle(
-            color: WeretTokens.textMuted,
-            fontSize: 14,
-          ),
-          filled: true,
-          fillColor: WeretTokens.inputFill,
-          prefixIcon: prefixIcon != null
-              ? Icon(prefixIcon, size: 20, color: WeretTokens.textMuted)
-              : null,
-          border: _border,
-          enabledBorder: _border,
-          focusedBorder: _focusedBorder,
-          errorBorder: _errorBorder,
-          focusedErrorBorder: _errorBorder.copyWith(
-            borderSide: BorderSide(color: Colors.red.shade400, width: 1.5),
-          ),
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 14,
-          ),
-          errorStyle: const TextStyle(height: 0, fontSize: 0),
-        ),
-      ),
-    );
   }
 }

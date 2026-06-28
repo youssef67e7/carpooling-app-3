@@ -52,7 +52,7 @@ Future<bool> showCancelRideDialog(BuildContext context, WidgetRef ref, String ri
       });
     },
   );
-  if (confirmed is! bool || confirmed != true) return false;
+  if (confirmed == null) return false;
   try {
     final reason = selectedReason != null ? selectedReason!.tr() : null;
     if (isDriver) {

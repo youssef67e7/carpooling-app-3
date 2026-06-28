@@ -29,9 +29,9 @@ class WeretTheme {
         centerTitle: true,
         elevation: 0,
         scrolledUnderElevation: 0,
-        backgroundColor: Colors.transparent,
-        surfaceTintColor: Colors.transparent,
-        foregroundColor: isLight ? WeretTokens.textPrimary : Colors.white,
+        backgroundColor: WeretTokens.surface,
+        surfaceTintColor: WeretTokens.surface,
+        foregroundColor: isLight ? WeretTokens.textPrimary : WeretTokens.surface,
       ),
       cardTheme: CardThemeData(
         color: isLight ? WeretTokens.surface : const Color(0xFF1E1E1E),
@@ -64,10 +64,10 @@ class WeretTheme {
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           backgroundColor: WeretTokens.brand,
-          foregroundColor: Colors.white,
+          foregroundColor: WeretTokens.surface,
           minimumSize: const Size.fromHeight(52),
           elevation: 4,
-          shadowColor: Colors.black.withValues(alpha: 0.2),
+          shadowColor: WeretTokens.brand.withValues(alpha: 0.2),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(WeretTokens.pillRadius)),
           textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
         ),
@@ -75,7 +75,7 @@ class WeretTheme {
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: WeretTokens.brand,
-          backgroundColor: isLight ? WeretTokens.surface : Colors.transparent,
+          backgroundColor: isLight ? WeretTokens.surface : WeretTokens.surface,
           minimumSize: const Size.fromHeight(52),
           side: const BorderSide(color: WeretTokens.brand, width: 2),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(WeretTokens.pillRadius)),
@@ -89,8 +89,8 @@ class WeretTheme {
         ),
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: Colors.transparent,
-        indicatorColor: Colors.transparent,
+        backgroundColor: WeretTokens.surface,
+        indicatorColor: WeretTokens.surface,
         elevation: 0,
         height: 68,
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,

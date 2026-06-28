@@ -1,10 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/providers/wallet_provider.dart';
+import '../../core/theme/app_styles.dart';
 import '../../core/theme/weret_tokens.dart';
 import '../../shared/widgets/wallet_activity_item.dart';
 import 'wallet_labels.dart';
+
+// ignore_for_file: unused_element
+const _xs = 8.0;
+const _sm = 12.0;
+const _fieldGap = 14.0;
+const _md = 16.0;
+const _lg = 24.0;
+const _xl = 32.0;
+const _xxl = 60.0;
 
 class WalletOverviewScreen extends ConsumerStatefulWidget {
   const WalletOverviewScreen({super.key});
@@ -13,112 +24,71 @@ class WalletOverviewScreen extends ConsumerStatefulWidget {
 }
 
 class _WalletOverviewScreenState extends ConsumerState<WalletOverviewScreen> {
+
   @override
   void initState() {
     super.initState();
     Future.microtask(() => ref.read(walletProvider.notifier).refresh());
   }
 
+  // ── Helpers ──
+  void _withHaptic(VoidCallback action) {
+    HapticFeedback.selectionClick();
+    action();
+  }
+
+  // ── Build ──
   @override
   Widget build(BuildContext context) {
     final w = ref.watch(walletProvider);
     return Scaffold(
       backgroundColor: WeretTokens.bg,
       appBar: AppBar(
-        title: const Text('Wallet', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17)),
+        title: Text('Wallet', style: AppStyles.title),
         centerTitle: true,
-        backgroundColor: Colors.transparent,
-        surfaceTintColor: Colors.transparent,
       ),
       body: Column(
         children: [
-          Container(
-            width: double.infinity,
-            height: 160,
-            decoration: const BoxDecoration(
-              color: WeretTokens.brand,
-              borderRadius: BorderRadius.only(
-                bottomLeft: Radius.circular(30),
-                bottomRight: Radius.circular(30),
-              ),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text('Wallet balance', style: TextStyle(color: Colors.white, fontSize: 14)),
-                const SizedBox(height: 4),
-                Text('EGP ${w.totalBalance.toStringAsFixed(2)}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 32)),
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    OutlinedButton.icon(
-                      onPressed: () => context.push('deposit'),
-                      icon: const Icon(Icons.add, size: 18),
-                      label: const Text('Top up'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        side: const BorderSide(color: Colors.white, width: 1.5),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9999)),
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    FilledButton.icon(
-                      onPressed: () => context.push('withdraw'),
-                      icon: const Icon(Icons.send, size: 18),
-                      label: const Text('Transfer'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: Colors.black,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9999)),
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
+          _BrandHeader(balance: w.totalBalance, onTopUp: () => _withHaptic(() => context.push('deposit')), onTransfer: () => _withHaptic(() => context.push('withdraw'))),
           Expanded(
             child: RefreshIndicator(
               onRefresh: () => ref.read(walletProvider.notifier).refresh(),
               child: ListView(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.symmetric(horizontal: _md),
                 children: [
-                  const SizedBox(height: 24),
+                  const SizedBox(height: _lg),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Recent Activities', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.black)),
+                      Text('Recent Activities', style: AppStyles.headlineSmall),
                       TextButton(
-                        onPressed: () => context.push('history'),
+                        onPressed: () => _withHaptic(() => context.push('history')),
                         child: const Text('View All', style: TextStyle(fontSize: 13)),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: _xs),
                   if (w.error != null)
                     Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 32),
+                      padding: const EdgeInsets.symmetric(vertical: _xl),
                       child: Center(
                         child: Column(
                           children: [
-                            Text(w.error!, style: const TextStyle(color: Colors.red, fontSize: 13), textAlign: TextAlign.center),
-                            const SizedBox(height: 8),
-                            TextButton(onPressed: () => ref.read(walletProvider.notifier).refresh(), child: const Text('Retry')),
+                            Text(w.error!, style: AppStyles.bodySmall.copyWith(color: WeretTokens.error), textAlign: TextAlign.center),
+                            const SizedBox(height: _xs),
+                            TextButton(onPressed: () { HapticFeedback.selectionClick(); ref.read(walletProvider.notifier).refresh(); }, child: const Text('Retry')),
                           ],
                         ),
                       ),
                     )
                   else if (w.loading && w.transactions.isEmpty)
                     const Padding(
-                      padding: EdgeInsets.only(top: 32),
+                      padding: EdgeInsets.only(top: _xl),
                       child: Center(child: CircularProgressIndicator()),
                     )
                   else if (w.transactions.isEmpty)
                     const Padding(
-                      padding: EdgeInsets.only(top: 32),
+                      padding: EdgeInsets.only(top: _xl),
                       child: Center(child: Text('No recent activity', style: TextStyle(color: WeretTokens.textMuted))),
                     )
                   else
@@ -141,6 +111,74 @@ class _WalletOverviewScreenState extends ConsumerState<WalletOverviewScreen> {
                 ],
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Branded header widget ──
+
+class _BrandHeader extends StatelessWidget {
+  const _BrandHeader({required this.balance, required this.onTopUp, required this.onTransfer});
+
+  final num balance;
+  final VoidCallback onTopUp;
+  final VoidCallback onTransfer;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      height: 160,
+      decoration: const BoxDecoration(
+        color: WeretTokens.brand,
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(30),
+          bottomRight: Radius.circular(30),
+        ),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Text('Wallet balance', style: TextStyle(color: WeretTokens.surface, fontSize: 14)),
+          const SizedBox(height: 4),
+          Text('EGP ${balance.toStringAsFixed(2)}', style: const TextStyle(color: WeretTokens.surface, fontWeight: FontWeight.bold, fontSize: 32)),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Flexible(
+                fit: FlexFit.loose,
+                child: OutlinedButton.icon(
+                  onPressed: onTopUp,
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Top up'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: WeretTokens.surface,
+                    side: const BorderSide(color: WeretTokens.surface, width: 1.5),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9999)),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Flexible(
+                fit: FlexFit.loose,
+                child: FilledButton.icon(
+                  onPressed: onTransfer,
+                  icon: const Icon(Icons.send, size: 18),
+                  label: const Text('Transfer'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: WeretTokens.surface,
+                    foregroundColor: WeretTokens.brand,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9999)),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),

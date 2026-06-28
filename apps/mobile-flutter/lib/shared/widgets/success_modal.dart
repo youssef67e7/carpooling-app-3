@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import '../../core/theme/weret_tokens.dart';
 
@@ -29,7 +30,7 @@ class SuccessModal extends StatelessWidget {
   }) {
     return showDialog(
       context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.6),
+      barrierColor: WeretTokens.textPrimary.withValues(alpha: 0.6),
       builder: (_) => SuccessModal(
         title: title,
         description: description,
@@ -43,17 +44,16 @@ class SuccessModal extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      backgroundColor: Colors.transparent,
+      backgroundColor: WeretTokens.surface,
       elevation: 0,
       insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(WeretTokens.cardRadius),
+      ),
       child: Container(
         width: double.infinity,
         constraints: const BoxConstraints(maxWidth: 380),
         padding: const EdgeInsets.all(32),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(24),
-        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -61,23 +61,50 @@ class SuccessModal extends StatelessWidget {
               width: 64,
               height: 64,
               decoration: const BoxDecoration(
-                color: Colors.black,
+                color: WeretTokens.brand,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.check, color: Colors.white, size: 32),
+              child: const Icon(
+                Icons.check,
+                color: WeretTokens.surface,
+                size: 32,
+              ),
             ),
             const SizedBox(height: 20),
-            Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 22, color: Colors.black)),
+            Text(
+              title,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 22,
+                color: WeretTokens.textPrimary,
+              ),
+            ),
             const SizedBox(height: 8),
             Text(
               description,
               textAlign: TextAlign.center,
-              style:   const TextStyle(fontSize: 14, color: WeretTokens.textSecondary),
+              style: const TextStyle(
+                fontSize: 14,
+                color: WeretTokens.textSecondary,
+              ),
             ),
             const SizedBox(height: 20),
-            const Text('Total Payment', style: TextStyle(fontSize: 12, color: WeretTokens.textMuted)),
+            Text(
+              'totalPayment'.tr(),
+              style: const TextStyle(
+                fontSize: 12,
+                color: WeretTokens.textMuted,
+              ),
+            ),
             const SizedBox(height: 4),
-            Text('$currency $amount', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 28, color: Colors.black)),
+            Text(
+              '$currency $amount',
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 28,
+                color: WeretTokens.textPrimary,
+              ),
+            ),
             const SizedBox(height: 24),
             SizedBox(
               width: double.infinity,
@@ -86,18 +113,29 @@ class SuccessModal extends StatelessWidget {
                 onPressed: onDone,
                 style: FilledButton.styleFrom(
                   backgroundColor: WeretTokens.brand,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                  foregroundColor: WeretTokens.surface,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  textStyle: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                  ),
                 ),
-                child: const Text('Done'),
+                child: Text('done'.tr()),
               ),
             ),
             if (onPayAgain != null) ...[
               const SizedBox(height: 12),
               TextButton(
                 onPressed: onPayAgain,
-                child: const Text('Pay Again', style: TextStyle(color: Colors.black, fontSize: 14)),
+                child: Text(
+                  'payAgain'.tr(),
+                  style: const TextStyle(
+                    color: WeretTokens.textPrimary,
+                    fontSize: 14,
+                  ),
+                ),
               ),
             ],
           ],

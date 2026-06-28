@@ -1,3 +1,5 @@
+// ignore_for_file: unused_element
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -25,11 +27,16 @@ import '../../shared/widgets/weret_ride_map.dart';
 import '../../shared/widgets/spacing.dart';
 import '../../shared/widgets/ui/pressable_scale.dart';
 import '../../shared/widgets/ui/form_error_callout.dart';
+import '../../shared/widgets/custom_button.dart';
 
 // ── Spacing ──────────────────────────────────────────────────────────
-const _pad = 16.0;
-const _md = 12.0;
-const _lg = 20.0;
+const _xs = 8.0;
+const _sm = 12.0;
+const _fieldGap = 14.0;
+const _md = 16.0;
+const _lg = 24.0;
+const _xl = 32.0;
+const _xxl = 60.0;
 
 
 // ── Map config ───────────────────────────────────────────────────────
@@ -59,6 +66,7 @@ class _PassengerHomeScreenState extends ConsumerState<PassengerHomeScreen> {
 
   // ── Ride config ───────────────────────────────────────────────────
   String _vehicleType = 'delivery';
+  int _passengerCount = 1;
 
   // ── Route preview ─────────────────────────────────────────────────
   Map<String, dynamic>? _routePreview;
@@ -235,6 +243,7 @@ class _PassengerHomeScreenState extends ConsumerState<PassengerHomeScreen> {
           'lng': _destination!.longitude,
           if (_destCtrl.text.isNotEmpty) 'address': _destCtrl.text,
         },
+        'passengerCount': _passengerCount,
       });
       if (!mounted) return;
       HapticFeedback.lightImpact();
@@ -316,8 +325,8 @@ class _PassengerHomeScreenState extends ConsumerState<PassengerHomeScreen> {
       backgroundColor: WeretTokens.bg,
       floatingActionButton: active != null
           ? FloatingActionButton.extended(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
+              backgroundColor: WeretTokens.error,
+              foregroundColor: WeretTokens.surface,
               icon: const Icon(Icons.sos),
               label: const Text(
                 'SOS',
@@ -332,7 +341,7 @@ class _PassengerHomeScreenState extends ConsumerState<PassengerHomeScreen> {
           color: WeretTokens.brand,
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: _pad),
+            padding: const EdgeInsets.symmetric(horizontal: _md),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -398,18 +407,26 @@ class _PassengerHomeScreenState extends ConsumerState<PassengerHomeScreen> {
                   ),
                 ],
 
+                if (active == null && _canBook) ...[
+                  Gap.h12(),
+                  _PassengerCountSelector(
+                    count: _passengerCount,
+                    onChanged: (v) => setState(() => _passengerCount = v),
+                  ),
+                ],
+
                 Gap.h12(),
                 if (active != null)
-                  _CtaButton(label: 'edit'.tr(), onPressed: () => _openMapPicker(_nextMissingField))
+                  CustomButton(title: 'edit'.tr(), onPressed: () => _openMapPicker(_nextMissingField))
                 else if (_canBook)
-                  _CtaButton(
-                    label: 'requestRide'.tr(),
+                  CustomButton(
+                    title: 'requestRide'.tr(),
                     loading: _creating,
                     onPressed: _creating ? null : _book,
                   )
                 else
-                  _CtaButton(
-                    label: 'Set your route',
+                  CustomButton(
+                    title: 'Set your route',
                     onPressed: () => _openMapPicker(_nextMissingField),
                   ),
 
@@ -505,7 +522,7 @@ class _MapPreview extends StatelessWidget {
     return SizedBox(
       height: MediaQuery.of(context).size.height * _mapHeightFraction,
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(_md),
         child: WeretRideMap(
           center: pickup ?? _defaultCenter,
           controller: controller,
@@ -558,7 +575,7 @@ class _ModeSelector extends StatelessWidget {
             },
           ),
         ),
-        const SizedBox(width: _md),
+        const SizedBox(width: _sm),
         Expanded(
           child: _ModeCard(
             label: 'Send a package',
@@ -598,7 +615,7 @@ class _ModeCard extends StatelessWidget {
         height: 88,
         decoration: BoxDecoration(
           color: selected ? WeretTokens.brand : WeretTokens.surface,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(_md),
           border: Border.all(
             color: selected ? WeretTokens.brand : WeretTokens.borderSubtle,
             width: selected ? 1.5 : 1,
@@ -613,15 +630,15 @@ class _ModeCard extends StatelessWidget {
               Icon(
                 icon,
                 size: 32,
-                color: selected ? Colors.white : WeretTokens.textPrimary,
+                color: selected ? WeretTokens.surface : WeretTokens.textPrimary,
               ),
-            const SizedBox(height: 6),
+            const SizedBox(height: _xs),
             Text(
               label,
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
-                color: selected ? Colors.white : WeretTokens.textSecondary,
+                color: selected ? WeretTokens.surface : WeretTokens.textSecondary,
               ),
             ),
           ],
@@ -651,7 +668,7 @@ class _LocationField extends StatelessWidget {
       onTap: enabled ? onTap : null,
       child: Container(
         height: 50,
-        padding: const EdgeInsets.symmetric(horizontal: _pad),
+        padding: const EdgeInsets.symmetric(horizontal: _md),
         alignment: Alignment.centerLeft,
         decoration: BoxDecoration(
           color: WeretTokens.inputFill,
@@ -682,56 +699,6 @@ class _LocationField extends StatelessWidget {
             if (enabled)
               Icon(Icons.chevron_right, size: 18, color: WeretTokens.textMuted),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CtaButton extends StatelessWidget {
-  final String label;
-  final bool loading;
-  final VoidCallback? onPressed;
-
-  const _CtaButton({
-    required this.label,
-    this.loading = false,
-    this.onPressed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: 50,
-      child: AnimatedOpacity(
-        duration: const Duration(milliseconds: 150),
-        opacity: (onPressed == null && !loading) ? 0.5 : 1.0,
-        child: FilledButton(
-          onPressed: onPressed,
-          style: FilledButton.styleFrom(
-            backgroundColor: WeretTokens.brand,
-            foregroundColor: Colors.white,
-            disabledBackgroundColor: WeretTokens.brand,
-            disabledForegroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            textStyle: const TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 16,
-            ),
-          ),
-          child: loading
-              ? const SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.5,
-                    color: Colors.white,
-                  ),
-                )
-              : Text(label),
         ),
       ),
     );
@@ -785,7 +752,7 @@ class _NearbySection extends StatelessWidget {
         Gap.h12(),
         if (drivers.isEmpty)
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: _lg),
+            padding: const EdgeInsets.symmetric(vertical: 20.0),
             child: Text(
               'nearbyEmpty'.tr(),
               style: const TextStyle(
@@ -811,6 +778,56 @@ class _NearbySection extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+// ── Passenger count selector ───────────────────────────────────────
+
+class _PassengerCountSelector extends StatelessWidget {
+  const _PassengerCountSelector({
+    required this.count,
+    required this.onChanged,
+  });
+
+  final int count;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: _md, vertical: _sm),
+      decoration: BoxDecoration(
+        color: WeretTokens.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: WeretTokens.borderSubtle),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.people_outline, size: 20, color: WeretTokens.textSecondary),
+          const SizedBox(width: 10),
+          const Text('Passengers', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+          const Spacer(),
+          IconButton(
+            icon: const Icon(Icons.remove_circle_outline, size: 22),
+            color: count > 1 ? WeretTokens.brand : WeretTokens.textMuted,
+            onPressed: count > 1 ? () => onChanged(count - 1) : null,
+          ),
+          SizedBox(
+            width: 36,
+            child: Text(
+              '$count',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.add_circle_outline, size: 22),
+            color: count < 8 ? WeretTokens.brand : WeretTokens.textMuted,
+            onPressed: count < 8 ? () => onChanged(count + 1) : null,
+          ),
+        ],
+      ),
     );
   }
 }

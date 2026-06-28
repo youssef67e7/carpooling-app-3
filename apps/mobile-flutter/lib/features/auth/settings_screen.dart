@@ -10,6 +10,7 @@ import '../../core/constants/vehicle_types.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/providers/ui_provider.dart';
 import '../../core/theme/weret_tokens.dart';
+import '../../core/theme/app_styles.dart';
 import '../../core/utils/logout_action.dart';
 import '../../core/utils/show_alert.dart';
 import '../../core/utils/api_error_message.dart';
@@ -19,10 +20,16 @@ import '../../shared/widgets/weret_text_field.dart';
 import '../../shared/widgets/custom_button.dart';
 import '../../shared/widgets/weret_pill_toggle.dart';
 import '../../shared/widgets/weret_section_card.dart';
-import '../../shared/widgets/ui/stagger_entrance.dart';
 import '../../shared/widgets/ui/form_error_callout.dart';
 
-const _gap = 8.0;
+// ignore_for_file: unused_element
+const _xs = 8.0;
+const _sm = 12.0;
+const _fieldGap = 14.0;
+const _md = 16.0;
+const _lg = 24.0;
+const _xl = 32.0;
+const _xxl = 60.0;
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -158,7 +165,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     return Scaffold(
       backgroundColor: WeretTokens.bg,
       appBar: AppBar(
-        title: const Text('Settings', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17)),
+        title: Text('Settings', style: AppStyles.title),
         centerTitle: true,
         backgroundColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
@@ -168,12 +175,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ),
       ),
       body: WeretAmbientBackground(
-        child: SafeArea(
-          child: WeretListScreen(
-            child: StaggerEntrance(
-              spacing: 0,
-              children: sections,
-            ),
+        child: WeretListScreen(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: sections,
           ),
         ),
       ),
@@ -194,7 +199,7 @@ class _AdminPanelSection extends StatelessWidget {
     return WeretSectionCard(
       title: 'adminWebPanel'.tr(),
       subtitle: 'adminWebPanelHint'.tr(),
-      footer: SelectableText('$base/admin-ui/', textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: WeretTokens.textSecondary)),
+      footer: SelectableText('$base/admin-ui/', textAlign: TextAlign.center, style: AppStyles.bodySmall),
       child: CustomButton(
         title: 'openAdminWeb'.tr(),
         onPressed: () async {
@@ -230,10 +235,10 @@ class _PhoneSection extends StatelessWidget {
             keyboardType: TextInputType.phone,
             hint: 'phonePlaceholder'.tr(),
           ),
-          const SizedBox(height: _gap),
+          const SizedBox(height: _xs),
           CustomButton(title: 'savePhone'.tr(), onPressed: onSave, loading: saving),
           if (error != null) ...[
-            const SizedBox(height: _gap),
+            const SizedBox(height: _xs),
             FormErrorCallout(message: error!),
           ],
         ],
@@ -253,8 +258,8 @@ class _VehicleSection extends StatelessWidget {
       title: 'driverVehicleClass'.tr(),
       subtitle: 'driverVehicleClassHint'.tr(),
       child: Wrap(
-        spacing: _gap,
-        runSpacing: _gap,
+        spacing: _xs,
+        runSpacing: _xs,
         children: driverVehicleTypes.map((vt) {
           final selected = (user?.vehicleType ?? 'delivery') == vt;
           return FilterChip(
@@ -308,13 +313,13 @@ class _ThemeSection extends StatelessWidget {
             selected: themeMode == ThemeMode.system,
             onTap: () => onSelect(ThemeMode.system),
           ),
-          const SizedBox(height: _gap),
+          const SizedBox(height: _xs),
           WeretStackOption(
             label: 'themeLight'.tr(),
             selected: themeMode == ThemeMode.light,
             onTap: () => onSelect(ThemeMode.light),
           ),
-          const SizedBox(height: _gap),
+          const SizedBox(height: _xs),
           WeretStackOption(
             label: 'themeDark'.tr(),
             selected: themeMode == ThemeMode.dark,
@@ -337,19 +342,19 @@ class _SafetySection extends StatelessWidget {
         children: [
           CustomButton(
             title: 'sosTitle'.tr(),
-            variant: 'outline',
+            variant: ButtonVariant.outlined,
             onPressed: () => context.push('/safety/emergency'),
           ),
-          const SizedBox(height: _gap),
+          const SizedBox(height: _xs),
           CustomButton(
             title: 'trustedTitle'.tr(),
-            variant: 'outline',
+            variant: ButtonVariant.outlined,
             onPressed: () => context.push('/safety/trusted-contacts'),
           ),
-          const SizedBox(height: _gap),
+          const SizedBox(height: _xs),
           CustomButton(
             title: 'blockedTitle'.tr(),
-            variant: 'outline',
+            variant: ButtonVariant.outlined,
             onPressed: () => context.push('/safety/blocked'),
           ),
         ],
@@ -371,13 +376,13 @@ class _AccountSection extends StatelessWidget {
         children: [
           CustomButton(
             title: 'logout'.tr(),
-            variant: 'outline',
+            variant: ButtonVariant.outlined,
             onPressed: () => performLogout(ref, context),
           ),
-          const SizedBox(height: _gap + 4),
+          const SizedBox(height: _sm),
           CustomButton(
             title: 'deleteAccount'.tr(),
-            variant: 'outline',
+            variant: ButtonVariant.outlined,
             onPressed: onDelete,
           ),
         ],
