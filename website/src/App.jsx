@@ -12,9 +12,10 @@ function siteOrigin() {
 }
 
 function App() {
-  /* redirect /download to the APK binary */
+  /* redirect /app/download to the APK binary */
   useEffect(() => {
-    if (window.location.pathname === '/download') {
+    const p = window.location.pathname;
+    if (p === '/app/download' || p === '/download') {
       window.location.replace(apkUrl);
     }
   }, []);
@@ -165,7 +166,7 @@ function Download() {
             </p>
           </div>
           <div className="download-preview">
-            <QrCode value={`${siteOrigin()}/download`} />
+            <QrCode value={`${siteOrigin()}/app/download`} />
           </div>
         </div>
       </div>

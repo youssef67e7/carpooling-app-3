@@ -10,18 +10,13 @@
       "use": "@vercel/static"
     },
     {
-      "src": "website/package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "dist"
-      }
+      "src": "website/dist/**/*",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
     { "src": "/admin-ui(.*)", "dest": "apps/web$1" },
     { "src": "/api/(.*)", "dest": "backend/api/index.js" },
-    { "handle": "filesystem" },
-    { "src": "/(download|features)", "dest": "/index.html" },
-    { "src": "/", "dest": "/index.html" }
+    { "src": "/app(.*)", "dest": "website/dist$1" }
   ]
 }

@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/providers/ride_provider.dart';
 import '../../core/theme/weret_tokens.dart';
 import 'cancel_ride_dialog.dart';
 import 'report_user_modal.dart';
@@ -100,6 +101,14 @@ class ActiveRidePanel extends ConsumerWidget {
               ],
             ),
           ],
+          if (status == 'accepted' || status == 'pending') ...[
+            const SizedBox(height: 10),
+            _PoolingToggle(ride: ride),
+          ],
+          if (status == 'accepted' || status == 'ongoing' || status == 'passenger_onboard' || status == 'driver_arriving') ...[
+            const SizedBox(height: 8),
+            _SharedRideInfo(ride: ride),
+          ],
           if (!compact) ...[
             const SizedBox(height: 12),
             Row(
@@ -165,6 +174,100 @@ class ActiveRidePanel extends ConsumerWidget {
               ),
             ],
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _PoolingToggle extends ConsumerStatefulWidget {
+  final Map<String, dynamic> ride;
+  const _PoolingToggle({required this.ride});
+
+  @override
+  ConsumerState<_PoolingToggle> createState() => _PoolingToggleState();
+}
+
+class _PoolingToggleState extends ConsumerState<_PoolingToggle> {
+  bool _loading = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final poolingEnabled = widget.ride['poolingEnabled'] == true;
+    final available = (widget.ride['availableSeatUnits'] as num?)?.toInt() ?? 0;
+    if (available <= 0 && !poolingEnabled) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(poolingEnabled ? Icons.people_alt_rounded : Icons.people_alt_outlined, color: Colors.white70, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              poolingEnabled ? 'Sharing enabled — $available seat(s) available' : 'Enable ride sharing',
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
+            ),
+          ),
+          if (_loading)
+            const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
+          if (!_loading)
+            SizedBox(
+              height: 28,
+              child: Switch.adaptive(
+                value: poolingEnabled,
+                activeColor: Colors.white,
+                activeTrackColor: Colors.greenAccent,
+                onChanged: (v) async {
+                  setState(() => _loading = true);
+                  try {
+                    await ref.read(rideProvider.notifier).togglePooling('${widget.ride['_id']}');
+                  } catch (_) {}
+                  if (mounted) setState(() => _loading = false);
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SharedRideInfo extends ConsumerWidget {
+  final Map<String, dynamic> ride;
+  const _SharedRideInfo({required this.ride});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final bookings = ride['bookings'] as List? ?? [];
+    final totalSeats = (ride['totalSeats'] as num?)?.toInt() ?? 0;
+    final available = (ride['availableSeatUnits'] as num?)?.toInt() ?? 0;
+    final poolingEnabled = ride['poolingEnabled'] == true;
+
+    if (!poolingEnabled && bookings.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.people, color: Colors.white70, size: 16),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              bookings.isEmpty
+                  ? 'No one has joined yet'
+                  : '${bookings.length} passenger(s) joined — $available/$totalSeats seats left',
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
+            ),
+          ),
         ],
       ),
     );

@@ -55,6 +55,15 @@ class ApiEndpoints {
   static const ridesRatePassenger = '/rides/rate-passenger';
   static const ridesRatingsReceived = '/rides/ratings/received';
   static const ridesRatingsGiven = '/rides/ratings/given';
+  static const ridesPoolMatches = '/rides/pool-matches';
+
+  // Shared ride (peer-to-peer pooling) endpoints
+  static String rideTogglePooling(String id) => '/rides/$id/toggle-pooling';
+  static String rideRequestJoin(String id) => '/rides/$id/request-join';
+  static String rideJoinRequests(String id) => '/rides/$id/join-requests';
+  static String rideApproveJoin(String rideId, String bookingId) => '/rides/$rideId/approve-join/$bookingId';
+  static String rideRejectJoin(String rideId, String bookingId) => '/rides/$rideId/reject-join/$bookingId';
+  static String rideFareSplit(String id) => '/rides/$id/fare-split';
 
   static const walletAccounts = '/wallet/accounts';
   static const walletDeposit = '/wallet/deposit';

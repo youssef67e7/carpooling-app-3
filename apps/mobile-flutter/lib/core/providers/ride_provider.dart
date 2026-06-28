@@ -407,6 +407,53 @@ class RideNotifier extends StateNotifier<RideState> {
     }
   }
 
+  // ── Shared Ride (Peer-to-Peer Pooling) ──────────────────────────
+
+  Future<Map<String, dynamic>> togglePooling(String rideId) async {
+    final api = await _api;
+    final data = await api.postJson(ApiEndpoints.rideTogglePooling(rideId), {});
+    final ride = data['ride'] as Map<String, dynamic>;
+    _applyActiveRides(_mergeActiveRide(ride));
+    return ride;
+  }
+
+  Future<Map<String, dynamic>> requestJoin(String rideId, Map<String, dynamic> body) async {
+    final api = await _api;
+    final data = await api.postJson(ApiEndpoints.rideRequestJoin(rideId), body);
+    return data;
+  }
+
+  Future<List<dynamic>> fetchJoinRequests(String rideId) async {
+    final api = await _api;
+    final data = await api.getJson(ApiEndpoints.rideJoinRequests(rideId));
+    return data['requests'] as List? ?? [];
+  }
+
+  Future<Map<String, dynamic>> approveJoin(String rideId, String bookingId) async {
+    final api = await _api;
+    final data = await api.postJson(ApiEndpoints.rideApproveJoin(rideId, bookingId), {});
+    final ride = data['ride'] as Map<String, dynamic>;
+    _applyActiveRides(_mergeActiveRide(ride));
+    return ride;
+  }
+
+  Future<void> rejectJoin(String rideId, String bookingId) async {
+    final api = await _api;
+    await api.postJson(ApiEndpoints.rideRejectJoin(rideId, bookingId), {});
+  }
+
+  Future<Map<String, dynamic>> fetchFareSplit(String rideId) async {
+    final api = await _api;
+    final data = await api.postJson(ApiEndpoints.rideFareSplit(rideId), {});
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  Future<List<dynamic>> fetchPoolMatches(Map<String, dynamic> params) async {
+    final api = await _api;
+    final data = await api.postJson(ApiEndpoints.ridesPoolMatches, params);
+    return data['rides'] as List? ?? [];
+  }
+
   Future<void> toggleDriverOnline() async {
     final api = await _api;
     final data = await api.postJson(ApiEndpoints.driverToggleStatus, {});

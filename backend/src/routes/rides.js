@@ -688,6 +688,9 @@ router.post(
           seatsReserved: seatUnits,
           passengerGender: req.body.passengerGender != null ? String(req.body.passengerGender) : "unspecified",
           status: "confirmed",
+          distanceKm: Math.round(km * 100) / 100,
+          pickupLocation: pickup,
+          destinationLocation: dest,
         });
       } catch (e) {
         if (createdRide?._id) {
@@ -1224,6 +1227,253 @@ router.post(
   },
 );
 
+/* ── Shared Ride (Peer-to-Peer Pooling) ─────────────────────────── */
+
+/** Passenger: toggle pooling on their own pending/accepted ride. */
+router.post(
+  "/:id/toggle-pooling",
+  roleRequired("passenger"),
+  docIdParam("id"),
+  validateRequest,
+  async (req, res, next) => {
+    try {
+      const rideId = String(req.params.id);
+      const ride = await Ride.findById(rideId);
+      if (!ride) throw new AppError("Not found", 404);
+      if (String(ride.passengerId) !== String(req.userId)) throw new AppError("Forbidden", 403);
+      if (!["pending", "accepted"].includes(ride.status)) throw new AppError("Ride is not in a shareable state", 400);
+      if (ride.availableSeatUnits <= 0) throw new AppError("No available seats to share", 400);
+
+      const newVal = !ride.poolingEnabled;
+      await Ride.updateOne({ _id: rideId }, { $set: { poolingEnabled: newVal } });
+      const populated = await populatedRideById(rideId);
+      return res.json({ ride: populated });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+/** Passenger: request to join a shared ride (creates Booking with status "requested"). */
+router.post(
+  "/:id/request-join",
+  roleRequired("passenger"),
+  docIdParam("id"),
+  body("passengerCount").optional().isInt({ min: 1, max: 8 }).toInt(),
+  body("passengerSize").optional().isIn(["SMALL", "MEDIUM", "LARGE", "XL"]),
+  body("passengerGender").optional().isIn(["male", "female", "unspecified"]),
+  body("pickupLocation.lat").isFloat({ min: -90, max: 90 }),
+  body("pickupLocation.lng").isFloat({ min: -180, max: 180 }),
+  body("destinationLocation.lat").isFloat({ min: -90, max: 90 }),
+  body("destinationLocation.lng").isFloat({ min: -180, max: 180 }),
+  validateRequest,
+  async (req, res, next) => {
+    try {
+      const rideId = String(req.params.id);
+      const ride = await Ride.findById(rideId).lean();
+      if (!ride) throw new AppError("Not found", 404);
+      if (ride.status !== "accepted") throw new AppError("Ride is not accepting passengers", 400);
+      if (ride.poolingEnabled !== true) throw new AppError("Pooling is disabled for this ride", 403);
+
+      const passengerCount = req.body.passengerCount != null ? Number(req.body.passengerCount) : 1;
+      const passengerSize = String(req.body.passengerSize || "MEDIUM")
+        .toUpperCase()
+        .trim();
+      const seatUnits = computeSeatUnits(passengerCount, passengerSize);
+      const passengerGender = String(req.body.passengerGender || "unspecified");
+
+      if (ride.availableSeatUnits < seatUnits) throw new AppError("Not enough seats available", 409);
+
+      const pol = ride.passengerGenderPolicy || "all";
+      if (pol !== "all" && passengerGender !== "unspecified") {
+        if (pol === "male_only" && passengerGender !== "male") throw new AppError("Gender preference mismatch", 403);
+        if (pol === "female_only" && passengerGender !== "female") throw new AppError("Gender preference mismatch", 403);
+      }
+
+      const already = await Booking.findOne({
+        rideId,
+        passengerId: req.userId,
+        status: { $in: ["requested", "confirmed"] },
+      });
+      if (already) throw new AppError("Already requested or joined this ride", 409);
+
+      const pickup = { lat: Number(req.body.pickupLocation.lat), lng: Number(req.body.pickupLocation.lng) };
+      const dest = { lat: Number(req.body.destinationLocation.lat), lng: Number(req.body.destinationLocation.lng) };
+      const distanceKm = haversineKm(pickup.lat, pickup.lng, dest.lat, dest.lng);
+
+      const booking = await Booking.create({
+        rideId,
+        passengerId: req.userId,
+        passengerCount,
+        passengerSize,
+        seatsReserved: seatUnits,
+        passengerGender,
+        status: "requested",
+        distanceKm: Math.round(distanceKm * 100) / 100,
+        pickupLocation: pickup,
+        destinationLocation: dest,
+      });
+
+      const populated = await populatedRideById(rideId);
+      return res.status(201).json({ booking, ride: populated });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+/** Driver: get pending join requests for their ride. */
+router.get(
+  "/:id/join-requests",
+  roleRequired("driver"),
+  docIdParam("id"),
+  validateRequest,
+  async (req, res, next) => {
+    try {
+      const rideId = String(req.params.id);
+      const ride = await Ride.findById(rideId).lean();
+      if (!ride) throw new AppError("Not found", 404);
+      if (String(ride.driverId) !== String(req.userId)) throw new AppError("Forbidden", 403);
+
+      const requests = await Booking.find({ rideId, status: "requested" })
+        .sort({ createdAt: -1 })
+        .populate("passengerId", "name email phone profileImageUrl");
+
+      return res.json({ requests });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+/** Driver: approve a join request (atomic seat decrement + booking confirmed). */
+router.post(
+  "/:id/approve-join/:bookingId",
+  roleRequired("driver"),
+  docIdParam("id"),
+  docIdParam("bookingId"),
+  validateRequest,
+  async (req, res, next) => {
+    try {
+      const rideId = String(req.params.id);
+      const bookingId = String(req.params.bookingId);
+      const userId = String(req.userId);
+
+      const ride = await Ride.findById(rideId).lean();
+      if (!ride) throw new AppError("Not found", 404);
+      if (String(ride.driverId) !== userId) throw new AppError("Forbidden", 403);
+      if (!["accepted", "driver_arriving"].includes(ride.status)) {
+        throw new AppError("Ride cannot accept more passengers at this stage", 400);
+      }
+
+      const booking = await Booking.findById(bookingId).lean();
+      if (!booking || String(booking.rideId) !== rideId) throw new AppError("Join request not found", 404);
+      if (booking.status !== "requested") throw new AppError("Join request already processed", 409);
+
+      const seatUnits = Number(booking.seatsReserved) ||
+        computeSeatUnits(Number(booking.passengerCount) || 1, String(booking.passengerSize || "MEDIUM"));
+
+      // Calculate fare share based on all passengers' proportional distance
+      const allConfirmed = await Booking.find({ rideId, status: "confirmed" }).lean();
+      const originalKm = haversineKm(
+        ride.pickupLocation?.lat || 0, ride.pickupLocation?.lng || 0,
+        ride.destinationLocation?.lat || 0, ride.destinationLocation?.lng || 0,
+      );
+      const joiningKm = Number(booking.distanceKm) || 0;
+      const existingKm = allConfirmed.reduce((s, b) => s + Number(b.distanceKm || 0), 0);
+      const totalKm = originalKm + existingKm + joiningKm;
+      const totalFare = Number(ride.agreedFare || ride.passengerMinFare || ride.estimatedFare) || 0;
+
+      // Atomic seat decrement
+      const updated = await Ride.findOneAndUpdate(
+        { _id: rideId, availableSeatUnits: { $gte: seatUnits } },
+        { $inc: { availableSeatUnits: -seatUnits } },
+        { new: true },
+      );
+      if (!updated) throw new AppError("Not enough seats left", 409);
+
+      const fareShare = totalKm > 0 ? Math.round((joiningKm / totalKm) * totalFare * 100) / 100 : 0;
+
+      await Booking.updateOne(
+        { _id: bookingId },
+        { $set: { status: "confirmed", fareShare, fareShareCalculatedAt: new Date() } },
+      );
+
+      const populated = await populatedRideById(rideId);
+      return res.json({ ride: populated });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+/** Driver: reject a join request. */
+router.post(
+  "/:id/reject-join/:bookingId",
+  roleRequired("driver"),
+  docIdParam("id"),
+  docIdParam("bookingId"),
+  validateRequest,
+  async (req, res, next) => {
+    try {
+      const rideId = String(req.params.id);
+      const bookingId = String(req.params.bookingId);
+
+      const ride = await Ride.findById(rideId).lean();
+      if (!ride) throw new AppError("Not found", 404);
+      if (String(ride.driverId) !== String(req.userId)) throw new AppError("Forbidden", 403);
+
+      const booking = await Booking.findById(bookingId).lean();
+      if (!booking || String(booking.rideId) !== rideId) throw new AppError("Join request not found", 404);
+      if (booking.status !== "requested") throw new AppError("Join request already processed", 409);
+
+      await Booking.updateOne({ _id: bookingId }, { $set: { status: "rejected", rejectedAt: new Date() } });
+
+      return res.json({ message: "Join request rejected" });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+/** Get fare split breakdown for a shared ride (any participant). */
+router.post(
+  "/:id/fare-split",
+  roleRequired("passenger", "driver"),
+  docIdParam("id"),
+  validateRequest,
+  async (req, res, next) => {
+    try {
+      const rideId = String(req.params.id);
+      const ride = await Ride.findById(rideId).lean();
+      if (!ride) throw new AppError("Not found", 404);
+
+      const allConfirmed = await Booking.find({ rideId, status: "confirmed" }).lean();
+      const totalFare = Number(ride.agreedFare || ride.passengerMinFare || ride.estimatedFare) || 0;
+
+      const originalKm = haversineKm(
+        ride.pickupLocation?.lat || 0, ride.pickupLocation?.lng || 0,
+        ride.destinationLocation?.lat || 0, ride.destinationLocation?.lng || 0,
+      );
+      let totalKm = originalKm;
+      const breakdown = [{ passengerId: ride.passengerId, distanceKm: Math.round(originalKm * 100) / 100, fareShare: 0, type: "original" }];
+      for (const b of allConfirmed) {
+        const km = Number(b.distanceKm) || 0;
+        totalKm += km;
+        breakdown.push({ passengerId: b.passengerId, passengerCount: b.passengerCount, distanceKm: km, fareShare: 0, type: "joiner" });
+      }
+
+      for (const item of breakdown) {
+        item.fareShare = totalKm > 0 ? Math.round((item.distanceKm / totalKm) * totalFare * 100) / 100 : 0;
+      }
+
+      return res.json({ totalFare, totalKm, breakdown });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
 router.post("/start", roleRequired("driver"), requireApprovedDriver, ...rideIdValidators, async (req, res, next) => {
   try {
     const { rideId } = req.body;
@@ -1282,12 +1532,37 @@ router.post("/end", roleRequired("driver"), requireApprovedDriver, ...rideIdVali
       agreed != null && !Number.isNaN(agreed) ? agreed : Number(updated.passengerMinFare ?? updated.estimatedFare) || 0;
     await updated.save();
 
-    if (updated.driverId && updated.passengerId) {
-      const paymentMethod = String(updated.paymentMethod || "cash").toLowerCase();
-      if (paymentMethod === "wallet") {
-        const ok = await atomicRidePayment(updated.passengerId, updated.driverId, rideId, updated.fare);
-        if (!ok) {
-          console.error("wallet atomicRidePayment failed — insufficient funds or already processed");
+    // Shared ride fare split: charge each confirmed booking passenger proportionally
+    const allConfirmed = await Booking.find({ rideId, status: "confirmed" }).lean();
+    const paymentMethod = String(updated.paymentMethod || "cash").toLowerCase();
+    if (updated.driverId && paymentMethod === "wallet") {
+      if (allConfirmed.length <= 1) {
+        // Single passenger — charge original requester the full fare
+        if (updated.passengerId) {
+          const ok = await atomicRidePayment(updated.passengerId, updated.driverId, rideId, updated.fare);
+          if (!ok) console.error("wallet atomicRidePayment failed — insufficient funds or already processed");
+        }
+      } else {
+        // Multiple passengers — charge each proportional share
+        const originalKm = haversineKm(
+          updated.pickupLocation?.lat || 0, updated.pickupLocation?.lng || 0,
+          updated.destinationLocation?.lat || 0, updated.destinationLocation?.lng || 0,
+        );
+        let totalKm = originalKm;
+        const shares = [{ passengerId: updated.passengerId, distanceKm: originalKm }];
+        for (const b of allConfirmed) {
+          const km = Number(b.distanceKm) || 0;
+          totalKm += km;
+          shares.push({ passengerId: b.passengerId, distanceKm: km });
+        }
+        for (const s of shares) {
+          const shareFare = totalKm > 0 ? Math.round((s.distanceKm / totalKm) * updated.fare * 100) / 100 : 0;
+          if (shareFare > 0 && s.passengerId) {
+            const ok = await atomicRidePayment(s.passengerId, updated.driverId, rideId, shareFare);
+            if (!ok) {
+              console.error(`wallet payment failed for passenger ${s.passengerId} — insufficient funds or already processed`);
+            }
+          }
         }
       }
     }
@@ -1297,7 +1572,7 @@ router.post("/end", roleRequired("driver"), requireApprovedDriver, ...rideIdVali
     if (updated.driverId) {
       notifyPaymentReceived(updated.driverId, rideId, updated.fare).catch(() => {});
     }
-    logAction({ req, action: "Ride completed", file: "routes/rides.js:end", extra: { rideId, fare: updated.fare } });
+    logAction({ req, action: "Ride completed", file: "routes/rides.js:end", extra: { rideId, fare: updated.fare, sharedPassengers: allConfirmed.length } });
     return res.json({ ride: populated });
   } catch (e) {
     logAction({ req, action: "Ride end failed", file: "routes/rides.js:end", error: e, extra: { rideId: req.body?.rideId } });
