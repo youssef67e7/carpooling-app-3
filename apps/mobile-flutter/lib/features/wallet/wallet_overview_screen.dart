@@ -88,7 +88,7 @@ class _WalletOverviewScreenState extends ConsumerState<WalletOverviewScreen> {
                       child: Center(child: CircularProgressIndicator()),
                     )
                   else if (w.transactions.isEmpty)
-                    const Padding(
+                    Padding(
                       padding: EdgeInsets.only(top: _xl),
                       child: Center(child: Text('walletNoTx'.tr(), style: TextStyle(color: WeretTokens.textMuted))),
                     )

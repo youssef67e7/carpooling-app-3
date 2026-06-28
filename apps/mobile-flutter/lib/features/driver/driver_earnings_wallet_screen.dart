@@ -22,7 +22,7 @@ class _DriverEarningsWalletScreenState extends ConsumerState<DriverEarningsWalle
   }
 
   String _formatAmount(num value) {
-    return NumberFormat.currency(symbol: '\$', decimalDigits: 2).format(value);
+    return NumberFormat.currency(symbol: 'EGP ', decimalDigits: 2).format(value);
   }
 
   String _formatDate(dynamic raw) {
@@ -61,17 +61,17 @@ class _DriverEarningsWalletScreenState extends ConsumerState<DriverEarningsWalle
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('driverWalletBalance'.tr(), style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                Text('driverWalletBalance'.tr(), style: TextStyle(color: WeretTokens.surface.withValues(alpha: 0.7), fontSize: 13)),
                 const SizedBox(height: 8),
-                Text(_formatAmount(w.totalBalance), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 36)),
+                Text(_formatAmount(w.totalBalance), style: const TextStyle(color: WeretTokens.surface, fontWeight: FontWeight.w900, fontSize: 36)),
                 const SizedBox(height: 20),
                 Row(
                   children: [
                     Expanded(
                       child: OutlinedButton.icon(
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white,
-                          side: const BorderSide(color: Colors.white54),
+                          foregroundColor: WeretTokens.surface,
+                          side: BorderSide(color: WeretTokens.surface.withValues(alpha: 0.54)),
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
                         ),

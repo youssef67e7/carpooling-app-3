@@ -432,7 +432,7 @@ class _WalletHistoryScreenState extends ConsumerState<WalletHistoryScreen> {
                                         ? () { HapticFeedback.selectionClick(); ref.read(walletProvider.notifier).fetchTransactions(page: pag.page - 1); }
                                         : null,
                                     icon: const Icon(Icons.chevron_left, size: 20),
-                                    label: const Text('Previous'),
+                                    label: Text('driverBackPrevious'.tr()),
                                   ),
                                   Text('${pag.page} / ${pag.totalPages}',
                                       style: AppStyles.bodySmall),
@@ -441,7 +441,7 @@ class _WalletHistoryScreenState extends ConsumerState<WalletHistoryScreen> {
                                         ? () { HapticFeedback.selectionClick(); ref.read(walletProvider.notifier).fetchTransactions(page: pag.page + 1); }
                                         : null,
                                     icon: const Icon(Icons.chevron_right, size: 20),
-                                    label: const Text('Next'),
+                                    label: Text('registerNext'.tr()),
                                   ),
                                 ],
                               ),
@@ -556,7 +556,7 @@ class _WalletAddAccountScreenState extends ConsumerState<WalletAddAccountScreen>
     return Scaffold(
       backgroundColor: WeretTokens.bg,
       appBar: AppBar(
-        title: Text('Add Payment Method', style: AppStyles.title),
+        title: Text('paymentMethodsAdd'.tr(), style: AppStyles.title),
         centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
@@ -575,20 +575,20 @@ class _WalletAddAccountScreenState extends ConsumerState<WalletAddAccountScreen>
           if (_type != 'cash') ...[
             const SizedBox(height: _md),
             WeretTextField(
-              label: 'Phone number',
+              label: 'phone'.tr(),
               controller: _phone,
               keyboardType: TextInputType.phone,
-              hint: 'Phone number',
+              hint: 'phone'.tr(),
             ),
           ],
           const SizedBox(height: _md),
           WeretTextField(
-            label: 'Label (optional)',
+            label: 'paymentLabelOptional'.tr(),
             controller: _label,
-            hint: 'Label (optional)',
+            hint: 'paymentLabelOptional'.tr(),
           ),
           const SizedBox(height: 20),
-          CustomButton(title: 'Save', onPressed: _save, loading: _busy),
+          CustomButton(title: 'save'.tr(), onPressed: _save, loading: _busy),
         ],
       ),
     );
@@ -615,7 +615,7 @@ class _TypeCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Select type', style: AppStyles.bodySemiBold),
+          Text('walletSelectType'.tr(), style: AppStyles.bodySemiBold),
           const SizedBox(height: _xs),
           DropdownButtonFormField<String>(
             initialValue: type,
