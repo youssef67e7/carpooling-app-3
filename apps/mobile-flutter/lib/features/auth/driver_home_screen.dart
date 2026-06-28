@@ -443,6 +443,7 @@ class _ActiveRideCard extends StatelessWidget {
   final VoidCallback? onStart;
   final VoidCallback? onEnd;
   final VoidCallback? onCancel;
+  final VoidCallback? onJoinRequests;
 
   String get _statusLabel => const {
     'pending': 'Waiting for driver',
@@ -498,6 +499,16 @@ class _ActiveRideCard extends StatelessWidget {
               icon: const Icon(Icons.chat_bubble_outline, size: 18),
               label: Text('rideChatTitle'.tr()),
             ),
+
+            if (onJoinRequests != null) ...[
+              const SizedBox(height: _sm),
+              OutlinedButton.icon(
+                onPressed: onJoinRequests,
+                icon: const Icon(Icons.people_outline, size: 18),
+                label: Text('Join Requests'),
+                style: OutlinedButton.styleFrom(foregroundColor: WeretTokens.brand, side: const BorderSide(color: WeretTokens.brand)),
+              ),
+            ],
 
             if (_action != null && _actionLabel.isNotEmpty) ...[
               const SizedBox(height: _sm),

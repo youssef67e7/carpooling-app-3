@@ -16,7 +16,7 @@
     "test:smoke": "npm run test:smoke --prefix backend",
     "vscode:sync": "node scripts/sync-vscode-workspace.js",
     "brand:generate": "python scripts/generate-weret-brand-assets.py && cd apps/mobile-flutter && dart run flutter_launcher_icons && dart run flutter_native_splash:create",
-    "vercel-build": "npm install --prefix website && npm run build --prefix website"
+    "vercel-build": "echo no-op"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

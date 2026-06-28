@@ -10,13 +10,13 @@
       "use": "@vercel/static"
     },
     {
-      "src": "website/dist/**/*",
+      "src": "apps/landing/**/*",
       "use": "@vercel/static"
     }
   ],
   "routes": [
     { "src": "/admin-ui(.*)", "dest": "apps/web$1" },
     { "src": "/api/(.*)", "dest": "backend/api/index.js" },
-    { "src": "/app(.*)", "dest": "website/dist$1" }
+    { "src": "/app(.*)", "dest": "apps/landing$1" }
   ]
 }
