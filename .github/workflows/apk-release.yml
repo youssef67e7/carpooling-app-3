@@ -30,6 +30,17 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Inject google-services.json
+        env:
+          GOOGLE_SERVICES: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -n "$GOOGLE_SERVICES" ]; then
+            echo "$GOOGLE_SERVICES" > android/app/google-services.json
+            echo "google-services.json injected from secret"
+          else
+            echo "WARNING: GOOGLE_SERVICES_JSON secret not set — build may fail if Firebase is required"
+          fi
+
       - name: Build APK
         run: flutter build apk --release
 
