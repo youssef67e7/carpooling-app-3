@@ -20,6 +20,8 @@
     { "src": "/health", "dest": "backend/api/index.js" },
     { "src": "/auth(.*)", "dest": "backend/api/index.js" },
     { "src": "/admin(.*)", "dest": "backend/api/index.js" },
-    { "src": "/app(.*)", "dest": "apps/landing$1" }
+    { "src": "/app(.*)", "dest": "apps/landing$1" },
+    { "handle": "miss" },
+    { "src": "/app/(.*)", "dest": "apps/landing/index.html" }
   ]
 }

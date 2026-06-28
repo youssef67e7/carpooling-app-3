@@ -125,7 +125,7 @@ class _WalletDepositScreenState extends ConsumerState<WalletDepositScreen> {
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(WeretTokens.fieldRadius)),
                         contentPadding: const EdgeInsets.symmetric(horizontal: _md),
                       ),
-                      hint: Text('walletPickAccount'.tr(), style: TextStyle(color: WeretTokens.textMuted)),
+                      hint: const Text('Choose one', style: TextStyle(color: WeretTokens.textMuted)),
                       items: accounts.map((a) {
                         final id = walletAccountId(a);
                         final label = a['label']?.toString() ?? walletTypeLabel('${a['walletType'] ?? ''}');
@@ -139,7 +139,7 @@ class _WalletDepositScreenState extends ConsumerState<WalletDepositScreen> {
             ),
             Padding(
               padding: const EdgeInsets.all(_lg),
-              child: CustomButton(title: 'Confirm', onPressed: _submit, loading: _busy || w.loading),
+              child: CustomButton(title: 'confirm'.tr(), onPressed: _submit, loading: _busy || w.loading),
             ),
           ],
         ),
@@ -243,7 +243,7 @@ class _WalletWithdrawScreenState extends ConsumerState<WalletWithdrawScreen> {
         child: Column(
           children: [
             _WalletHeader(
-              title: 'Transfer',
+              title: 'walletWithdraw'.tr(),
               height: 120,
               onBack: () { HapticFeedback.selectionClick(); Navigator.pop(context); },
             ),
@@ -266,7 +266,7 @@ class _WalletWithdrawScreenState extends ConsumerState<WalletWithdrawScreen> {
             Padding(
               padding: const EdgeInsets.all(_lg),
               child: CustomButton(
-                title: _step2 ? 'Confirm OTP' : 'Request Transfer',
+                title: _step2 ? 'walletConfirmWithdraw'.tr() : 'walletWithdraw'.tr(),
                 onPressed: _step2 ? _confirm : _request,
                 loading: _busy || w.loading,
               ),
@@ -282,14 +282,14 @@ class _WalletWithdrawScreenState extends ConsumerState<WalletWithdrawScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         WeretTextField(
-          label: 'Amount',
+          label: 'walletAmount'.tr(),
           controller: _amountCtrl,
           keyboardType: TextInputType.number,
           hint: '0.00',
           prefixText: 'EGP ',
         ),
         const SizedBox(height: _md),
-        Text('From account', style: AppStyles.label),
+        Text('walletPickAccount'.tr(), style: AppStyles.label),
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
           value: _selectedAccountId,
@@ -313,16 +313,16 @@ class _WalletWithdrawScreenState extends ConsumerState<WalletWithdrawScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Enter the OTP sent to your registered phone number',
-          style: TextStyle(fontSize: 14, color: WeretTokens.textSecondary),
+        Text(
+          'walletWithdrawOtpHint'.tr(),
+          style: const TextStyle(fontSize: 14, color: WeretTokens.textSecondary),
         ),
         const SizedBox(height: _lg),
         WeretTextField(
-          label: 'OTP',
+          label: 'walletEnterOtpTitle'.tr(),
           controller: _otpCtrl,
           keyboardType: TextInputType.number,
-          hint: 'Enter OTP',
+          hint: 'walletEnterOtpTitle'.tr(),
         ),
       ],
     );
@@ -355,7 +355,7 @@ class _WalletHistoryScreenState extends ConsumerState<WalletHistoryScreen> {
     return Scaffold(
       backgroundColor: WeretTokens.bg,
       appBar: AppBar(
-        title: Text('Wallet History', style: AppStyles.title),
+        title: Text('walletHistory'.tr(), style: AppStyles.title),
         centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
@@ -378,7 +378,7 @@ class _WalletHistoryScreenState extends ConsumerState<WalletHistoryScreen> {
                             const SizedBox(height: _sm),
                             TextButton(
                               onPressed: () { HapticFeedback.selectionClick(); ref.read(walletProvider.notifier).fetchTransactions(page: 1); },
-                              child: const Text('Retry'),
+                              child: Text('retry'.tr()),
                             ),
                           ],
                         ),
@@ -390,7 +390,7 @@ class _WalletHistoryScreenState extends ConsumerState<WalletHistoryScreen> {
                         physics: const AlwaysScrollableScrollPhysics(),
                         children: [
                           SizedBox(height: MediaQuery.sizeOf(context).height * 0.3),
-                          const Center(child: Text('No transactions', style: TextStyle(color: WeretTokens.textMuted))),
+                          Center(child: Text('walletNoTx'.tr(), style: const TextStyle(color: WeretTokens.textMuted))),
                         ],
                       )
                     : Column(
