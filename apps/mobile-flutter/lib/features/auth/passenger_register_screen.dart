@@ -72,6 +72,7 @@ class _PassengerRegisterScreenState
   bool _obscureConfirm = true;
   bool _registering = false;
   int _selectedCountryIndex = 0;
+  String? _gender;
 
   String? _localError;
   bool _errorDismissed = false;
@@ -154,6 +155,7 @@ class _PassengerRegisterScreenState
         'email': _email.text.trim(),
         'password': _password.text.trim(),
         'phone': e164,
+        if (_gender != null) 'gender': _gender,
       });
       if (mounted) context.go('/passenger/home');
     } catch (e) {
@@ -376,6 +378,14 @@ class _PassengerRegisterScreenState
                 ),
               ],
             ),
+            const SizedBox(height: _fieldGap),
+
+            Text('Gender', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: WeretTokens.textSecondary)),
+            const SizedBox(height: 6),
+            _GenderSelector(
+              value: _gender,
+              onChanged: (v) => setState(() => _gender = v),
+            ),
             const SizedBox(height: _lg),
 
             _TermsCheckbox(
@@ -567,6 +577,39 @@ class _TermsCheckbox extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _GenderSelector extends StatelessWidget {
+  final String? value;
+  final ValueChanged<String?> onChanged;
+  const _GenderSelector({required this.value, required this.onChanged});
+
+  static const _options = [
+    ('male', 'Male'),
+    ('female', 'Female'),
+    ('other', 'Other'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final (key, label) in _options)
+          ChoiceChip(
+            label: Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: value == key ? Colors.white : WeretTokens.textPrimary)),
+            selected: value == key,
+            selectedColor: WeretTokens.brand,
+            backgroundColor: WeretTokens.inputFill,
+            side: BorderSide(color: value == key ? WeretTokens.brand : WeretTokens.borderSubtle),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            visualDensity: VisualDensity.compact,
+            onSelected: (s) => onChanged(s ? key : null),
+          ),
+      ],
     );
   }
 }

@@ -18,6 +18,7 @@
     { "src": "/admin-ui(.*)", "dest": "apps/web$1" },
     { "src": "/api/(.*)", "dest": "backend/api/index.js" },
     { "handle": "filesystem" },
+    { "src": "/(download|features)", "dest": "/index.html" },
     { "src": "/", "dest": "/index.html" }
   ]
 }

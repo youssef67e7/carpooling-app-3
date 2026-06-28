@@ -1,21 +1,38 @@
+import { useEffect, useState } from 'react';
+
+const REPO = 'youssef67e7/carpooling-app-3';
+const releaseUrl = `https://github.com/${REPO}/releases`;
+const repoUrl = `https://github.com/${REPO}`;
+const apkUrl = `https://github.com/${REPO}/releases/latest/download/app-release.apk`;
+
+/* root origin for QR (dynamic, so it works on any domain) */
+function siteOrigin() {
+  if (typeof window !== 'undefined') return window.location.origin;
+  return 'https://carpooling-app-3.vercel.app';
+}
+
 function App() {
-  const releaseUrl = 'https://github.com/youssef67e7/carpooling-app-3/releases';
-  const repoUrl = 'https://github.com/youssef67e7/carpooling-app-3';
+  /* redirect /download to the APK binary */
+  useEffect(() => {
+    if (window.location.pathname === '/download') {
+      window.location.replace(apkUrl);
+    }
+  }, []);
 
   return (
     <>
-      <Header repoUrl={repoUrl} releaseUrl={releaseUrl} />
-      <Hero releaseUrl={releaseUrl} />
+      <Header />
+      <Hero />
       <Features />
-      <Download releaseUrl={releaseUrl} repoUrl={repoUrl} />
+      <Download />
       <Tech />
-      <Footer repoUrl={repoUrl} />
+      <Footer />
     </>
   );
 }
 
 /* ─── Header ─── */
-function Header({ repoUrl, releaseUrl }) {
+function Header() {
   return (
     <header className="header">
       <div className="container">
@@ -36,7 +53,7 @@ function Header({ repoUrl, releaseUrl }) {
 }
 
 /* ─── Hero ─── */
-function Hero({ releaseUrl }) {
+function Hero() {
   return (
     <section className="hero">
       <div className="container">
@@ -117,7 +134,7 @@ function Features() {
 }
 
 /* ─── Download ─── */
-function Download({ releaseUrl, repoUrl }) {
+function Download() {
   return (
     <section className="section" id="download">
       <div className="container">
@@ -148,15 +165,22 @@ function Download({ releaseUrl, repoUrl }) {
             </p>
           </div>
           <div className="download-preview">
-            <div className="mockup-phone">
-              <span className="big">WERET</span>
-              <span>Premium rides</span>
-              <span style={{ fontSize: '0.8rem' }}>Clear pricing · Simple steps</span>
-            </div>
+            <QrCode value={`${siteOrigin()}/download`} />
           </div>
         </div>
       </div>
     </section>
+  );
+}
+
+/* ─── QR Code ─── */
+function QrCode({ value }) {
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(value)}`;
+  return (
+    <div className="qr-wrap">
+      <img src={qrUrl} alt={`QR: ${value}`} width="280" height="280" className="qr-img" />
+      <p className="qr-label">Scan to download APK</p>
+    </div>
   );
 }
 
@@ -195,7 +219,7 @@ function Tech() {
 }
 
 /* ─── Footer ─── */
-function Footer({ repoUrl }) {
+function Footer() {
   return (
     <footer className="footer">
       <div className="container">
@@ -206,8 +230,8 @@ function Footer({ repoUrl }) {
           </a>
           <div className="footer-links">
             <a href={repoUrl} target="_blank" rel="noopener noreferrer">GitHub</a>
-            <a href={repoUrl + '/releases'} target="_blank" rel="noopener noreferrer">Releases</a>
-            <a href={repoUrl + '/issues'} target="_blank" rel="noopener noreferrer">Issues</a>
+            <a href={releaseUrl} target="_blank" rel="noopener noreferrer">Releases</a>
+            <a href={`${repoUrl}/issues`} target="_blank" rel="noopener noreferrer">Issues</a>
           </div>
           <p>&copy; {new Date().getFullYear()} WERET. Open source under MIT License.</p>
         </div>

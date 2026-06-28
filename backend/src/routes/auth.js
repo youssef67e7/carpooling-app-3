@@ -145,6 +145,7 @@ router.post(
   body("name").trim().notEmpty().isLength({ max: 80 }),
   body("email").isEmail().normalizeEmail(),
   body("password").isLength({ min: 6, max: 128 }),
+  body("gender").optional().trim().isIn(["male", "female", "other"]),
   body("lat").optional().isFloat({ min: -90, max: 90 }),
   body("lng").optional().isFloat({ min: -180, max: 180 }),
   body("profileImageUrl")
@@ -155,7 +156,7 @@ router.post(
   validateRequest,
   async (req, res, next) => {
     try {
-      const { name, email, password, profileImageUrl, phone } = req.body;
+      const { name, email, password, gender, profileImageUrl, phone } = req.body;
       const existing = await User.findOne({ email: email.toLowerCase() });
       if (existing) throw new AppError("Email already registered", 409);
       const hash = await bcrypt.hash(password, 10);
@@ -166,6 +167,7 @@ router.post(
         role: "passenger",
         active_role: "passenger",
         isOnline: false,
+        gender: typeof gender === "string" ? gender.trim() : "",
         profileImageUrl: profileImageUrl || "",
         phone: typeof phone === "string" ? phone.trim().slice(0, 32) : "",
         location: {
