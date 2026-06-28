@@ -90,7 +90,7 @@ class _WalletOverviewScreenState extends ConsumerState<WalletOverviewScreen> {
                   else if (w.transactions.isEmpty)
                     const Padding(
                       padding: EdgeInsets.only(top: _xl),
-                      child: Center(child: Text('No recent activity', style: TextStyle(color: WeretTokens.textMuted))),
+                      child: Center(child: Text('walletNoTx'.tr(), style: TextStyle(color: WeretTokens.textMuted))),
                     )
                   else
                     ...w.transactions.map((tx) {

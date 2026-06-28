@@ -95,7 +95,7 @@ class _WalletDepositScreenState extends ConsumerState<WalletDepositScreen> {
         child: Column(
           children: [
             _WalletHeader(
-              title: 'Debit Card top-up',
+              title: 'driverDebitCardTopUp'.tr(),
               onBack: () { HapticFeedback.selectionClick(); Navigator.pop(context); },
             ),
             Expanded(
@@ -110,14 +110,14 @@ class _WalletDepositScreenState extends ConsumerState<WalletDepositScreen> {
                         child: FormErrorCallout(message: _error!, onDismiss: () => setState(() => _error = null)),
                       ),
                     WeretTextField(
-                      label: 'Amount',
+                      label: 'walletAmount'.tr(),
                       controller: _amountCtrl,
                       keyboardType: TextInputType.number,
                       hint: '0.00',
                       prefixText: 'EGP ',
                     ),
                     const SizedBox(height: _md),
-                    Text('Select account', style: AppStyles.label),
+                    Text('walletPickAccount'.tr(), style: AppStyles.label),
                     const SizedBox(height: 6),
                     DropdownButtonFormField<String>(
                       value: _selectedAccountId,
@@ -125,7 +125,7 @@ class _WalletDepositScreenState extends ConsumerState<WalletDepositScreen> {
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(WeretTokens.fieldRadius)),
                         contentPadding: const EdgeInsets.symmetric(horizontal: _md),
                       ),
-                      hint: const Text('Choose one', style: TextStyle(color: WeretTokens.textMuted)),
+                      hint: Text('walletPickAccount'.tr(), style: TextStyle(color: WeretTokens.textMuted)),
                       items: accounts.map((a) {
                         final id = walletAccountId(a);
                         final label = a['label']?.toString() ?? walletTypeLabel('${a['walletType'] ?? ''}');
