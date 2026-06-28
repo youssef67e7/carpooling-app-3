@@ -24,6 +24,7 @@ import '../driver/driver_shared_widgets.dart';
 import '../driver/driver_passenger_helpers.dart';
 import '../driver/driver_break_mode_widget.dart';
 import '../driver/driver_heatmap_overlay.dart';
+import '../driver/driver_join_requests_sheet.dart';
 
 // ── Spacing & Config ─────────────────────────────────────────────────
 const _pad = 16.0;
@@ -217,6 +218,14 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
                         : null,
                     onCancel: const {'accepted', 'driver_arriving', 'passenger_onboard'}.contains('${active['status']}')
                         ? () => showCancelRideDialog(context, ref, '${active['_id']}', isDriver: true)
+                        : null,
+                    onJoinRequests: '${active['status']}' == 'accepted'
+                        ? () => showModalBottomSheet(
+                              context: context,
+                              isScrollControlled: true,
+                              backgroundColor: Colors.transparent,
+                              builder: (_) => DriverJoinRequestsSheet(rideId: '${active['_id']}'),
+                            )
                         : null,
                   );
                 }),

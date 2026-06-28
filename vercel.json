@@ -17,6 +17,9 @@
   "routes": [
     { "src": "/admin-ui(.*)", "dest": "apps/web$1" },
     { "src": "/api/(.*)", "dest": "backend/api/index.js" },
+    { "src": "/health", "dest": "backend/api/index.js" },
+    { "src": "/auth(.*)", "dest": "backend/api/index.js" },
+    { "src": "/admin(.*)", "dest": "backend/api/index.js" },
     { "src": "/app(.*)", "dest": "apps/landing$1" }
   ]
 }
