@@ -223,6 +223,8 @@ const STR = {
     login_heading: "Sign in",
     login_secure_note: "Fixed admins only (server-validated).",
     label_api: "Server URL (API)",
+    label_name: "Name",
+    label_phone: "Phone",
     ph_api: "Empty = same origin (/admin-ui/)",
     label_email: "Email",
     label_password: "Password",
