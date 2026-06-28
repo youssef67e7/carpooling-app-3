@@ -28,7 +28,9 @@ const STR = {
     login_secure_note: "مسؤولون ثابتون فقط (مصادقة الخادم).",
     label_api: "عنوان الخادم (API)",
     ph_api: "فارغ = نفس المنشأ (/admin-ui/)",
+    label_name: "الاسم",
     label_email: "البريد",
+    label_phone: "الهاتف",
     label_password: "كلمة المرور",
     btn_login: "دخول",
     nav_brand_sub: "لوحة الإدارة",
@@ -139,9 +141,32 @@ const STR = {
     badge_driver_approved: "سائق مقبول",
     badge_pending_verify: "قيد الموافقة",
     badge_verified: "موثّق",
+    driver_app_title: "طلب سائق",
+    section_personal: "بيانات شخصية",
+    section_vehicle: "المركبة",
+    section_license: "رخصة القيادة",
+    section_payout: "معلومات الدفع",
+    section_documents: "المستندات",
+    doc_car_image: "صورة السيارة",
+    doc_registration: "وثيقة التسجيل",
+    doc_insurance: "وثيقة التأمين",
+    doc_license: "صورة الرخصة",
+    doc_criminal_front: "فيشة جنائية (أمامي)",
+    doc_criminal_back: "فيشة جنائية (خلفي)",
+    label_car: "السيارة",
+    label_color: "اللون",
+    label_plate: "اللوحة",
+    label_seats: "المقاعد",
+    label_type: "النوع",
+    label_license_number: "رقم الرخصة",
+    label_license_expiry: "تاريخ الانتهاء",
+    label_bank: "البنك",
+    label_account: "رقم الحساب",
+    label_holder: "صاحب الحساب",
     action_verify: "توثيق",
     action_approve_driver: "قبول سائق",
     action_reject_driver: "رفض سائق",
+    action_view_app: "عرض الطلب",
     action_unblock: "إلغاء حظر",
     action_block: "حظر",
     action_delete: "حذف",
@@ -310,9 +335,32 @@ const STR = {
     badge_driver_approved: "Driver approved",
     badge_pending_verify: "Pending approval",
     badge_verified: "Verified",
+    driver_app_title: "Driver Application",
+    section_personal: "Personal Info",
+    section_vehicle: "Vehicle",
+    section_license: "Driving License",
+    section_payout: "Payout Info",
+    section_documents: "Documents",
+    doc_car_image: "Car Image",
+    doc_registration: "Registration",
+    doc_insurance: "Insurance",
+    doc_license: "License Image",
+    doc_criminal_front: "Criminal Record (Front)",
+    doc_criminal_back: "Criminal Record (Back)",
+    label_car: "Car",
+    label_color: "Color",
+    label_plate: "Plate",
+    label_seats: "Seats",
+    label_type: "Type",
+    label_license_number: "License Number",
+    label_license_expiry: "Expiry Date",
+    label_bank: "Bank",
+    label_account: "Account",
+    label_holder: "Holder",
     action_verify: "Verify",
     action_approve_driver: "Approve driver",
     action_reject_driver: "Reject driver",
+    action_view_app: "View application",
     action_unblock: "Unblock",
     action_block: "Block",
     action_delete: "Delete",
@@ -764,6 +812,175 @@ async function deleteUserSafe(userId) {
   await apiJson(`/admin/users/${userId}`, { method: "DELETE" });
 }
 
+let _driverAppUserId = null;
+
+function openDriverAppModal(userId) {
+  _driverAppUserId = userId;
+  const modal = $("modal-driver-app");
+  const body = $("driver-app-body");
+  const actions = $("driver-app-actions");
+  modal.classList.remove("hidden");
+  body.innerHTML = `<div class="driver-app-skeleton">${esc(t("loading"))}…</div>`;
+  actions.classList.add("hidden");
+  fetchDriverApp(userId);
+}
+
+function closeDriverAppModal() {
+  _driverAppUserId = null;
+  $("modal-driver-app")?.classList.add("hidden");
+}
+
+async function fetchDriverApp(userId) {
+  try {
+    const data = await apiJson(`/admin/users/${userId}/profile`);
+    renderDriverApp(data);
+  } catch (e) {
+    $("driver-app-body").innerHTML = `<p class="err">${esc(e.message)}</p>`;
+  }
+}
+
+function renderDriverApp(data) {
+  const body = $("driver-app-body");
+  const actions = $("driver-app-actions");
+  const { user, profile, documents } = data;
+  const sections = [];
+
+  sections.push(`
+    <div class="driver-app-section">
+      <h4>${esc(t("section_personal"))}</h4>
+      <div class="field-row">
+        <span class="label">${esc(t("label_name"))}</span>
+        <span class="value">${esc(user.name || "—")}</span>
+        <span class="label">${esc(t("label_email"))}</span>
+        <span class="value">${esc(user.email || "—")}</span>
+        <span class="label">${esc(t("label_phone"))}</span>
+        <span class="value">${esc(user.phone || "—")}</span>
+      </div>
+    </div>
+  `);
+
+  if (profile) {
+    sections.push(`
+      <div class="driver-app-section">
+        <h4>${esc(t("section_vehicle"))}</h4>
+        ${(profile.cars || []).map((c, i) => `
+          <div style="margin-bottom:0.5rem;${i > 0 ? 'border-top:1px solid var(--border-subtle);padding-top:0.5rem;margin-top:0.5rem' : ''}">
+            <div class="field-row">
+              <span class="label">${esc(t("label_car"))}</span>
+              <span class="value">${esc(c.brand || "—")} ${esc(c.model || "—")} (${esc(c.year || "—")})</span>
+              <span class="label">${esc(t("label_color"))}</span>
+              <span class="value">${esc(c.color || "—")}</span>
+              <span class="label">${esc(t("label_plate"))}</span>
+              <span class="value">${esc(c.plateNumber || "—")}</span>
+              <span class="label">${esc(t("label_seats"))}</span>
+              <span class="value">${c.seats || "—"}</span>
+              <span class="label">${esc(t("label_type"))}</span>
+              <span class="value">${esc(c.carCategory || "—")}</span>
+            </div>
+            <div class="doc-grid">
+              ${c.imageUrl ? `<a href="${esc(c.imageUrl)}" target="_blank" rel="noopener">📷 ${esc(t("doc_car_image"))}</a>` : ""}
+              ${c.registrationDocUrl ? `<a href="${esc(c.registrationDocUrl)}" target="_blank" rel="noopener">📄 ${esc(t("doc_registration"))}</a>` : ""}
+              ${c.insuranceDocUrl ? `<a href="${esc(c.insuranceDocUrl)}" target="_blank" rel="noopener">📄 ${esc(t("doc_insurance"))}</a>` : ""}
+            </div>
+          </div>
+        `).join("")}
+      </div>
+    `);
+
+    sections.push(`
+      <div class="driver-app-section">
+        <h4>${esc(t("section_license"))}</h4>
+        <div class="field-row">
+          <span class="label">${esc(t("label_license_number"))}</span>
+          <span class="value">${esc(profile.licenseNumber || "—")}</span>
+          <span class="label">${esc(t("label_license_expiry"))}</span>
+          <span class="value">${profile.licenseExpiry ? new Date(profile.licenseExpiry).toLocaleDateString(localeForDates()) : "—"}</span>
+        </div>
+        <div class="doc-grid">
+          ${profile.licenseImageUrl ? `<a href="${esc(profile.licenseImageUrl)}" target="_blank" rel="noopener">📷 ${esc(t("doc_license"))}</a>` : ""}
+        </div>
+      </div>
+    `);
+
+    if (profile.payoutBankName || profile.payoutAccountNumber) {
+      sections.push(`
+        <div class="driver-app-section">
+          <h4>${esc(t("section_payout"))}</h4>
+          <div class="field-row">
+            <span class="label">${esc(t("label_bank"))}</span>
+            <span class="value">${esc(profile.payoutBankName || "—")}</span>
+            <span class="label">${esc(t("label_account"))}</span>
+            <span class="value">${esc(profile.payoutAccountNumber || "—")}</span>
+            <span class="label">${esc(t("label_holder"))}</span>
+            <span class="value">${esc(profile.payoutAccountHolder || "—")}</span>
+          </div>
+        </div>
+      `);
+    }
+  }
+
+  if (documents) {
+    const docLinks = [];
+    if (documents.criminalRecordFrontUrl) docLinks.push(`<a href="${esc(documents.criminalRecordFrontUrl)}" target="_blank" rel="noopener">📷 ${esc(t("doc_criminal_front"))}</a>`);
+    if (documents.criminalRecordBackUrl) docLinks.push(`<a href="${esc(documents.criminalRecordBackUrl)}" target="_blank" rel="noopener">📷 ${esc(t("doc_criminal_back"))}</a>`);
+    if (docLinks.length) {
+      sections.push(`
+        <div class="driver-app-section">
+          <h4>${esc(t("section_documents"))}</h4>
+          <div class="doc-grid">${docLinks.join("")}</div>
+        </div>
+      `);
+    }
+  }
+
+  body.innerHTML = sections.join("");
+  actions.classList.remove("hidden");
+}
+
+$("driver-app-close")?.addEventListener("click", closeDriverAppModal);
+$("modal-driver-app")?.addEventListener("click", (e) => {
+  if (e.target.classList.contains("modal-backdrop")) closeDriverAppModal();
+});
+
+$("driver-app-approve")?.addEventListener("click", async () => {
+  const id = _driverAppUserId;
+  if (!id) return;
+  const ok = await openConfirm({
+    title: t("confirm_approve_driver_title"),
+    message: t("confirm_approve_driver_msg"),
+    danger: false,
+  });
+  if (!ok) return;
+  await patchUserSafe(id, {
+    driver_application_status: "approved",
+    driver_profile_status: "approved",
+    driver_review_note: "",
+  });
+  closeDriverAppModal();
+  toast(t("toast_approve"), "success");
+  await loadUsers();
+});
+
+$("driver-app-reject")?.addEventListener("click", async () => {
+  const id = _driverAppUserId;
+  if (!id) return;
+  const ok = await openConfirm({
+    title: t("confirm_reject_driver_title"),
+    message: t("confirm_reject_driver_msg"),
+    danger: true,
+  });
+  if (!ok) return;
+  const note = window.prompt(t("prompt_reject_reason"), "") || "";
+  await patchUserSafe(id, {
+    driver_application_status: "rejected",
+    driver_profile_status: "rejected",
+    driver_review_note: note,
+  });
+  closeDriverAppModal();
+  toast(t("toast_reject"), "success");
+  await loadUsers();
+});
+
 async function patchReport(id, status) {
   await apiJson(`/admin/reports/${id}`, {
     method: "PATCH",
@@ -1115,6 +1332,9 @@ async function loadUsers() {
         );
         if (u.driver_application_status === "pending") {
           actions.push(
+            `<button type="button" class="btn-inline" data-act="viewApp" data-id="${esc(u._id)}">${esc(t("action_view_app"))}</button>`
+          );
+          actions.push(
             `<button type="button" class="btn-inline" data-act="approveDriver" data-id="${esc(u._id)}">${esc(t("action_approve_driver"))}</button>`
           );
           actions.push(
@@ -1371,6 +1591,10 @@ function bindUsersTableActions() {
         await loadUsers();
         return;
       }
+      if (act === "viewApp") {
+        await openDriverAppModal(id);
+        return;
+      }
       if (act === "approveDriver") {
         const ok = await openConfirm({
           title: t("confirm_approve_driver_title"),
@@ -1383,6 +1607,7 @@ function bindUsersTableActions() {
           driver_profile_status: "approved",
           driver_review_note: "",
         });
+        closeDriverAppModal();
         toast(t("toast_approve"), "success");
         await loadUsers();
         return;
@@ -1400,6 +1625,7 @@ function bindUsersTableActions() {
           driver_profile_status: "rejected",
           driver_review_note: note,
         });
+        closeDriverAppModal();
         toast(t("toast_reject"), "success");
         await loadUsers();
         return;

@@ -136,6 +136,101 @@ body {
   margin-top: 1.35rem;
   flex-wrap: wrap;
 }
+.modal-panel--wide {
+  max-width: 720px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 0.75rem;
+}
+.modal-head h3 {
+  margin: 0;
+}
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: var(--muted);
+  padding: 0.25rem;
+  line-height: 1;
+}
+.modal-close:hover {
+  color: var(--text);
+}
+.driver-app-body {
+  overflow-y: auto;
+  flex: 1;
+  padding-right: 0.25rem;
+}
+.driver-app-section {
+  margin-bottom: 1rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem;
+}
+.driver-app-section h4 {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.driver-app-section .field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem 1rem;
+  font-size: 0.875rem;
+}
+.driver-app-section .field-row .label {
+  color: var(--muted);
+  font-weight: 600;
+}
+.driver-app-section .field-row .value {
+  color: var(--text);
+}
+.doc-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+.doc-grid a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.75rem;
+  background: var(--accent-soft);
+  border-radius: var(--radius-pill);
+  font-size: 0.8rem;
+  color: var(--accent);
+  text-decoration: none;
+}
+.doc-grid a:hover {
+  background: var(--accent);
+  color: var(--on-ink);
+}
+.driver-app-actions {
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border-subtle);
+  margin-top: 0.5rem;
+  position: sticky;
+  bottom: 0;
+  background: var(--surface);
+}
+.driver-app-skeleton {
+  padding: 2rem;
+  text-align: center;
+  color: var(--muted);
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;

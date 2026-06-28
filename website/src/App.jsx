@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 const REPO = 'youssef67e7/carpooling-app-3';
 const releaseUrl = `https://github.com/${REPO}/releases`;
 const repoUrl = `https://github.com/${REPO}`;
-const apkUrl = `https://github.com/${REPO}/releases/latest/download/app-release.apk`;
+const apkUrl = `https://github.com/${REPO}/releases/download/v1.0.1/WERET-v1.0.1.apk`;
 
 /* root origin for QR (dynamic, so it works on any domain) */
 function siteOrigin() {
@@ -148,11 +148,11 @@ function Download() {
               iOS build available for development via Flutter.
             </p>
             <div className="download-buttons">
-              <a href={releaseUrl} target="_blank" rel="noopener noreferrer" className="btn btn-primary btn-lg">
+              <a href={apkUrl} target="_blank" rel="noopener noreferrer" className="btn btn-primary btn-lg">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 <span className="btn-text">
                   <small>Download</small>
-                  WERET APK v1.0.0
+                  WERET APK v1.0.1
                 </span>
               </a>
               <a href={repoUrl} target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-lg">

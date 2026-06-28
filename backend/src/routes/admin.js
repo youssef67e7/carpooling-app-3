@@ -104,6 +104,25 @@ router.get(
   },
 );
 
+router.get(
+  "/users/:userId/profile",
+  docIdParam("userId"),
+  validateRequest,
+  async (req, res, next) => {
+    try {
+      const user = await User.findById(req.params.userId);
+      if (!user) throw new AppError("User not found", 404);
+      const [profile, documents] = await Promise.all([
+        DriverProfile.findOne({ userId: user._id }).lean(),
+        DriverDocuments.findOne({ userId: user._id }).lean(),
+      ]);
+      return res.json({ user: user.toJSON(), profile, documents });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
 router.patch(
   "/users/:userId",
   docIdParam("userId"),

@@ -31,6 +31,21 @@
     </div>
   </div>
 
+  <div id="modal-driver-app" class="modal hidden" aria-modal="true" role="dialog">
+    <div class="modal-backdrop"></div>
+    <div class="modal-panel modal-panel--wide card">
+      <div class="modal-head">
+        <h3 id="driver-app-title" data-i18n="driver_app_title">Driver Application</h3>
+        <button type="button" class="modal-close" id="driver-app-close" aria-label="Close">&times;</button>
+      </div>
+      <div id="driver-app-body" class="driver-app-body"></div>
+      <div id="driver-app-actions" class="modal-actions driver-app-actions hidden">
+        <button type="button" class="btn-primary" id="driver-app-approve" data-i18n="action_approve_driver">Approve Driver</button>
+        <button type="button" class="btn-danger" id="driver-app-reject" data-i18n="action_reject_driver">Reject Driver</button>
+      </div>
+    </div>
+  </div>
+
   <div id="app-login" class="layout-login">
     <div class="login-panel card fade-up">
       <div class="login-top">
